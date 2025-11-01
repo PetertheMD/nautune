@@ -1,10 +1,26 @@
 import 'package:flutter/material.dart';
+
+import 'app_state.dart';
+import 'jellyfin/jellyfin_service.dart';
+import 'jellyfin/jellyfin_session_store.dart';
+import 'screens/library_screen.dart';
+import 'screens/login_screen.dart';
 import 'theme/nautune_theme.dart';
 
-void main() => runApp(const NautuneApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final appState = NautuneAppState(
+    jellyfinService: JellyfinService(),
+    sessionStore: JellyfinSessionStore(),
+  );
+  await appState.initialize();
+  runApp(NautuneApp(appState: appState));
+}
 
 class NautuneApp extends StatelessWidget {
-  const NautuneApp({super.key});
+  const NautuneApp({super.key, required this.appState});
+
+  final NautuneAppState appState;
 
   @override
   Widget build(BuildContext context) {
@@ -12,10 +28,23 @@ class NautuneApp extends StatelessWidget {
       title: 'Nautune – Poseidon’s Music Player',
       theme: NautuneTheme.build(),
       debugShowCheckedModeBanner: false,
-      home: const Scaffold(
-        body: Center(
-          child: Text('🌊 Nautune Booted Up!', style: TextStyle(fontSize: 26)),
-        ),
+      home: AnimatedBuilder(
+        animation: appState,
+        builder: (context, _) {
+          if (!appState.isInitialized) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+
+          if (appState.session == null) {
+            return LoginScreen(appState: appState);
+          }
+
+          return LibraryScreen(appState: appState);
+        },
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import 'jellyfin_credentials.dart';
 import 'jellyfin_exceptions.dart';
+import 'jellyfin_library.dart';
 import 'jellyfin_user.dart';
 
 /// Lightweight Jellyfin REST client to be expanded as features land.
@@ -68,6 +69,30 @@ class JellyfinClient {
     return data
         .whereType<Map<String, dynamic>>()
         .map(JellyfinUser.fromJson)
+        .toList();
+  }
+
+  Future<List<JellyfinLibrary>> fetchLibraries(
+    JellyfinCredentials credentials,
+  ) async {
+    final uri = _buildUri('/Users/${credentials.userId}/Views');
+    final response = await httpClient.get(
+      uri,
+      headers: _defaultHeaders(credentials),
+    );
+
+    if (response.statusCode != 200) {
+      throw JellyfinRequestException(
+        'Unable to fetch libraries: ${response.statusCode}',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>?;
+    final items = data?['Items'] as List<dynamic>? ?? const [];
+
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(JellyfinLibrary.fromJson)
         .toList();
   }
 
