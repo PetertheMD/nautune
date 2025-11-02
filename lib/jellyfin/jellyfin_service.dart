@@ -364,6 +364,152 @@ class JellyfinService {
     return trimmed;
   }
 
+  // Playlist Management
+  Future<JellyfinPlaylist> createPlaylist({
+    required String name,
+    List<String>? itemIds,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    final response = await client.request(
+      method: 'POST',
+      path: '/Playlists',
+      credentials: session.credentials,
+      body: {
+        'Name': name,
+        'Ids': itemIds ?? [],
+        'UserId': session.credentials.userId,
+        'MediaType': 'Audio',
+      },
+    );
+
+    _playlistCache.clear();
+    return JellyfinPlaylist.fromJson(response);
+  }
+
+  Future<void> updatePlaylist({
+    required String playlistId,
+    required String newName,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+    
+    await client.request(
+      method: 'POST',
+      path: '/Items/$playlistId',
+      credentials: session.credentials,
+      body: {
+        'Name': newName,
+      },
+    );
+
+    _playlistCache.clear();
+  }
+
+  Future<void> deletePlaylist(String playlistId) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+    
+    await client.request(
+      method: 'DELETE',
+      path: '/Items/$playlistId',
+      credentials: session.credentials,
+    );
+    
+    _playlistCache.clear();
+  }
+
+  Future<void> addItemsToPlaylist({
+    required String playlistId,
+    required List<String> itemIds,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    await client.request(
+      method: 'POST',
+      path: '/Playlists/$playlistId/Items',
+      credentials: session.credentials,
+      queryParams: {
+        'ids': itemIds.join(','),
+        'userId': session.credentials.userId,
+      },
+    );
+
+    _playlistCache.clear();
+  }
+
+  Future<void> removeItemsFromPlaylist({
+    required String playlistId,
+    required List<String> entryIds,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+    
+    await client.request(
+      method: 'DELETE',
+      path: '/Playlists/$playlistId/Items',
+      credentials: session.credentials,
+      queryParams: {
+        'entryIds': entryIds.join(','),
+      },
+    );
+
+    _playlistCache.clear();
+  }
+
+  Future<List<JellyfinTrack>> getPlaylistItems(String playlistId) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    final response = await client.request(
+      method: 'GET',
+      path: '/Playlists/$playlistId/Items',
+      credentials: session.credentials,
+      queryParams: {
+        'userId': session.credentials.userId,
+        'fields': 'AudioInfo,ParentId',
+      },
+    );
+
+    final items = (response['Items'] as List?) ?? [];
+    return items.map((json) => JellyfinTrack.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<JellyfinTrack>> getAlbumTracks(String albumId) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    final response = await client.request(
+      method: 'GET',
+      path: '/Users/${session.credentials.userId}/Items',
+      credentials: session.credentials,
+      queryParams: {
+        'parentId': albumId,
+        'sortBy': 'SortName',
+        'fields': 'AudioInfo,ParentId',
+      },
+    );
+
+    final items = (response['Items'] as List?) ?? [];
+    return items.map((json) => JellyfinTrack.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
   void _clearCaches() {
     _albumCache.clear();
     _artistCache.clear();

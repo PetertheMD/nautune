@@ -481,4 +481,48 @@ class JellyfinClient {
 
     return headers;
   }
+
+  // Generic HTTP methods for playlist management
+  Future<Map<String, dynamic>> request({
+    required String method,
+    required String path,
+    required JellyfinCredentials credentials,
+    Map<String, dynamic>? queryParams,
+    Map<String, dynamic>? body,
+  }) async {
+    final uri = _buildUri(path, queryParams?.map((k, v) => MapEntry(k, v.toString())));
+    
+    http.Response response;
+    final headers = _defaultHeaders(credentials);
+    
+    switch (method.toUpperCase()) {
+      case 'GET':
+        response = await httpClient.get(uri, headers: headers);
+        break;
+      case 'POST':
+        response = await httpClient.post(
+          uri,
+          headers: headers,
+          body: body != null ? jsonEncode(body) : null,
+        );
+        break;
+      case 'DELETE':
+        response = await httpClient.delete(uri, headers: headers);
+        break;
+      default:
+        throw ArgumentError('Unsupported HTTP method: $method');
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw JellyfinRequestException(
+        'Request failed: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    if (response.body.isEmpty) {
+      return {};
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
 }

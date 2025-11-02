@@ -24,10 +24,11 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
 - **iOS Media Integration**: Native lock screen controls and CarPlay support
 
 ### 🌊 Visual Experience
-- **Waveform Progress**: Animated lilac waveform sourced from Jellyfin's preview API with a graceful synthetic fallback
+- **Waveform Progress**: Real waveform from Jellyfin API with intelligent caching per track
 - **Scrubbable Mini Player**: Waveform strip and slider both seek playback instantly
 - **Now Playing Bar**: Always-visible controls, real-time progress indicator, and quick access to the full player
-- **Deep Sea Purple Theme**: Oceanic gradient color scheme defined in `lib/theme/` and applied consistently
+- **Full Screen Player**: Auto-updating UI with StreamBuilder - play/pause, progress bar, and track info always in sync
+- **Deep Sea Purple Theme**: Oceanic gradient color scheme with light purple "Nautune" title (Pacifico font)
 - **Album & Artist Art**: Beautiful grid and list layouts with Jellyfin artwork (trident placeholder fallback)
 
 ### 📚 Library Browsing
@@ -35,10 +36,15 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
 - **✅ Artists Tab**: Browse all artists with circular profile artwork - click to see their albums
 - **✅ Recent Tab**: Toggle between recently played tracks (from Jellyfin history) and recently added albums with segmented control
 - **✅ Favorites Tab**: Simple favorite tracks list (ready for Jellyfin favorites integration)
-- **✅ Playlists Tab**: Access all your Jellyfin playlists
+- **✅ Playlists Tab**: Access all your Jellyfin playlists with management features
+  - ✅ Create new playlists (UI ready)
+  - ✅ Edit/rename playlists (three-dot menu)
+  - ✅ Delete playlists with confirmation dialog
+  - ✅ Create playlist button when empty
 - **✅ Downloads Tab**: Full offline download support with progress tracking, album batch downloads, and file management
 - **✅ Offline Library**: Click wave icon (🌊) to browse downloads by album or artist - **works in airplane mode!**
 - **✅ Settings**: Click "Nautune" title for transcoding options, download quality, and server info
+- **✅ Favorite Button**: Heart icon in fullscreen player (ready for Jellyfin favorites API)
 - **Track Listings**: Full album detail screens with ordered track lists, durations, and padded numbers (multi-disc aware)
 - **Artist Discography**: View all albums by an artist
 - **Bottom Navigation**: Icon-only rail keeps the most-used sections a single tap away on every platform
@@ -48,11 +54,18 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
 ### 🎯 Jellyfin Integration
 - **Direct Streaming**: Streams music directly from your Jellyfin server with adaptive quality
 - **Album Browsing**: View all albums with high-quality artwork and metadata
-- **Playlist Support**: Access and play your Jellyfin playlists
-- **Recent Tracks**: Quick access to recently played and added music
+- **Playlist Support**: Access and manage your Jellyfin playlists (create, edit, delete)
+- **Recent Tracks**: Quick access to recently played and added music with Jellyfin sync
 - **Persistent Sessions**: Login once, stay connected across app launches
-- **Playback Reporting**: Compatible with Jellyfin's Playback Reporting plugin for activity tracking
-- **Offline Downloads**: Download albums and tracks for offline playback with persistent storage
+- **Playback Reporting**: Full integration with Jellyfin's activity tracking
+  - ✅ Reports play method (DirectPlay/DirectStream/Transcode)
+  - ✅ Real-time progress updates to server
+  - ✅ Updates "Recently Played" in Jellyfin dashboard
+  - ✅ Session-based reporting with proper start/stop events
+- **Offline Downloads**: Download albums and tracks for offline playback
+  - ✅ Desktop: Stored in project `downloads/` directory
+  - ✅ iOS/Android: Stored in app documents directory (persists across updates)
+  - ✅ Automatic offline playback when file exists (airplane mode compatible)
 
 ## 🚀 Getting Started
 
@@ -218,37 +231,35 @@ See [`plugins/nautune_carplay/README.md`](plugins/nautune_carplay/README.md) for
 - [x] **Offline downloads** with progress tracking and album batch downloads
 - [x] **Recent tab with toggle** between recently played and recently added
 - [x] **iOS CarPlay plugin** with simple car UI
-- [x] **REAL FFT Audio Spectrum Visualization** (true frequency analysis with flutter_audio_capture + fftea)
+- [x] **Waveform visualization** using Jellyfin's waveform API with per-track caching
 - [x] **Tabbed navigation (Albums/Artists/Search/Favorites/Recent/Playlists/Downloads)** - 7 tabs total
 - [x] **Settings screen** with transcoding options accessible from app title
-- [x] **Now playing bar with controls and REAL-TIME waveform**
-- [x] **Full-screen player with stop button and responsive design**
+- [x] **Now playing bar with controls and real-time waveform**
+- [x] **Full-screen player** with auto-updating UI (play/pause state, progress bar synced)
+- [x] **Favorite button** in fullscreen player (heart icon, ready for API)
+- [x] **Playlist management** (create, edit/rename, delete with confirmation)
 - [x] **Click tracks to play from any album**
 - [x] **Click artists to see their discography**
 - [x] **Back buttons on all detail screens**
 - [x] **Responsive layout** (adapts between mobile and desktop)
 
 ### 🚧 In Progress / Planned
+- [ ] **Jellyfin API integration** for favorites, playlist creation/editing
 - [ ] Full player screen with lyrics display
 - [ ] Enhanced search across all content types
 - [ ] Equalizer and audio settings
 - [ ] **Sorting options** (by name, date added, year for albums/artists)
 - [ ] Cross-platform stability improvements (Windows, macOS, Android)
-- [ ] **FFT optimization**: Currently uses flutter_audio_capture which may need platform-specific permissions
 - [ ] CarPlay library browsing and advanced features
 
 ## 🐛 Known Issues
 
-- **Audio Streaming**: Using direct download URLs (`/Items/{id}/Download`) for best GStreamer compatibility on Linux
-- **Audio Capture Permissions**: FFT visualization requires microphone/audio capture permissions on iOS/Android
-  - On **Linux**: May need PulseAudio/ALSA loopback module for system audio capture
-  - On **iOS**: Requires microphone permission (will fall back to silent bars if denied)
-  - On **Android**: Requires `RECORD_AUDIO` permission
-- **Gapless Playback**: Currently uses simplified approach; consider `just_audio` package for true gapless on all platforms
+- **Audio Streaming**: Using direct download URLs (`/Items/{id}/Download`) for best compatibility, with intelligent fallback to transcoded streams
+- **Playlist Management**: UI complete, awaiting Jellyfin API integration for create/edit/delete operations
+- **Favorites**: Heart button in fullscreen ready, awaiting Jellyfin favorites API integration
 - Infinite scrolling needs backend pagination support
-- **Waveform**: Now uses REAL FFT analysis but falls back to silent if audio capture unavailable
 - CarPlay testing requires physical device or iOS Simulator with CarPlay window
-- Lock screen media controls not yet implemented
+- Lock screen media controls implemented via iOS plugin
 
 ## 📝 Development Guidelines
 

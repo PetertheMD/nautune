@@ -162,6 +162,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                 error: playlistsError,
                 scrollController: _playlistsScrollController,
                 onRefresh: () => widget.appState.refreshPlaylists(),
+                appState: widget.appState,
               ),
               _DownloadsTab(appState: widget.appState),
             ],
@@ -550,6 +551,7 @@ class _PlaylistsTab extends StatelessWidget {
     required this.error,
     required this.scrollController,
     required this.onRefresh,
+    required this.appState,
   });
 
   final List<JellyfinPlaylist>? playlists;
@@ -557,6 +559,7 @@ class _PlaylistsTab extends StatelessWidget {
   final Object? error;
   final ScrollController scrollController;
   final VoidCallback onRefresh;
+  final NautuneAppState appState;
 
   @override
   Widget build(BuildContext context) {
@@ -585,14 +588,8 @@ class _PlaylistsTab extends StatelessWidget {
             const Text('No playlists found'),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () {
-                // TODO: Implement create playlist
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Create playlist feature coming soon!'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
+              onPressed: () async {
+                await _showCreatePlaylistDialog(context);
               },
               icon: const Icon(Icons.add),
               label: const Text('Create Playlist'),
@@ -613,14 +610,8 @@ class _PlaylistsTab extends StatelessWidget {
             return Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: ElevatedButton.icon(
-                onPressed: () {
-                  // TODO: Implement create playlist
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Create playlist feature coming soon!'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
+                onPressed: () async {
+                  await _showCreatePlaylistDialog(context);
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('Create New Playlist'),
@@ -681,10 +672,62 @@ class _PlaylistsTab extends StatelessWidget {
     );
   }
 
-  void _showEditPlaylistDialog(BuildContext context, JellyfinPlaylist playlist) {
+  Future<void> _showCreatePlaylistDialog(BuildContext context) async {
+    final nameController = TextEditingController();
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create Playlist'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'Playlist Name',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && nameController.text.isNotEmpty && context.mounted) {
+      try {
+        await appState.createPlaylist(name: nameController.text);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Created playlist "${nameController.text}"'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to create playlist: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  void _showEditPlaylistDialog(BuildContext context, JellyfinPlaylist playlist) async {
     final nameController = TextEditingController(text: playlist.name);
     
-    showDialog(
+    final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Edit Playlist'),
@@ -698,49 +741,58 @@ class _PlaylistsTab extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              // TODO: Call Jellyfin API to rename playlist
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Renaming "${playlist.name}" to "${nameController.text}"'),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-              Navigator.pop(context);
-            },
+            onPressed: () => Navigator.pop(context, true),
             child: const Text('Save'),
           ),
         ],
       ),
     );
+
+    if (result == true && nameController.text.isNotEmpty && context.mounted) {
+      try {
+        await appState.updatePlaylist(
+          playlistId: playlist.id,
+          newName: nameController.text,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Renamed to "${nameController.text}"'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to rename: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 
-  void _showDeletePlaylistDialog(BuildContext context, JellyfinPlaylist playlist) {
-    showDialog(
+  void _showDeletePlaylistDialog(BuildContext context, JellyfinPlaylist playlist) async {
+    
+    final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Playlist?'),
-        content: Text('Are you sure you want to delete "${playlist.name}"?'),
+        content: Text('Are you sure you want to delete "${playlist.name}"? This cannot be undone.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              // TODO: Call Jellyfin API to delete playlist
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Deleted "${playlist.name}"'),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-              Navigator.pop(context);
-            },
+            onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(
               backgroundColor: Colors.red,
             ),
@@ -749,6 +801,29 @@ class _PlaylistsTab extends StatelessWidget {
         ],
       ),
     );
+
+    if (result == true && context.mounted) {
+      try {
+        await appState.deletePlaylist(playlist.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Deleted "${playlist.name}"'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 }
 

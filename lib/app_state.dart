@@ -188,6 +188,53 @@ class NautuneAppState extends ChangeNotifier {
     await _loadLibraryDependentContent(forceRefresh: true);
   }
 
+  // Playlist Management
+  Future<JellyfinPlaylist> createPlaylist({
+    required String name,
+    List<String>? itemIds,
+  }) async {
+    final playlist = await _jellyfinService.createPlaylist(
+      name: name,
+      itemIds: itemIds,
+    );
+    await refreshPlaylists();
+    return playlist;
+  }
+
+  Future<void> updatePlaylist({
+    required String playlistId,
+    required String newName,
+  }) async {
+    await _jellyfinService.updatePlaylist(
+      playlistId: playlistId,
+      newName: newName,
+    );
+    await refreshPlaylists();
+  }
+
+  Future<void> deletePlaylist(String playlistId) async {
+    await _jellyfinService.deletePlaylist(playlistId);
+    await refreshPlaylists();
+  }
+
+  Future<void> addToPlaylist({
+    required String playlistId,
+    required List<String> itemIds,
+  }) async {
+    await _jellyfinService.addItemsToPlaylist(
+      playlistId: playlistId,
+      itemIds: itemIds,
+    );
+  }
+
+  Future<List<JellyfinTrack>> getPlaylistTracks(String playlistId) async {
+    return await _jellyfinService.getPlaylistItems(playlistId);
+  }
+
+  Future<List<JellyfinTrack>> getAlbumTracks(String albumId) async {
+    return await _jellyfinService.getAlbumTracks(albumId);
+  }
+
   Future<void> _loadLibraries() async {
     _librariesError = null;
     _isLoadingLibraries = true;
