@@ -253,6 +253,8 @@ class _WaveformDisplayState extends State<_WaveformDisplay> {
   @override
   Widget build(BuildContext context) {
     final borderRadius = BorderRadius.circular(12);
+    final primaryTint = const Color(0xFFCCB8FF);
+    final secondaryTint = const Color(0xFF5F3FAE);
 
     return SizedBox(
       height: 40,

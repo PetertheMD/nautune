@@ -17,14 +17,17 @@ class PlaybackReportingService {
   String? _currentSessionId;
   Timer? _progressTimer;
 
-  Future<void> reportPlaybackStart(JellyfinTrack track) async {
+  Future<void> reportPlaybackStart(
+    JellyfinTrack track, {
+    String playMethod = 'DirectPlay',
+  }) async {
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
     
     final url = Uri.parse('$serverUrl/Sessions/Playing');
     final body = {
       'ItemId': track.id,
       'SessionId': _currentSessionId,
-      'PlayMethod': 'DirectPlay',
+      'PlayMethod': playMethod,
       'CanSeek': true,
       'IsPaused': false,
       'IsMuted': false,

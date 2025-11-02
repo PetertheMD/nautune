@@ -10,6 +10,7 @@ import 'jellyfin/jellyfin_session_store.dart';
 import 'jellyfin/jellyfin_track.dart';
 import 'services/audio_player_service.dart';
 import 'services/download_service.dart';
+import 'services/playback_reporting_service.dart';
 import 'services/playback_state_store.dart';
 
 class NautuneAppState extends ChangeNotifier {
@@ -129,6 +130,14 @@ class NautuneAppState extends ChangeNotifier {
       );
       _session = session;
       await _sessionStore.save(session);
+      
+      // Initialize playback reporting
+      final reportingService = PlaybackReportingService(
+        serverUrl: session.serverUrl,
+        accessToken: session.credentials.accessToken,
+      );
+      _audioPlayerService.setReportingService(reportingService);
+      
       await _loadLibraries();
       await _loadLibraryDependentContent(forceRefresh: true);
     } catch (error) {

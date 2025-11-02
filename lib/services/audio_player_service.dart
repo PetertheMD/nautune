@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../jellyfin/jellyfin_track.dart';
 import 'download_service.dart';
+import 'playback_reporting_service.dart';
 import 'playback_state_store.dart';
 
 class AudioPlayerService {
@@ -13,15 +14,22 @@ class AudioPlayerService {
   final AudioPlayer _nextPlayer = AudioPlayer();
   final PlaybackStateStore _stateStore = PlaybackStateStore();
   DownloadService? _downloadService;
+  PlaybackReportingService? _reportingService;
   
   JellyfinTrack? _currentTrack;
   List<JellyfinTrack> _queue = [];
   int _currentIndex = 0;
   Timer? _positionSaveTimer;
   bool _isTransitioning = false;
+  Duration _lastPosition = Duration.zero;
+  bool _lastPlayingState = false;
 
   void setDownloadService(DownloadService service) {
     _downloadService = service;
+  }
+
+  void setReportingService(PlaybackReportingService service) {
+    _reportingService = service;
   }
   
   // Streams
@@ -59,6 +67,16 @@ class AudioPlayerService {
     // Position updates
     _player.onPositionChanged.listen((position) {
       _positionController.add(position);
+      _lastPosition = position;
+      
+      // Report progress to Jellyfin periodically
+      if (_currentTrack != null && _reportingService != null) {
+        _reportingService!.reportPlaybackProgress(
+          _currentTrack!,
+          position,
+          !_lastPlayingState,
+        );
+      }
     });
     
     // Duration updates
@@ -70,6 +88,18 @@ class AudioPlayerService {
     _player.onPlayerStateChanged.listen((state) {
       final isPlaying = state == PlayerState.playing;
       _playingController.add(isPlaying);
+      
+      // Report state change to Jellyfin
+      if (_lastPlayingState != isPlaying && _currentTrack != null) {
+        _lastPlayingState = isPlaying;
+        if (_reportingService != null) {
+          _reportingService!.reportPlaybackProgress(
+            _currentTrack!,
+            _lastPosition,
+            !isPlaying,
+          );
+        }
+      }
       
       if (isPlaying) {
         _startPositionSaving();
@@ -221,11 +251,30 @@ class AudioPlayerService {
 
     try {
       await _player.resume();
+      
+      // Report playback start to Jellyfin
+      if (_reportingService != null) {
+        await _reportingService!.reportPlaybackStart(
+          track,
+          playMethod: isOffline ? 'DirectPlay' : (activeUrl == downloadUrl ? 'DirectStream' : 'Transcode'),
+        );
+      }
+      
+      _lastPlayingState = true;
     } on PlatformException {
       if (activeUrl != universalUrl && universalUrl != null) {
         if (await trySetSource(universalUrl)) {
           await _player.resume();
           activeUrl = universalUrl;
+          
+          // Report transcoded playback
+          if (_reportingService != null) {
+            await _reportingService!.reportPlaybackStart(
+              track,
+              playMethod: 'Transcode',
+            );
+          }
+          _lastPlayingState = true;
         } else {
           rethrow;
         }
@@ -292,6 +341,14 @@ class AudioPlayerService {
   }
 
   Future<void> stop() async {
+    // Report stop to Jellyfin before stopping
+    if (_currentTrack != null && _reportingService != null) {
+      await _reportingService!.reportPlaybackStopped(
+        _currentTrack!,
+        _lastPosition,
+      );
+    }
+    
     await _player.stop();
     _currentTrack = null;
     _currentTrackController.add(null);
