@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../jellyfin/jellyfin_track.dart';
 import '../screens/full_player_screen.dart';
 import '../services/audio_player_service.dart';
+import 'jellyfin_waveform.dart';
 
 /// Compact control surface that mirrors the full player while staying unobtrusive.
 class NowPlayingBar extends StatelessWidget {
@@ -249,23 +250,9 @@ class _WaveformDisplay extends StatefulWidget {
 }
 
 class _WaveformDisplayState extends State<_WaveformDisplay> {
-  bool _waveformUnavailable = false;
-
-  @override
-  void didUpdateWidget(covariant _WaveformDisplay oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.track.id != widget.track.id) {
-      _waveformUnavailable = false;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final waveformUrl =
-        _waveformUnavailable ? null : widget.track.waveformImageUrl(width: 900, height: 120);
     final borderRadius = BorderRadius.circular(12);
-    final primaryTint = const Color(0xFFCCB8FF);
-    final secondaryTint = const Color(0xFF5F3FAE);
 
     return SizedBox(
       height: 40,
@@ -287,36 +274,12 @@ class _WaveformDisplayState extends State<_WaveformDisplay> {
               child: Stack(
                 children: [
                   Positioned.fill(
-                    child: waveformUrl != null
-                        ? ColorFiltered(
-                            colorFilter: ColorFilter.mode(
-                              primaryTint.withOpacity(0.65),
-                              BlendMode.srcATop,
-                            ),
-                            child: Image.network(
-                              waveformUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) {
-                                if (!_waveformUnavailable) {
-                                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                                    if (mounted) {
-                                      setState(() => _waveformUnavailable = true);
-                                    }
-                                  });
-                                }
-                              return _WaveformFallback(
-                                theme: widget.theme,
-                                primaryTint: primaryTint,
-                                seed: widget.track.id.hashCode,
-                              );
-                            },
-                          ),
-                        )
-                        : _WaveformFallback(
-                            theme: widget.theme,
-                            primaryTint: primaryTint,
-                            seed: widget.track.id.hashCode,
-                          ),
+                    child: JellyfinWaveform(
+                      track: widget.track,
+                      progress: clampedProgress,
+                      width: constraints.maxWidth,
+                      height: 40,
+                    ),
                   ),
                   Positioned.fill(
                     child: DecoratedBox(
@@ -380,75 +343,6 @@ class _WaveformDisplayState extends State<_WaveformDisplay> {
   }
 }
 
-class _WaveformFallback extends StatelessWidget {
-  const _WaveformFallback({
-    required this.theme,
-    required this.primaryTint,
-    required this.seed,
-  });
-
-  final ThemeData theme;
-  final Color primaryTint;
-  final int seed;
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _SyntheticWaveformPainter(
-        baseColor: theme.colorScheme.secondary.withOpacity(0.25),
-        highlightColor: primaryTint.withOpacity(0.35),
-        seed: seed,
-      ),
-    );
-  }
-}
-
-class _SyntheticWaveformPainter extends CustomPainter {
-  _SyntheticWaveformPainter({
-    required this.baseColor,
-    required this.highlightColor,
-    required this.seed,
-  });
-
-  final Color baseColor;
-  final Color highlightColor;
-  final int seed;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.isEmpty) return;
-    final paint = Paint()
-      ..style = PaintingStyle.fill;
-    final barCount = 60;
-    final random = math.Random(seed);
-    final barWidth = size.width / barCount;
-
-    for (int i = 0; i < barCount; i++) {
-      final t = i / (barCount - 1);
-      final base = math.sin(t * math.pi * 3) * 0.5 + 0.5;
-      final jitter = random.nextDouble() * 0.3;
-      final height = size.height * (0.2 + base * 0.6 + jitter * 0.2);
-      final x = i * barWidth;
-      final rect = Rect.fromLTWH(x, (size.height - height) / 2, barWidth * 0.7, height);
-      paint.shader = LinearGradient(
-        begin: Alignment.bottomCenter,
-        end: Alignment.topCenter,
-        colors: [baseColor, highlightColor],
-      ).createShader(rect);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(2)),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_SyntheticWaveformPainter oldDelegate) {
-    return oldDelegate.baseColor != baseColor ||
-        oldDelegate.highlightColor != highlightColor ||
-        oldDelegate.seed != seed;
-  }
-}
 
 class _PositionSlider extends StatefulWidget {
   const _PositionSlider({required this.audioService});
