@@ -368,7 +368,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.nautune;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elysiumdisc.nautune;
 				DEVELOPMENT_TEAM = 5Q647G89V6;
 				CODE_SIGN_STYLE = Automatic;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -386,7 +386,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.nautune.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elysiumdisc.nautune.RunnerTests;
 				DEVELOPMENT_TEAM = 5Q647G89V6;
 				CODE_SIGN_STYLE = Automatic;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -405,7 +405,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.nautune.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elysiumdisc.nautune.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
@@ -420,7 +420,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.nautune.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elysiumdisc.nautune.RunnerTests;
 				DEVELOPMENT_TEAM = 5Q647G89V6;
 				CODE_SIGN_STYLE = Automatic;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -553,7 +553,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.nautune;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elysiumdisc.nautune;
 				DEVELOPMENT_TEAM = 5Q647G89V6;
 				CODE_SIGN_STYLE = Automatic;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -577,7 +577,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.nautune;
+				PRODUCT_BUNDLE_IDENTIFIER = com.elysiumdisc.nautune;
 				DEVELOPMENT_TEAM = 5Q647G89V6;
 				CODE_SIGN_STYLE = Automatic;
 				PRODUCT_NAME = "$(TARGET_NAME)";
