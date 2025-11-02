@@ -9,6 +9,7 @@ import '../jellyfin/jellyfin_track.dart';
 import '../widgets/now_playing_bar.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
+import 'settings_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key, required this.appState});
@@ -29,7 +30,7 @@ class _LibraryScreenState extends State<LibraryScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _tabController.addListener(_handleTabChange);
     _albumsScrollController.addListener(_onAlbumsScroll);
     _playlistsScrollController.addListener(_onPlaylistsScroll);
@@ -151,8 +152,8 @@ class _LibraryScreenState extends State<LibraryScreen>
                 error: recentError,
                 onRefresh: () => widget.appState.refreshRecent(),
                 onTrackTap: (track) => _playTrack(track),
-                appState: widget.appState,
               ),
+              _RecentTab(appState: widget.appState),
               _PlaylistsTab(
                 playlists: playlists,
                 isLoading: isLoadingPlaylists,
@@ -167,17 +168,29 @@ class _LibraryScreenState extends State<LibraryScreen>
 
         return Scaffold(
           appBar: AppBar(
-            title: Row(
-              children: [
-                const Icon(Icons.waves),
-                const SizedBox(width: 8),
-                Text(
-                  'Nautune',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: theme.colorScheme.onPrimary,
+            title: InkWell(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => SettingsScreen(appState: widget.appState),
                   ),
-                ),
-              ],
+                );
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.waves),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Nautune',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: theme.colorScheme.onPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.settings, size: 16, color: theme.colorScheme.onPrimary.withOpacity(0.7)),
+                ],
+              ),
             ),
             actions: [
               if (selectedId != null)
@@ -219,6 +232,10 @@ class _LibraryScreenState extends State<LibraryScreen>
                   NavigationDestination(
                     icon: Icon(Icons.favorite_outline),
                     label: 'Favorites',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.history),
+                    label: 'Recent',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.queue_music),
@@ -571,14 +588,13 @@ class _PlaylistsTab extends StatelessWidget {
   }
 }
 
-class _FavoritesTab extends StatefulWidget {
+class _FavoritesTab extends StatelessWidget {
   const _FavoritesTab({
     required this.recentTracks,
     required this.isLoading,
     required this.error,
     required this.onRefresh,
     required this.onTrackTap,
-    required this.appState,
   });
 
   final List<JellyfinTrack>? recentTracks;
@@ -586,30 +602,22 @@ class _FavoritesTab extends StatefulWidget {
   final Object? error;
   final VoidCallback onRefresh;
   final Function(JellyfinTrack) onTrackTap;
-  final NautuneAppState appState;
-
-  @override
-  State<_FavoritesTab> createState() => _FavoritesTabState();
-}
-
-class _FavoritesTabState extends State<_FavoritesTab> {
-  bool _showRecentlyPlayed = true;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    if (widget.error != null) {
+    if (error != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.error, size: 64, color: Colors.red.shade300),
             const SizedBox(height: 16),
-            const Text('Failed to load recent items'),
+            const Text('Failed to load favorites'),
             const SizedBox(height: 8),
             ElevatedButton.icon(
-              onPressed: widget.onRefresh,
+              onPressed: onRefresh,
               icon: const Icon(Icons.refresh),
               label: const Text('Retry'),
             ),
@@ -618,8 +626,140 @@ class _FavoritesTabState extends State<_FavoritesTab> {
       );
     }
 
-    final albums = widget.appState.albums;
-    final isLoadingAlbums = widget.appState.isLoadingAlbums;
+    if (isLoading && (recentTracks == null || recentTracks!.isEmpty)) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
+    if (recentTracks == null || recentTracks!.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.favorite_outline, size: 64, color: theme.colorScheme.secondary.withOpacity(0.5)),
+            const SizedBox(height: 16),
+            Text(
+              'No favorite tracks',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Mark tracks as favorites to see them here',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () async => onRefresh(),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: recentTracks!.length,
+        itemBuilder: (context, index) {
+          final track = recentTracks![index];
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: Icon(Icons.music_note, color: theme.colorScheme.secondary),
+              title: Text(track.name),
+              subtitle: Text(track.displayArtist),
+              trailing: track.duration != null
+                  ? Text(
+                      _formatDuration(track.duration!),
+                      style: theme.textTheme.bodySmall,
+                    )
+                  : null,
+              onTap: () => onTrackTap(track),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    return '${twoDigits(duration.inMinutes.remainder(60))}:${twoDigits(duration.inSeconds.remainder(60))}';
+  }
+}
+
+class _RecentTab extends StatefulWidget {
+  const _RecentTab({
+    required this.appState,
+  });
+
+  final NautuneAppState appState;
+
+  @override
+  State<_RecentTab> createState() => _RecentTabState();
+}
+
+class _RecentTabState extends State<_RecentTab> {
+  bool _showRecentlyPlayed = true;
+  List<JellyfinTrack>? _recentlyPlayedTracks;
+  List<JellyfinAlbum>? _recentlyAddedAlbums;
+  bool _isLoadingPlayed = false;
+  bool _isLoadingAdded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentlyPlayed();
+    _loadRecentlyAdded();
+  }
+
+  Future<void> _loadRecentlyPlayed() async {
+    final libraryId = widget.appState.selectedLibraryId;
+    if (libraryId == null) return;
+
+    setState(() => _isLoadingPlayed = true);
+    try {
+      final tracks = await widget.appState.jellyfinService.loadRecentlyPlayedTracks(
+        libraryId: libraryId,
+        limit: 50,
+      );
+      if (mounted) {
+        setState(() {
+          _recentlyPlayedTracks = tracks;
+          _isLoadingPlayed = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingPlayed = false);
+      }
+    }
+  }
+
+  Future<void> _loadRecentlyAdded() async {
+    final libraryId = widget.appState.selectedLibraryId;
+    if (libraryId == null) return;
+
+    setState(() => _isLoadingAdded = true);
+    try {
+      final albums = await widget.appState.jellyfinService.loadRecentlyAddedAlbums(
+        libraryId: libraryId,
+        limit: 20,
+      );
+      if (mounted) {
+        setState(() {
+          _recentlyAddedAlbums = albums;
+          _isLoadingAdded = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingAdded = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
 
     return Column(
       children: [
@@ -663,19 +803,19 @@ class _FavoritesTabState extends State<_FavoritesTab> {
         ),
         Expanded(
           child: _showRecentlyPlayed
-              ? _buildRecentlyPlayed(theme)
-              : _buildRecentlyAdded(theme, albums, isLoadingAlbums),
+              ? _buildRecentlyPlayed(theme, _recentlyPlayedTracks, _isLoadingPlayed)
+              : _buildRecentlyAdded(theme, _recentlyAddedAlbums, _isLoadingAdded),
         ),
       ],
     );
   }
 
-  Widget _buildRecentlyPlayed(ThemeData theme) {
-    if (widget.isLoading && (widget.recentTracks == null || widget.recentTracks!.isEmpty)) {
+  Widget _buildRecentlyPlayed(ThemeData theme, List<JellyfinTrack>? recentTracks, bool isLoading) {
+    if (isLoading && (recentTracks == null || recentTracks.isEmpty)) {
       return const Center(child: CircularProgressIndicator());
     }
     
-    if (widget.recentTracks == null || widget.recentTracks!.isEmpty) {
+    if (recentTracks == null || recentTracks.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -699,12 +839,15 @@ class _FavoritesTabState extends State<_FavoritesTab> {
     }
 
     return RefreshIndicator(
-      onRefresh: () async => widget.onRefresh(),
+      onRefresh: () async => _loadRecentlyPlayed(),
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: widget.recentTracks!.length,
+        itemCount: recentTracks.length,
         itemBuilder: (context, index) {
-          final track = widget.recentTracks![index];
+          if (index >= recentTracks.length) {
+            return const SizedBox.shrink();
+          }
+          final track = recentTracks[index];
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
@@ -717,7 +860,12 @@ class _FavoritesTabState extends State<_FavoritesTab> {
                       style: theme.textTheme.bodySmall,
                     )
                   : null,
-              onTap: () => widget.onTrackTap(track),
+              onTap: () {
+                widget.appState.audioPlayerService.playTrack(
+                  track,
+                  queueContext: [track],
+                );
+              },
             ),
           );
         },
@@ -738,7 +886,7 @@ class _FavoritesTabState extends State<_FavoritesTab> {
             Icon(Icons.album, size: 64, color: theme.colorScheme.secondary.withOpacity(0.5)),
             const SizedBox(height: 16),
             Text(
-              'No albums found',
+              'No recently added albums',
               style: theme.textTheme.titleMedium,
             ),
           ],
@@ -746,11 +894,8 @@ class _FavoritesTabState extends State<_FavoritesTab> {
       );
     }
 
-    // Show recently added albums (sorted by date added, descending)
-    final recentAlbums = albums.take(20).toList();
-
     return RefreshIndicator(
-      onRefresh: () async => widget.appState.refreshAlbums(),
+      onRefresh: () async => _loadRecentlyAdded(),
       child: GridView.builder(
         padding: const EdgeInsets.all(16),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -759,11 +904,12 @@ class _FavoritesTabState extends State<_FavoritesTab> {
           crossAxisSpacing: 16,
           mainAxisSpacing: 16,
         ),
-        itemCount: recentAlbums.length,
+        itemCount: albums.length,
         itemBuilder: (context, index) {
-          final album = recentAlbums[index];
+          final album = albums[index];
           return _AlbumCard(
             album: album,
+            appState: widget.appState,
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(

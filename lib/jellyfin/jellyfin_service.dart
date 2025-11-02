@@ -192,6 +192,60 @@ class JellyfinService {
     return recent;
   }
 
+  Future<List<JellyfinTrack>> loadRecentlyPlayedTracks({
+    required String libraryId,
+    bool forceRefresh = false,
+    int limit = 20,
+  }) async {
+    final client = _client;
+    final session = _session;
+    if (client == null || session == null) {
+      throw StateError('Authenticate before requesting recently played tracks.');
+    }
+    final cacheKey = 'played_$libraryId#$limit';
+    if (!forceRefresh) {
+      final cached = _recentCache[cacheKey];
+      if (cached != null && !cached.isExpired(_cacheTtl)) {
+        return cached.value;
+      }
+    }
+
+    final recent = await client.fetchRecentlyPlayedTracks(
+      credentials: session.credentials,
+      libraryId: libraryId,
+      limit: limit,
+    );
+    _recentCache[cacheKey] = _CacheEntry(recent);
+    return recent;
+  }
+
+  Future<List<JellyfinAlbum>> loadRecentlyAddedAlbums({
+    required String libraryId,
+    bool forceRefresh = false,
+    int limit = 20,
+  }) async {
+    final client = _client;
+    final session = _session;
+    if (client == null || session == null) {
+      throw StateError('Authenticate before requesting recently added albums.');
+    }
+    final cacheKey = 'added_albums_$libraryId#$limit';
+    if (!forceRefresh) {
+      final cached = _albumCache[cacheKey];
+      if (cached != null && !cached.isExpired(_cacheTtl)) {
+        return cached.value;
+      }
+    }
+
+    final recent = await client.fetchRecentlyAddedAlbums(
+      credentials: session.credentials,
+      libraryId: libraryId,
+      limit: limit,
+    );
+    _albumCache[cacheKey] = _CacheEntry(recent);
+    return recent;
+  }
+
   Future<List<JellyfinTrack>> loadAlbumTracks({
     required String albumId,
     bool forceRefresh = false,
