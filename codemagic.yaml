@@ -22,16 +22,20 @@ workflows:
 
       - name: Archive and export .ipa
         script: |
-          # Archive with your Apple Team ID
+          echo "🔑 Using Team ID: $APP_STORE_CONNECT_TEAM_ID"
+
+          # Archive the app and sign with your Apple Developer Team ID
           xcodebuild -workspace "$IOS_WORKSPACE" \
             -scheme "$IOS_SCHEME" \
             -configuration Release \
             -sdk iphoneos \
             -archivePath build/ios/archive/Nautune.xcarchive \
             DEVELOPMENT_TEAM=$APP_STORE_CONNECT_TEAM_ID \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            CODE_SIGN_STYLE=Automatic \
             clean archive
 
-          # Export using the existing ExportOptions.plist
+          # Export the .ipa for TestFlight upload
           xcodebuild -exportArchive \
             -archivePath build/ios/archive/Nautune.xcarchive \
             -exportOptionsPlist ios/ExportOptions.plist \
