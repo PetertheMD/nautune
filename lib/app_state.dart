@@ -56,6 +56,9 @@ class NautuneAppState extends ChangeNotifier {
   bool _isLoadingRecent = false;
   Object? _recentError;
   List<JellyfinTrack>? _recentTracks;
+  bool _isLoadingFavorites = false;
+  Object? _favoritesError;
+  List<JellyfinTrack>? _favoriteTracks;
 
   bool get isInitialized => _initialized;
   bool get isAuthenticating => _isAuthenticating;
@@ -76,6 +79,9 @@ class NautuneAppState extends ChangeNotifier {
   bool get isLoadingRecent => _isLoadingRecent;
   Object? get recentError => _recentError;
   List<JellyfinTrack>? get recentTracks => _recentTracks;
+  bool get isLoadingFavorites => _isLoadingFavorites;
+  Object? get favoritesError => _favoritesError;
+  List<JellyfinTrack>? get favoriteTracks => _favoriteTracks;
   String? get selectedLibraryId => _session?.selectedLibraryId;
   JellyfinLibrary? get selectedLibrary {
     final libs = _libraries;
@@ -176,6 +182,9 @@ class NautuneAppState extends ChangeNotifier {
     _recentTracks = null;
     _recentError = null;
     _isLoadingRecent = false;
+    _favoriteTracks = null;
+    _favoritesError = null;
+    _isLoadingFavorites = false;
     await _sessionStore.clear();
     notifyListeners();
   }
@@ -338,6 +347,7 @@ class NautuneAppState extends ChangeNotifier {
       _loadArtistsForLibrary(libraryId, forceRefresh: forceRefresh),
       _loadPlaylistsForLibrary(libraryId, forceRefresh: forceRefresh),
       _loadRecentForLibrary(libraryId, forceRefresh: forceRefresh),
+      _loadFavorites(forceRefresh: forceRefresh),
     ]);
   }
 
@@ -465,11 +475,32 @@ class NautuneAppState extends ChangeNotifier {
     }
   }
 
+  Future<void> _loadFavorites({bool forceRefresh = false}) async {
+    _favoritesError = null;
+    _isLoadingFavorites = true;
+    notifyListeners();
+
+    try {
+      _favoriteTracks = await _jellyfinService.getFavoriteTracks();
+    } catch (error) {
+      _favoritesError = error;
+      _favoriteTracks = null;
+    } finally {
+      _isLoadingFavorites = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshFavorites() async {
+    await _loadFavorites(forceRefresh: true);
+  }
+
   void clearLibrarySelection() {
     _session = _session?.copyWith(selectedLibraryId: null, selectedLibraryName: null);
     _albums = null;
     _playlists = null;
     _recentTracks = null;
+    _favoriteTracks = null;
     notifyListeners();
     if (_session != null) {
       _sessionStore.save(_session!);

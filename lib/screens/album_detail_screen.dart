@@ -400,6 +400,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
       ),
       bottomNavigationBar: NowPlayingBar(
         audioService: widget.appState.audioPlayerService,
+        appState: widget.appState,
       ),
     );
   }

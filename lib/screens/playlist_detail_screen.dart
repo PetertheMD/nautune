@@ -204,6 +204,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                     ),
       bottomNavigationBar: NowPlayingBar(
         audioService: widget.appState.audioPlayerService,
+        appState: widget.appState,
       ),
     );
   }

@@ -227,6 +227,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
       ),
       bottomNavigationBar: NowPlayingBar(
         audioService: widget.appState.audioPlayerService,
+        appState: widget.appState,
       ),
     );
   }

@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../jellyfin/jellyfin_track.dart';
 import '../screens/full_player_screen.dart';
+import '../screens/queue_screen.dart';
 import '../services/audio_player_service.dart';
+import '../app_state.dart';
 import 'jellyfin_waveform.dart';
 
 /// Compact control surface that mirrors the full player while staying unobtrusive.
@@ -12,9 +14,11 @@ class NowPlayingBar extends StatelessWidget {
   const NowPlayingBar({
     super.key,
     required this.audioService,
+    required this.appState,
   });
 
   final AudioPlayerService audioService;
+  final NautuneAppState appState;
 
   void _openFullPlayer(BuildContext context) {
     Navigator.of(context).push(
@@ -137,7 +141,11 @@ class NowPlayingBar extends StatelessWidget {
                             tooltip: 'View queue',
                             icon: const Icon(Icons.queue_music),
                             onPressed: () {
-                              Navigator.of(context).pushNamed('/queue');
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => QueueScreen(appState: appState),
+                                ),
+                              );
                             },
                           ),
                         ],

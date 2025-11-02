@@ -70,6 +70,10 @@ class _LibraryScreenState extends State<LibraryScreen>
     setState(() {
       _currentTabIndex = _tabController.index;
     });
+    // Refresh favorites when switching to favorites tab (tab index 3)
+    if (_currentTabIndex == 3) {
+      widget.appState.refreshFavorites();
+    }
   }
 
   @override
@@ -93,6 +97,9 @@ class _LibraryScreenState extends State<LibraryScreen>
         final recentTracks = widget.appState.recentTracks;
         final isLoadingRecent = widget.appState.isLoadingRecent;
         final recentError = widget.appState.recentError;
+        final favoriteTracks = widget.appState.favoriteTracks;
+        final isLoadingFavorites = widget.appState.isLoadingFavorites;
+        final favoritesError = widget.appState.favoritesError;
 
         Widget body;
 
@@ -151,10 +158,10 @@ class _LibraryScreenState extends State<LibraryScreen>
               ),
               _SearchTab(appState: widget.appState),
               _FavoritesTab(
-                recentTracks: recentTracks,
-                isLoading: isLoadingRecent,
-                error: recentError,
-                onRefresh: () => widget.appState.refreshRecent(),
+                recentTracks: favoriteTracks,
+                isLoading: isLoadingFavorites,
+                error: favoritesError,
+                onRefresh: () => widget.appState.refreshFavorites(),
                 onTrackTap: (track) => _playTrack(track),
               ),
               _RecentTab(appState: widget.appState),
@@ -276,6 +283,7 @@ class _LibraryScreenState extends State<LibraryScreen>
               ),
               NowPlayingBar(
                 audioService: widget.appState.audioPlayerService,
+                appState: widget.appState,
               ),
             ],
           ),
