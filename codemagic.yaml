@@ -8,7 +8,6 @@ workflows:
       vars:
         IOS_SCHEME: "Runner"
         IOS_WORKSPACE: "ios/Runner.xcworkspace"
-        EXPORT_PLIST_PATH: "ios/ExportOptions.plist"
     scripts:
       - name: Flutter setup
         script: |
@@ -23,26 +22,7 @@ workflows:
 
       - name: Archive and export .ipa
         script: |
-          # Ensure the ExportOptions.plist exists
-          if [ ! -f "$EXPORT_PLIST_PATH" ]; then
-            echo "Creating default ExportOptions.plist..."
-            cat > "$EXPORT_PLIST_PATH" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>method</key><string>app-store</string>
-  <key>uploadSymbols</key><true/>
-  <key>compileBitcode</key><false/>
-  <key>destination</key><string>export</string>
-  <key>signingStyle</key><string>automatic</string>
-  <key>stripSwiftSymbols</key><true/>
-</dict>
-</plist>
-PLIST
-          fi
-
-          # Archive the app with proper signing team
+          # Archive with your Apple Team ID
           xcodebuild -workspace "$IOS_WORKSPACE" \
             -scheme "$IOS_SCHEME" \
             -configuration Release \
@@ -51,10 +31,10 @@ PLIST
             DEVELOPMENT_TEAM=$APP_STORE_CONNECT_TEAM_ID \
             clean archive
 
-          # Export the IPA for TestFlight
+          # Export using the existing ExportOptions.plist
           xcodebuild -exportArchive \
             -archivePath build/ios/archive/Nautune.xcarchive \
-            -exportOptionsPlist "$EXPORT_PLIST_PATH" \
+            -exportOptionsPlist ios/ExportOptions.plist \
             -exportPath build/ios/ipa
 
     artifacts:
