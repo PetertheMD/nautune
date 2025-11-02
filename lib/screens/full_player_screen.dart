@@ -85,80 +85,84 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 600;
 
-    return StreamBuilder<bool>(
-      stream: widget.audioService.playingStream,
-      builder: (context, playingSnapshot) {
-        final isPlaying = playingSnapshot.data ?? false;
+    return StreamBuilder<JellyfinTrack?>(
+      stream: widget.audioService.currentTrackStream,
+      builder: (context, trackSnapshot) {
+        final track = trackSnapshot.data;
 
-        return StreamBuilder<Duration>(
-          stream: widget.audioService.positionStream,
-          builder: (context, positionSnapshot) {
-            final position = positionSnapshot.data ?? Duration.zero;
+        return StreamBuilder<bool>(
+          stream: widget.audioService.playingStream,
+          builder: (context, playingSnapshot) {
+            final isPlaying = playingSnapshot.data ?? false;
 
-            return StreamBuilder<Duration?>(
-              stream: widget.audioService.durationStream,
-              builder: (context, durationSnapshot) {
-                final duration = durationSnapshot.data ?? Duration.zero;
-                final track = widget.audioService.currentTrack;
+            return StreamBuilder<Duration>(
+              stream: widget.audioService.positionStream,
+              builder: (context, positionSnapshot) {
+                final position = positionSnapshot.data ?? Duration.zero;
 
-                if (track == null) {
-                  return Scaffold(
-                    appBar: AppBar(
-                      title: const Text('Now Playing'),
-                      leading: IconButton(
-                        icon: const Icon(Icons.arrow_back),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ),
-                    body: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.music_note, size: 64, color: theme.colorScheme.secondary),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No track playing',
-                            style: theme.textTheme.titleLarge,
+                return StreamBuilder<Duration?>(
+                  stream: widget.audioService.durationStream,
+                  builder: (context, durationSnapshot) {
+                    final duration = durationSnapshot.data ?? Duration.zero;
+
+                    if (track == null) {
+                      return Scaffold(
+                        appBar: AppBar(
+                          title: const Text('Now Playing'),
+                          leading: IconButton(
+                            icon: const Icon(Icons.arrow_back),
+                            onPressed: () => Navigator.of(context).pop(),
                           ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                final artwork = _buildArtwork(
-                  track: track,
-                  isDesktop: isDesktop,
-                  theme: theme,
-                );
-
-                return Scaffold(
-                  body: SafeArea(
-                    child: Column(
-                      children: [
-                        // Header
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
+                        ),
+                        body: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.expand_more),
-                                onPressed: () => Navigator.of(context).pop(),
-                                tooltip: 'Close',
-                              ),
-                              const Spacer(),
+                              Icon(Icons.music_note, size: 64, color: theme.colorScheme.secondary),
+                              const SizedBox(height: 16),
                               Text(
-                                'Now Playing',
-                                style: theme.textTheme.titleMedium,
+                                'No track playing',
+                                style: theme.textTheme.titleLarge,
                               ),
-                              const Spacer(),
-                              const SizedBox(width: 48),
                             ],
                           ),
                         ),
+                      );
+                    }
 
-                        Expanded(
-                          child: SingleChildScrollView(
+                    final artwork = _buildArtwork(
+                      track: track,
+                      isDesktop: isDesktop,
+                      theme: theme,
+                    );
+
+                    return Scaffold(
+                      body: SafeArea(
+                        child: Column(
+                          children: [
+                            // Header
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.expand_more),
+                                    onPressed: () => Navigator.of(context).pop(),
+                                    tooltip: 'Close',
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    'Now Playing',
+                                    style: theme.textTheme.titleMedium,
+                                  ),
+                                  const Spacer(),
+                                  const SizedBox(width: 48),
+                                ],
+                              ),
+                            ),
+
+                            Expanded(
+                              child: SingleChildScrollView(
                             padding: EdgeInsets.symmetric(
                               horizontal: isDesktop ? size.width * 0.2 : 32,
                               vertical: 16,
@@ -343,20 +347,21 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
 
                                 SizedBox(height: isDesktop ? 32 : 24),
                               ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
+                  );
+                },
+              );
+            },
+          );
+        },
+      );
+    },
+  );
 }
 
   Widget _buildArtwork({
@@ -400,3 +405,4 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
       ),
     );
   }
+}

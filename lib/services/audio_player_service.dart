@@ -68,15 +68,6 @@ class AudioPlayerService {
     _player.onPositionChanged.listen((position) {
       _positionController.add(position);
       _lastPosition = position;
-      
-      // Report progress to Jellyfin periodically
-      if (_currentTrack != null && _reportingService != null) {
-        _reportingService!.reportPlaybackProgress(
-          _currentTrack!,
-          position,
-          !_lastPlayingState,
-        );
-      }
     });
     
     // Duration updates
@@ -96,7 +87,7 @@ class AudioPlayerService {
           _reportingService!.reportPlaybackProgress(
             _currentTrack!,
             _lastPosition,
-            !isPlaying,
+            !isPlaying, // isPaused
           );
         }
       }
@@ -254,10 +245,13 @@ class AudioPlayerService {
       
       // Report playback start to Jellyfin
       if (_reportingService != null) {
+        print('🎵 Reporting playback start to Jellyfin: ${track.name}');
         await _reportingService!.reportPlaybackStart(
           track,
           playMethod: isOffline ? 'DirectPlay' : (activeUrl == downloadUrl ? 'DirectStream' : 'Transcode'),
         );
+      } else {
+        print('⚠️ Reporting service not initialized!');
       }
       
       _lastPlayingState = true;

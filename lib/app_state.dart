@@ -106,6 +106,14 @@ class NautuneAppState extends ChangeNotifier {
     if (storedSession != null) {
       _session = storedSession;
       _jellyfinService.restoreSession(storedSession);
+      
+      // Initialize playback reporting for restored session
+      final reportingService = PlaybackReportingService(
+        serverUrl: storedSession.serverUrl,
+        accessToken: storedSession.credentials.accessToken,
+      );
+      _audioPlayerService.setReportingService(reportingService);
+      
       await _loadLibraries();
       await _loadLibraryDependentContent();
     }

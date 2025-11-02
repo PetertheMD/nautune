@@ -15,7 +15,12 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
 - **Album Queueing**: One tap queues the whole album in disc/track-number order with seamless previous/next navigation
 - **Resume & Persist**: Playback position is saved every second and restored on launch
 - **Background Audio**: Keeps playing while the app is in the background
-- **Playback Reporting**: Full integration with Jellyfin's Playback Reporting plugin - track your listening activity
+- **Playback Reporting**: Full Jellyfin server integration
+  - ✅ Reports playback start with play method (DirectPlay/DirectStream/Transcode)
+  - ✅ Real-time progress updates (position, pause state)
+  - ✅ Automatic "Recently Played" tracking in Jellyfin
+  - ✅ Session-based reporting with unique IDs
+  - ✅ Proper stop reporting with final position
 - **iOS Media Integration**: Native lock screen controls and CarPlay support
 
 ### 🌊 Visual Experience

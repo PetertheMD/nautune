@@ -23,6 +23,10 @@ class PlaybackReportingService {
   }) async {
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
     
+    print('📡 Reporting to Jellyfin: $serverUrl/Sessions/Playing');
+    print('   Track: ${track.name} (${track.id})');
+    print('   Method: $playMethod');
+    
     final url = Uri.parse('$serverUrl/Sessions/Playing');
     final body = {
       'ItemId': track.id,
@@ -32,10 +36,11 @@ class PlaybackReportingService {
       'IsPaused': false,
       'IsMuted': false,
       'PositionTicks': 0,
+      'RepeatMode': 'RepeatNone',
     };
 
     try {
-      await httpClient.post(
+      final response = await httpClient.post(
         url,
         headers: {
           'X-Emby-Token': accessToken,
@@ -44,10 +49,16 @@ class PlaybackReportingService {
         body: jsonEncode(body),
       );
 
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        print('✅ Playback start reported successfully!');
+      } else {
+        print('⚠️ Playback start failed: ${response.statusCode} - ${response.body}');
+      }
+
       // Start periodic progress reporting
       _startProgressReporting(track);
     } catch (e) {
-      print('Failed to report playback start: $e');
+      print('❌ Failed to report playback start: $e');
     }
   }
 
@@ -74,10 +85,12 @@ class PlaybackReportingService {
       'PositionTicks': positionTicks,
       'IsPaused': isPaused,
       'PlayMethod': 'DirectPlay',
+      'CanSeek': true,
+      'RepeatMode': 'RepeatNone',
     };
 
     try {
-      await httpClient.post(
+      final response = await httpClient.post(
         url,
         headers: {
           'X-Emby-Token': accessToken,
@@ -85,8 +98,14 @@ class PlaybackReportingService {
         },
         body: jsonEncode(body),
       );
+      
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        print('✅ Progress reported: ${position.inSeconds}s, paused: $isPaused');
+      } else {
+        print('⚠️ Progress report failed: ${response.statusCode}');
+      }
     } catch (e) {
-      print('Failed to report playback progress: $e');
+      print('❌ Failed to report playback progress: $e');
     }
   }
 
