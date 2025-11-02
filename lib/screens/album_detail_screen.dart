@@ -157,34 +157,124 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                   ],
                   const SizedBox(height: 24),
                   if (_tracks != null && _tracks!.isNotEmpty)
-                    FilledButton.icon(
-                      onPressed: () async {
-                        try {
-                          await widget.appState.audioPlayerService.playAlbum(
-                            _tracks!,
-                            albumId: album.id,
-                            albumName: album.name,
-                          );
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Playing ${album.name}'),
-                                duration: const Duration(seconds: 2),
-                              ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: () async {
+                            try {
+                              await widget.appState.audioPlayerService.playAlbum(
+                                _tracks!,
+                                albumId: album.id,
+                                albumName: album.name,
+                              );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Playing ${album.name}'),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            } catch (error) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Could not start playback: $error'),
+                                  duration: const Duration(seconds: 3),
+                                ),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('Play Album'),
+                        ),
+                        const SizedBox(width: 12),
+                        ListenableBuilder(
+                          listenable: widget.appState.downloadService,
+                          builder: (context, _) {
+                            final allDownloaded = _tracks!.every(
+                              (track) => widget.appState.downloadService
+                                  .isDownloaded(track.id),
                             );
-                          }
-                        } catch (error) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Could not start playback: $error'),
-                              duration: const Duration(seconds: 3),
-                            ),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Play Album'),
+                            final anyDownloading = _tracks!.any(
+                              (track) {
+                                final download = widget.appState.downloadService
+                                    .getDownload(track.id);
+                                return download != null &&
+                                    (download.isDownloading || download.isQueued);
+                              },
+                            );
+
+                            if (allDownloaded) {
+                              return OutlinedButton.icon(
+                                onPressed: () async {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: const Text('Delete Downloads'),
+                                      content: Text(
+                                          'Delete all ${_tracks!.length} downloaded tracks from this album?'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(context).pop(false),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        FilledButton(
+                                          onPressed: () =>
+                                              Navigator.of(context).pop(true),
+                                          child: const Text('Delete'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm == true && mounted) {
+                                    for (final track in _tracks!) {
+                                      await widget.appState.downloadService
+                                          .deleteDownload(track.id);
+                                    }
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Album downloads deleted'),
+                                          duration: Duration(seconds: 2),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                                icon: const Icon(Icons.download_done),
+                                label: const Text('Downloaded'),
+                              );
+                            }
+
+                            return OutlinedButton.icon(
+                              onPressed: anyDownloading
+                                  ? null
+                                  : () async {
+                                      await widget.appState.downloadService
+                                          .downloadAlbum(album);
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                                'Downloading ${_tracks!.length} tracks from ${album.name}'),
+                                            duration: const Duration(seconds: 2),
+                                          ),
+                                        );
+                                      }
+                                    },
+                              icon: Icon(anyDownloading
+                                  ? Icons.downloading
+                                  : Icons.download),
+                              label: Text(anyDownloading
+                                  ? 'Downloading...'
+                                  : 'Download Album'),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                 ],
               ),

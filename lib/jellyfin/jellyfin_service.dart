@@ -26,6 +26,9 @@ class JellyfinService {
 
   JellyfinSession? get session => _session;
 
+  String? get baseUrl => _session?.serverUrl;
+  String? get token => _session?.credentials.accessToken;
+
   Future<JellyfinSession> connect({
     required String serverUrl,
     required String username,

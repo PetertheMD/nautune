@@ -9,6 +9,7 @@ import 'jellyfin/jellyfin_session.dart';
 import 'jellyfin/jellyfin_session_store.dart';
 import 'jellyfin/jellyfin_track.dart';
 import 'services/audio_player_service.dart';
+import 'services/download_service.dart';
 import 'services/playback_state_store.dart';
 
 class NautuneAppState extends ChangeNotifier {
@@ -20,12 +21,14 @@ class NautuneAppState extends ChangeNotifier {
         _sessionStore = sessionStore,
         _playbackStateStore = playbackStateStore {
     _audioPlayerService = AudioPlayerService();
+    _downloadService = DownloadService(jellyfinService: jellyfinService);
   }
 
   final JellyfinService _jellyfinService;
   final JellyfinSessionStore _sessionStore;
   final PlaybackStateStore _playbackStateStore;
   late final AudioPlayerService _audioPlayerService;
+  late final DownloadService _downloadService;
 
   bool _initialized = false;
   JellyfinSession? _session;
@@ -83,6 +86,7 @@ class NautuneAppState extends ChangeNotifier {
 
   JellyfinService get jellyfinService => _jellyfinService;
   AudioPlayerService get audioPlayerService => _audioPlayerService;
+  DownloadService get downloadService => _downloadService;
 
   String _buildStreamUrl(String trackId) {
     final session = _session;

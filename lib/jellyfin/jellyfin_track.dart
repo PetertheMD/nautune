@@ -181,4 +181,17 @@ class JellyfinTrack {
     }
     throw Exception('JellyfinTrack missing data for streaming URL');
   }
+
+  String downloadUrl(String? baseUrl, String? authToken) {
+    final url = baseUrl ?? serverUrl;
+    final token = authToken ?? this.token;
+    if (url == null || token == null) {
+      throw Exception('Missing server URL or token for download');
+    }
+    final uri = Uri.parse(url).resolve('/Items/$id/Download');
+    final query = <String, String>{
+      'api_key': token,
+    };
+    return uri.replace(queryParameters: query).toString();
+  }
 }

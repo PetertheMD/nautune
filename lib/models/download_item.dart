@@ -1,0 +1,104 @@
+import '../jellyfin/jellyfin_track.dart';
+
+enum DownloadStatus {
+  queued,
+  downloading,
+  completed,
+  failed,
+  paused,
+}
+
+class DownloadItem {
+  final JellyfinTrack track;
+  final String localPath;
+  final DownloadStatus status;
+  final double progress;
+  final int? totalBytes;
+  final int? downloadedBytes;
+  final DateTime queuedAt;
+  final DateTime? completedAt;
+  final String? errorMessage;
+
+  DownloadItem({
+    required this.track,
+    required this.localPath,
+    required this.status,
+    this.progress = 0.0,
+    this.totalBytes,
+    this.downloadedBytes,
+    required this.queuedAt,
+    this.completedAt,
+    this.errorMessage,
+  });
+
+  DownloadItem copyWith({
+    JellyfinTrack? track,
+    String? localPath,
+    DownloadStatus? status,
+    double? progress,
+    int? totalBytes,
+    int? downloadedBytes,
+    DateTime? queuedAt,
+    DateTime? completedAt,
+    String? errorMessage,
+  }) {
+    return DownloadItem(
+      track: track ?? this.track,
+      localPath: localPath ?? this.localPath,
+      status: status ?? this.status,
+      progress: progress ?? this.progress,
+      totalBytes: totalBytes ?? this.totalBytes,
+      downloadedBytes: downloadedBytes ?? this.downloadedBytes,
+      queuedAt: queuedAt ?? this.queuedAt,
+      completedAt: completedAt ?? this.completedAt,
+      errorMessage: errorMessage ?? this.errorMessage,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'trackId': track.id,
+      'trackName': track.name,
+      'trackArtist': track.displayArtist,
+      'trackAlbum': track.album,
+      'trackDuration': track.duration?.inMilliseconds,
+      'localPath': localPath,
+      'status': status.name,
+      'progress': progress,
+      'totalBytes': totalBytes,
+      'downloadedBytes': downloadedBytes,
+      'queuedAt': queuedAt.toIso8601String(),
+      'completedAt': completedAt?.toIso8601String(),
+      'errorMessage': errorMessage,
+    };
+  }
+
+  static DownloadItem? fromJson(Map<String, dynamic> json, JellyfinTrack track) {
+    try {
+      return DownloadItem(
+        track: track,
+        localPath: json['localPath'] as String,
+        status: DownloadStatus.values.firstWhere(
+          (e) => e.name == json['status'],
+          orElse: () => DownloadStatus.queued,
+        ),
+        progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
+        totalBytes: json['totalBytes'] as int?,
+        downloadedBytes: json['downloadedBytes'] as int?,
+        queuedAt: DateTime.parse(json['queuedAt'] as String),
+        completedAt: json['completedAt'] != null
+            ? DateTime.parse(json['completedAt'] as String)
+            : null,
+        errorMessage: json['errorMessage'] as String?,
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  bool get isCompleted => status == DownloadStatus.completed;
+  bool get isDownloading => status == DownloadStatus.downloading;
+  bool get isFailed => status == DownloadStatus.failed;
+  bool get isPaused => status == DownloadStatus.paused;
+  bool get isQueued => status == DownloadStatus.queued;
+}

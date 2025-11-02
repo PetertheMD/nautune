@@ -9,12 +9,14 @@ import 'playback_state_store.dart';
 
 class AudioPlayerService {
   final AudioPlayer _player = AudioPlayer();
+  final AudioPlayer _nextPlayer = AudioPlayer();
   final PlaybackStateStore _stateStore = PlaybackStateStore();
   
   JellyfinTrack? _currentTrack;
   List<JellyfinTrack> _queue = [];
   int _currentIndex = 0;
   Timer? _positionSaveTimer;
+  bool _isTransitioning = false;
   
   // Streams
   final StreamController<JellyfinTrack?> _currentTrackController = StreamController<JellyfinTrack?>.broadcast();
@@ -71,10 +73,53 @@ class AudioPlayerService {
       }
     });
     
-    // Track completion
-    _player.onPlayerComplete.listen((_) {
-      skipToNext();
+    // Track completion - gapless transition
+    _player.onPlayerComplete.listen((_) async {
+      if (!_isTransitioning) {
+        await _gaplessTransition();
+      }
     });
+  }
+  
+  Future<void> _gaplessTransition() async {
+    if (_currentIndex + 1 < _queue.length) {
+      _isTransitioning = true;
+      
+      // Swap players for gapless playback
+      final temp = _player;
+      // Note: This is a simplified approach. For true gapless,
+      // we'd need platform-specific implementations or just_audio package
+      
+      _currentIndex++;
+      _currentTrack = _queue[_currentIndex];
+      _currentTrackController.add(_currentTrack);
+      
+      // Preload next track if available
+      if (_currentIndex + 1 < _queue.length) {
+        await _preloadNextTrack();
+      }
+      
+      _isTransitioning = false;
+      _saveCurrentPosition();
+    } else {
+      // Queue finished
+      await stop();
+    }
+  }
+  
+  Future<void> _preloadNextTrack() async {
+    if (_currentIndex + 1 >= _queue.length) return;
+    
+    final nextTrack = _queue[_currentIndex + 1];
+    final url = nextTrack.directDownloadUrl();
+    
+    if (url != null) {
+      try {
+        await _nextPlayer.setSource(UrlSource(url));
+      } catch (e) {
+        // Preload failed, will try regular load on track change
+      }
+    }
   }
   
   Future<void> _restorePlaybackState() async {

@@ -151,6 +151,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                 error: recentError,
                 onRefresh: () => widget.appState.refreshRecent(),
                 onTrackTap: (track) => _playTrack(track),
+                appState: widget.appState,
               ),
               _PlaylistsTab(
                 playlists: playlists,
@@ -159,7 +160,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                 scrollController: _playlistsScrollController,
                 onRefresh: () => widget.appState.refreshPlaylists(),
               ),
-              _DownloadsTab(),
+              _DownloadsTab(appState: widget.appState),
             ],
           );
         }
@@ -570,13 +571,14 @@ class _PlaylistsTab extends StatelessWidget {
   }
 }
 
-class _FavoritesTab extends StatelessWidget {
+class _FavoritesTab extends StatefulWidget {
   const _FavoritesTab({
     required this.recentTracks,
     required this.isLoading,
     required this.error,
     required this.onRefresh,
     required this.onTrackTap,
+    required this.appState,
   });
 
   final List<JellyfinTrack>? recentTracks;
@@ -584,56 +586,194 @@ class _FavoritesTab extends StatelessWidget {
   final Object? error;
   final VoidCallback onRefresh;
   final Function(JellyfinTrack) onTrackTap;
+  final NautuneAppState appState;
+
+  @override
+  State<_FavoritesTab> createState() => _FavoritesTabState();
+}
+
+class _FavoritesTabState extends State<_FavoritesTab> {
+  bool _showRecentlyPlayed = true;
 
   @override
   Widget build(BuildContext context) {
-    if (error != null) {
+    final theme = Theme.of(context);
+    
+    if (widget.error != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.error, size: 64, color: Colors.red.shade300),
             const SizedBox(height: 16),
-            const Text('Failed to load favorites'),
+            const Text('Failed to load recent items'),
             const SizedBox(height: 8),
-            ElevatedButton.icon(onPressed: onRefresh, icon: const Icon(Icons.refresh), label: const Text('Retry')),
+            ElevatedButton.icon(
+              onPressed: widget.onRefresh,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
           ],
         ),
       );
     }
-    if (isLoading && (recentTracks == null || recentTracks!.isEmpty)) return const Center(child: CircularProgressIndicator());
-    if (recentTracks == null || recentTracks!.isEmpty) {
+
+    final albums = widget.appState.albums;
+    final isLoadingAlbums = widget.appState.isLoadingAlbums;
+
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            border: Border(
+              bottom: BorderSide(
+                color: theme.colorScheme.outlineVariant,
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(
+                      value: true,
+                      label: Text('Recently Played'),
+                      icon: Icon(Icons.history, size: 18),
+                    ),
+                    ButtonSegment(
+                      value: false,
+                      label: Text('Recently Added'),
+                      icon: Icon(Icons.new_releases, size: 18),
+                    ),
+                  ],
+                  selected: {_showRecentlyPlayed},
+                  onSelectionChanged: (Set<bool> newSelection) {
+                    setState(() {
+                      _showRecentlyPlayed = newSelection.first;
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _showRecentlyPlayed
+              ? _buildRecentlyPlayed(theme)
+              : _buildRecentlyAdded(theme, albums, isLoadingAlbums),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecentlyPlayed(ThemeData theme) {
+    if (widget.isLoading && (widget.recentTracks == null || widget.recentTracks!.isEmpty)) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
+    if (widget.recentTracks == null || widget.recentTracks!.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.favorite, size: 64, color: Colors.grey.shade600),
+            Icon(Icons.history, size: 64, color: theme.colorScheme.secondary.withOpacity(0.5)),
             const SizedBox(height: 16),
-            const Text('No recent tracks'),
+            Text(
+              'No recently played tracks',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Start listening to see your history',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       );
     }
+
     return RefreshIndicator(
-      onRefresh: () async => onRefresh(),
+      onRefresh: () async => widget.onRefresh(),
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: recentTracks!.length,
+        itemCount: widget.recentTracks!.length,
         itemBuilder: (context, index) {
-          if (index >= recentTracks!.length) {
-            return const SizedBox.shrink();
-          }
-          final track = recentTracks![index];
-          final theme = Theme.of(context);
+          final track = widget.recentTracks![index];
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               leading: Icon(Icons.music_note, color: theme.colorScheme.secondary),
               title: Text(track.name),
               subtitle: Text(track.displayArtist),
-              trailing: track.duration != null ? Text(_formatDuration(track.duration!), style: theme.textTheme.bodySmall) : null,
-              onTap: () => onTrackTap(track),
+              trailing: track.duration != null
+                  ? Text(
+                      _formatDuration(track.duration!),
+                      style: theme.textTheme.bodySmall,
+                    )
+                  : null,
+              onTap: () => widget.onTrackTap(track),
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildRecentlyAdded(ThemeData theme, List<JellyfinAlbum>? albums, bool isLoading) {
+    if (isLoading && (albums == null || albums.isEmpty)) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (albums == null || albums.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.album, size: 64, color: theme.colorScheme.secondary.withOpacity(0.5)),
+            const SizedBox(height: 16),
+            Text(
+              'No albums found',
+              style: theme.textTheme.titleMedium,
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show recently added albums (sorted by date added, descending)
+    final recentAlbums = albums.take(20).toList();
+
+    return RefreshIndicator(
+      onRefresh: () async => widget.appState.refreshAlbums(),
+      child: GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 0.7,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+        ),
+        itemCount: recentAlbums.length,
+        itemBuilder: (context, index) {
+          final album = recentAlbums[index];
+          return _AlbumCard(
+            album: album,
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => AlbumDetailScreen(
+                    album: album,
+                    appState: widget.appState,
+                  ),
+                ),
+              );
+            },
           );
         },
       ),
@@ -1082,58 +1222,278 @@ class _ArtistCard extends StatelessWidget {
 }
 
 class _DownloadsTab extends StatelessWidget {
-  const _DownloadsTab();
+  const _DownloadsTab({required this.appState});
+
+  final NautuneAppState appState;
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes;
+    final seconds = d.inSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    return RefreshIndicator(
-      onRefresh: () async {
-        // TODO: Implement downloads refresh
-      },
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.download, size: 64, color: theme.colorScheme.secondary),
-            const SizedBox(height: 16),
-            Text(
-              'Offline Downloads',
-              style: theme.textTheme.titleLarge?.copyWith(
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
-                'Download your favorite albums and tracks\nfor offline listening',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+    return ListenableBuilder(
+      listenable: appState.downloadService,
+      builder: (context, _) {
+        final downloads = appState.downloadService.downloads;
+        final completedCount = appState.downloadService.completedCount;
+        final activeCount = appState.downloadService.activeCount;
+
+        if (downloads.isEmpty) {
+          return RefreshIndicator(
+            onRefresh: () async {
+              // Trigger a refresh check
+              await Future.delayed(const Duration(milliseconds: 100));
+            },
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                SizedBox(
+                  height: MediaQuery.of(context).size.height - 200,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.download_outlined,
+                            size: 64, color: theme.colorScheme.secondary),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No Downloads',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Text(
+                            'Download albums and tracks for offline listening',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                textAlign: TextAlign.center,
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            final totalSize =
+                await appState.downloadService.getTotalDownloadSize();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      'Total: $completedCount downloaded (${_formatFileSize(totalSize)})'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+          child: Column(
+            children: [
+              if (activeCount > 0 || completedCount > 0)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 20, color: theme.colorScheme.primary),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          '$completedCount completed • $activeCount active',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                      if (completedCount > 0)
+                        TextButton.icon(
+                          onPressed: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Clear All Downloads'),
+                                content: Text(
+                                    'Delete all $completedCount downloaded tracks?'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(context).pop(false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.of(context).pop(true),
+                                    child: const Text('Delete All'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              await appState.downloadService
+                                  .clearAllDownloads();
+                            }
+                          },
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text('Clear All'),
+                        ),
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: downloads.length,
+                  itemBuilder: (context, index) {
+                    final download = downloads[index];
+                    final track = download.track;
+
+                    return ListTile(
+                      leading: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(4),
+                          color: theme.colorScheme.primaryContainer,
+                        ),
+                        child: download.isCompleted
+                            ? Icon(Icons.check_circle,
+                                color: theme.colorScheme.primary)
+                            : download.isDownloading
+                                ? CircularProgressIndicator(
+                                    value: download.progress,
+                                    strokeWidth: 3,
+                                  )
+                                : download.isFailed
+                                    ? Icon(Icons.error,
+                                        color: theme.colorScheme.error)
+                                    : Icon(Icons.schedule,
+                                        color: theme.colorScheme.onPrimaryContainer),
+                      ),
+                      title: Text(
+                        track.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            track.displayArtist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (download.isDownloading)
+                            Text(
+                              '${(download.progress * 100).toStringAsFixed(0)}% • ${_formatFileSize(download.downloadedBytes ?? 0)} / ${_formatFileSize(download.totalBytes ?? 0)}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.primary,
+                              ),
+                            )
+                          else if (download.isCompleted && download.totalBytes != null)
+                            Text(
+                              _formatFileSize(download.totalBytes!),
+                              style: theme.textTheme.bodySmall,
+                            )
+                          else if (download.isFailed)
+                            Text(
+                              'Download failed',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.error,
+                              ),
+                            )
+                          else if (download.isQueued)
+                            Text(
+                              'Queued...',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (track.duration != null)
+                            Text(
+                              _formatDuration(track.duration!),
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          const SizedBox(width: 8),
+                          if (download.isFailed)
+                            IconButton(
+                              icon: const Icon(Icons.refresh),
+                              onPressed: () => appState.downloadService
+                                  .retryDownload(track.id),
+                              tooltip: 'Retry',
+                            )
+                          else
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Delete Download'),
+                                    content: Text(
+                                        'Delete "${track.name}"?'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      FilledButton(
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(true),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  await appState.downloadService
+                                      .deleteDownload(track.id);
+                                }
+                              },
+                              tooltip: 'Delete',
+                            ),
+                        ],
+                      ),
+                      onTap: download.isCompleted
+                          ? () {
+                              appState.audioPlayerService.playTrack(
+                                track,
+                                queueContext: [track],
+                              );
+                            }
+                          : null,
+                    );
+                  },
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: () {
-                // TODO: Implement offline mode
-              },
-              icon: const Icon(Icons.download_for_offline),
-              label: const Text('Start Downloading'),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () {
-                // TODO: Show download settings
-              },
-              icon: const Icon(Icons.settings),
-              label: const Text('Download Settings'),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
