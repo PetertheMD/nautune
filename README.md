@@ -30,6 +30,8 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
 - **✅ Downloads Tab**: Placeholder for offline mode (coming soon)
 - **Track Listings**: Full album detail screens with ordered track lists, durations, and padded numbers (multi-disc aware)
 - **Artist Discography**: View all albums by an artist
+- **Bottom Navigation**: Icon-only rail keeps the most-used sections a single tap away on every platform
+- **Library Search Tab**: Dedicated search experience for quickly finding albums by name, showing artist and year context
 - **Smart Refresh**: Pull-to-refresh on all tabs for latest content sync
 
 ### 🎯 Jellyfin Integration
@@ -120,10 +122,11 @@ lib/
 
 ### Library Screen (`lib/screens/library_screen.dart`)
 - **Albums Tab**: Grid view with infinite scroll support, album artwork
-- **Artists Tab**: Placeholder (coming soon!)
+- **Artists Tab**: Full artist browser with discography navigation
+- **Search Tab**: Search albums inside the selected library, displaying artist attribution and year
 - **Favorites Tab**: Recent and favorited tracks in a list
 - **Playlists Tab**: Your Jellyfin playlists with track counts
-- **Header**: Library switcher and user info
+- **Bottom Navigation**: Material `NavigationBar` mirrors the tab order for quick access on mobile and desktop
 
 ### Audio Player Service (`lib/services/audio_player_service.dart`)
 - Manages playback lifecycle and queues

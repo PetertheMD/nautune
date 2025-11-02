@@ -242,6 +242,25 @@ class JellyfinService {
     );
   }
 
+  Future<List<JellyfinArtist>> searchArtists({
+    required String libraryId,
+    required String query,
+  }) async {
+    final client = _client;
+    final session = _session;
+    if (client == null || session == null) {
+      throw StateError('Authenticate before searching artists.');
+    }
+    if (query.trim().isEmpty) {
+      return const [];
+    }
+    return client.searchArtists(
+      credentials: session.credentials,
+      libraryId: libraryId,
+      query: query,
+    );
+  }
+
   String buildImageUrl({
     required String itemId,
     String imageType = 'Primary',

@@ -69,6 +69,16 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
     return pos;
   }
 
+  void _seekFromGesture(double dx, double maxWidth, Duration duration) {
+    if (duration.inMilliseconds > 0 && maxWidth > 0) {
+      final ratio = (dx / maxWidth).clamp(0.0, 1.0);
+      final newPosition = Duration(
+        milliseconds: (duration.inMilliseconds * ratio).toInt(),
+      );
+      widget.audioService.seek(newPosition);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -207,48 +217,63 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                 SizedBox(height: isDesktop ? 48 : 32),
 
                                 // Progress
-                                Column(
-                                  children: [
-                                    SliderTheme(
-                                      data: SliderThemeData(
-                                        trackHeight: 4,
-                                        thumbShape: const RoundSliderThumbShape(
-                                          enabledThumbRadius: 8,
-                                        ),
-                                        overlayShape: const RoundSliderOverlayShape(
-                                          overlayRadius: 16,
-                                        ),
-                                      ),
-                                      child: Slider(
-                                        value: _sliderValue(position, duration),
-                                        min: 0,
-                                        max: _sliderMax(position, duration),
-                                        onChanged: duration.inMilliseconds > 0
-                                            ? (value) {
-                                                widget.audioService.seek(
-                                                  Duration(milliseconds: value.toInt()),
-                                                );
-                                              }
-                                            : null,
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    void scrub(double dx) => _seekFromGesture(
+                                          dx,
+                                          constraints.maxWidth,
+                                          duration,
+                                        );
+
+                                    return GestureDetector(
+                                      behavior: HitTestBehavior.translucent,
+                                      onTapDown: (details) => scrub(details.localPosition.dx),
+                                      onHorizontalDragUpdate: (details) => scrub(details.localPosition.dx),
+                                      child: Column(
                                         children: [
-                                          Text(
-                                            _formatDuration(position),
-                                            style: theme.textTheme.bodySmall,
+                                          SliderTheme(
+                                            data: SliderThemeData(
+                                              trackHeight: 4,
+                                              thumbShape: const RoundSliderThumbShape(
+                                                enabledThumbRadius: 8,
+                                              ),
+                                              overlayShape: const RoundSliderOverlayShape(
+                                                overlayRadius: 16,
+                                              ),
+                                            ),
+                                            child: Slider(
+                                              value: _sliderValue(position, duration),
+                                              min: 0,
+                                              max: _sliderMax(position, duration),
+                                              onChanged: duration.inMilliseconds > 0
+                                                  ? (value) {
+                                                      widget.audioService.seek(
+                                                        Duration(milliseconds: value.toInt()),
+                                                      );
+                                                    }
+                                                  : null,
+                                            ),
                                           ),
-                                          Text(
-                                            _formatDuration(duration),
-                                            style: theme.textTheme.bodySmall,
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text(
+                                                  _formatDuration(position),
+                                                  style: theme.textTheme.bodySmall,
+                                                ),
+                                                Text(
+                                                  _formatDuration(duration),
+                                                  style: theme.textTheme.bodySmall,
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ],
                                       ),
-                                    ),
-                                  ],
+                                    );
+                                  },
                                 ),
 
                                 SizedBox(height: isDesktop ? 48 : 32),

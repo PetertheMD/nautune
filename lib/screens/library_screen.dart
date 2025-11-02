@@ -723,6 +723,8 @@ class _ArtistsTab extends StatelessWidget {
   }
 }
 
+enum _SearchScope { albums, artists }
+
 class _SearchTab extends StatefulWidget {
   const _SearchTab({required this.appState});
 
@@ -734,10 +736,12 @@ class _SearchTab extends StatefulWidget {
 
 class _SearchTabState extends State<_SearchTab> {
   final TextEditingController _controller = TextEditingController();
-  List<JellyfinAlbum> _results = const [];
+  List<JellyfinAlbum> _albumResults = const [];
+  List<JellyfinArtist> _artistResults = const [];
   bool _isLoading = false;
   Object? _error;
   String _lastQuery = '';
+  _SearchScope _scope = _SearchScope.albums;
 
   @override
   void dispose() {
@@ -754,7 +758,8 @@ class _SearchTabState extends State<_SearchTab> {
 
     if (trimmed.isEmpty) {
       setState(() {
-        _results = const [];
+        _albumResults = const [];
+        _artistResults = const [];
         _isLoading = false;
       });
       return;
@@ -764,7 +769,8 @@ class _SearchTabState extends State<_SearchTab> {
     if (libraryId == null) {
       setState(() {
         _error = 'Select a music library to search.';
-        _results = const [];
+        _albumResults = const [];
+        _artistResults = const [];
         _isLoading = false;
       });
       return;
@@ -772,21 +778,37 @@ class _SearchTabState extends State<_SearchTab> {
 
     setState(() => _isLoading = true);
     try {
-      final albums = await widget.appState.jellyfinService.searchAlbums(
-        libraryId: libraryId,
-        query: trimmed,
-      );
+      if (_scope == _SearchScope.albums) {
+        final albums = await widget.appState.jellyfinService.searchAlbums(
+          libraryId: libraryId,
+          query: trimmed,
+        );
+        if (!mounted || _lastQuery != trimmed) return;
+        setState(() {
+          _albumResults = albums;
+          _artistResults = const [];
+          _isLoading = false;
+        });
+      } else {
+        final artists = await widget.appState.jellyfinService.searchArtists(
+          libraryId: libraryId,
+          query: trimmed,
+        );
+        if (!mounted || _lastQuery != trimmed) return;
+        setState(() {
+          _artistResults = artists;
+          _albumResults = const [];
+          _isLoading = false;
+        });
+      }
       if (!mounted || _lastQuery != trimmed) return;
-      setState(() {
-        _results = albums;
-        _isLoading = false;
-      });
     } catch (error) {
       if (!mounted || _lastQuery != trimmed) return;
       setState(() {
         _error = error;
         _isLoading = false;
-        _results = const [];
+        _albumResults = const [];
+        _artistResults = const [];
       });
     }
   }
@@ -808,14 +830,45 @@ class _SearchTabState extends State<_SearchTab> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+          child: SegmentedButton<_SearchScope>(
+            segments: const [
+              ButtonSegment(
+                value: _SearchScope.albums,
+                icon: Icon(Icons.album_outlined),
+                label: Text('Albums'),
+              ),
+              ButtonSegment(
+                value: _SearchScope.artists,
+                icon: Icon(Icons.person_outline),
+                label: Text('Artists'),
+              ),
+            ],
+            selected: {_scope},
+            onSelectionChanged: (selection) {
+              final scope = selection.first;
+              setState(() {
+                _scope = scope;
+                _albumResults = const [];
+                _artistResults = const [];
+              });
+              if (_lastQuery.isNotEmpty) {
+                _performSearch(_lastQuery);
+              }
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           child: TextField(
             controller: _controller,
             onSubmitted: _performSearch,
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search),
-              hintText: 'Search albums',
+              hintText: _scope == _SearchScope.albums
+                  ? 'Search albums'
+                  : 'Search artists',
               filled: true,
               fillColor: theme.colorScheme.surfaceContainerHighest,
               border: OutlineInputBorder(
@@ -850,46 +903,98 @@ class _SearchTabState extends State<_SearchTab> {
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
-              : _results.isEmpty
-                  ? Center(
-                      child: Text(
-                        _lastQuery.isEmpty
-                            ? 'Search your library by album name.'
-                            : 'No albums found for "$_lastQuery"',
-                        style: theme.textTheme.titleMedium,
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                      itemCount: _results.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final album = _results[index];
-                        return Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.album_outlined),
-                            title: Text(album.name),
-                            subtitle: Text(album.displayArtist),
-                            trailing: album.productionYear != null
-                                ? Text('${album.productionYear}')
-                                : null,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => AlbumDetailScreen(
-                                    album: album,
-                                    appState: widget.appState,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        );
-                      },
-                    ),
+              : _buildResults(theme),
         ),
       ],
+    );
+  }
+
+  Widget _buildResults(ThemeData theme) {
+    if (_lastQuery.isEmpty) {
+      return Center(
+        child: Text(
+          _scope == _SearchScope.albums
+              ? 'Search your library by album name.'
+              : 'Search your library by artist name.',
+          style: theme.textTheme.titleMedium,
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    if (_scope == _SearchScope.albums) {
+      if (_albumResults.isEmpty) {
+        return Center(
+          child: Text(
+            'No albums found for "$_lastQuery"',
+            style: theme.textTheme.titleMedium,
+            textAlign: TextAlign.center,
+          ),
+        );
+      }
+      return ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        itemCount: _albumResults.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final album = _albumResults[index];
+          return Card(
+            child: ListTile(
+              leading: const Icon(Icons.album_outlined),
+              title: Text(album.name),
+              subtitle: Text(album.displayArtist),
+              trailing:
+                  album.productionYear != null ? Text('${album.productionYear}') : null,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => AlbumDetailScreen(
+                      album: album,
+                      appState: widget.appState,
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      );
+    }
+
+    if (_artistResults.isEmpty) {
+      return Center(
+        child: Text(
+          'No artists found for "$_lastQuery"',
+          style: theme.textTheme.titleMedium,
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      itemCount: _artistResults.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final artist = _artistResults[index];
+        return Card(
+          child: ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: Text(artist.name),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ArtistDetailScreen(
+                    artist: artist,
+                    appState: widget.appState,
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
