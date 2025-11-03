@@ -1,8 +1,7 @@
 import CarPlay
 import Flutter
 
-@available(iOS 14.0, *)
-class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
+@objc class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     var interfaceController: CPInterfaceController?
     var methodChannel: FlutterMethodChannel?
     
