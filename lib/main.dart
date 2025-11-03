@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'app_state.dart';
@@ -16,7 +17,7 @@ Future<void> main() async {
     sessionStore: JellyfinSessionStore(),
     playbackStateStore: PlaybackStateStore(),
   );
-  await appState.initialize();
+  unawaited(appState.initialize());
   runApp(NautuneApp(appState: appState));
 }
 

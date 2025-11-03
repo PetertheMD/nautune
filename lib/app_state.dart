@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'jellyfin/jellyfin_album.dart';
@@ -121,26 +122,40 @@ class NautuneAppState extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
-    final storedSession = await _sessionStore.load();
-    if (storedSession != null) {
-      _session = storedSession;
-      _jellyfinService.restoreSession(storedSession);
-      
-      // Initialize playback reporting for restored session
-      final reportingService = PlaybackReportingService(
-        serverUrl: storedSession.serverUrl,
-        accessToken: storedSession.credentials.accessToken,
+    try {
+      final storedSession = await _sessionStore.load();
+      if (storedSession != null) {
+        _session = storedSession;
+        _jellyfinService.restoreSession(storedSession);
+        
+        // Initialize playback reporting for restored session
+        final reportingService = PlaybackReportingService(
+          serverUrl: storedSession.serverUrl,
+          accessToken: storedSession.credentials.accessToken,
+        );
+        _audioPlayerService.setReportingService(reportingService);
+        
+        await _loadLibraries();
+        await _loadLibraryDependentContent();
+      }
+    } catch (error, stackTrace) {
+      _lastError = error;
+      debugPrint('Nautune initialization failed: $error');
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'app_state',
+          context: ErrorDescription('restoring Nautune session'),
+        ),
       );
-      _audioPlayerService.setReportingService(reportingService);
+    } finally {
+      _initialized = true;
+      notifyListeners();
       
-      await _loadLibraries();
-      await _loadLibraryDependentContent();
+      // Initialize CarPlay AFTER app is fully loaded
+      _carPlayService.initialize();
     }
-    _initialized = true;
-    notifyListeners();
-    
-    // Initialize CarPlay AFTER app is fully loaded
-    _carPlayService.initialize();
   }
 
   Future<void> login({
