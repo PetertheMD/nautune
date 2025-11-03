@@ -658,4 +658,88 @@ class JellyfinClient {
 
     return items.whereType<Map<String, dynamic>>().toList();
   }
+
+  Future<List<JellyfinTrack>> fetchRecentlyAddedTracks({
+    required JellyfinCredentials credentials,
+    required String libraryId,
+    int limit = 50,
+  }) async {
+    final uri = _buildUri('/Users/${credentials.userId}/Items', {
+      'ParentId': libraryId,
+      'IncludeItemTypes': 'Audio',
+      'Recursive': 'true',
+      'SortBy': 'DateCreated',
+      'SortOrder': 'Descending',
+      'Limit': '$limit',
+      'Fields':
+          'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber',
+      'EnableImageTypes': 'Primary,Thumb',
+    });
+
+    final response = await httpClient.get(
+      uri,
+      headers: _defaultHeaders(credentials),
+    );
+
+    if (response.statusCode != 200) {
+      throw JellyfinRequestException(
+        'Unable to fetch recently added tracks: ${response.statusCode}',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>?;
+    final items = data?['Items'] as List<dynamic>? ?? const [];
+
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map((json) => JellyfinTrack.fromJson(
+              json,
+              serverUrl: serverUrl,
+              token: credentials.accessToken,
+              userId: credentials.userId,
+            ))
+        .toList();
+  }
+
+  Future<List<JellyfinTrack>> fetchLongestRuntimeTracks({
+    required JellyfinCredentials credentials,
+    required String libraryId,
+    int limit = 50,
+  }) async {
+    final uri = _buildUri('/Users/${credentials.userId}/Items', {
+      'ParentId': libraryId,
+      'IncludeItemTypes': 'Audio',
+      'Recursive': 'true',
+      'SortBy': 'Runtime',
+      'SortOrder': 'Descending',
+      'Limit': '$limit',
+      'Fields':
+          'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber',
+      'EnableImageTypes': 'Primary,Thumb',
+    });
+
+    final response = await httpClient.get(
+      uri,
+      headers: _defaultHeaders(credentials),
+    );
+
+    if (response.statusCode != 200) {
+      throw JellyfinRequestException(
+        'Unable to fetch longest runtime tracks: ${response.statusCode}',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>?;
+    final items = data?['Items'] as List<dynamic>? ?? const [];
+
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map((json) => JellyfinTrack.fromJson(
+              json,
+              serverUrl: serverUrl,
+              token: credentials.accessToken,
+              userId: credentials.userId,
+            ))
+        .toList();
+  }
 }

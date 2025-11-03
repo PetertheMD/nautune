@@ -759,6 +759,57 @@ class JellyfinService {
     return artistsJson.map((json) => JellyfinArtist.fromJson(json)).toList();
   }
 
+  /// Get recently played tracks for a library
+  Future<List<JellyfinTrack>> getRecentlyPlayedTracks({
+    required String libraryId,
+    int limit = 50,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    return await client.fetchRecentlyPlayedTracks(
+      credentials: session.credentials,
+      libraryId: libraryId,
+      limit: limit,
+    );
+  }
+
+  /// Get recently added tracks for a library
+  Future<List<JellyfinTrack>> getRecentlyAddedTracks({
+    required String libraryId,
+    int limit = 50,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    return await client.fetchRecentlyAddedTracks(
+      credentials: session.credentials,
+      libraryId: libraryId,
+      limit: limit,
+    );
+  }
+
+  /// Get longest runtime tracks for a library
+  Future<List<JellyfinTrack>> getLongestRuntimeTracks({
+    required String libraryId,
+    int limit = 50,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    return await client.fetchLongestRuntimeTracks(
+      credentials: session.credentials,
+      libraryId: libraryId,
+      limit: limit,
+    );
+  }
+
   void _clearCaches() {
     _albumCache.clear();
     _artistCache.clear();

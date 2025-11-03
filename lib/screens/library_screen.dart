@@ -284,7 +284,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.trending_up),
-                    label: 'Most Played',
+                    label: 'Most',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.queue_music),
@@ -1113,7 +1113,7 @@ class _FavoritesTab extends StatelessWidget {
   }
 }
 
-// Most Played Tab with toggle for Tracks/Albums/Artists
+// Most Tab with toggles for different views
 class _MostPlayedTab extends StatefulWidget {
   const _MostPlayedTab({
     required this.appState,
@@ -1128,18 +1128,18 @@ class _MostPlayedTab extends StatefulWidget {
 }
 
 class _MostPlayedTabState extends State<_MostPlayedTab> {
-  String _selectedType = 'tracks'; // 'tracks', 'albums', or 'artists'
-  List<dynamic>? _mostPlayedItems;
+  String _selectedType = 'mostPlayed'; // 'mostPlayed', 'recentlyPlayed', 'recentlyAdded', 'longest'
+  List<JellyfinTrack>? _tracks;
   bool _isLoading = false;
   Object? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadMostPlayed();
+    _loadTracks();
   }
 
-  Future<void> _loadMostPlayed() async {
+  Future<void> _loadTracks() async {
     final libraryId = widget.appState.selectedLibraryId;
     if (libraryId == null) return;
 
@@ -1150,22 +1150,26 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
 
     try {
       switch (_selectedType) {
-        case 'tracks':
-          _mostPlayedItems = await widget.appState.jellyfinService
+        case 'mostPlayed':
+          _tracks = await widget.appState.jellyfinService
               .getMostPlayedTracks(libraryId: libraryId);
           break;
-        case 'albums':
-          _mostPlayedItems = await widget.appState.jellyfinService
-              .getMostPlayedAlbums(libraryId: libraryId);
+        case 'recentlyPlayed':
+          _tracks = await widget.appState.jellyfinService
+              .getRecentlyPlayedTracks(libraryId: libraryId);
           break;
-        case 'artists':
-          _mostPlayedItems = await widget.appState.jellyfinService
-              .getMostPlayedArtists(libraryId: libraryId);
+        case 'recentlyAdded':
+          _tracks = await widget.appState.jellyfinService
+              .getRecentlyAddedTracks(libraryId: libraryId);
+          break;
+        case 'longest':
+          _tracks = await widget.appState.jellyfinService
+              .getLongestRuntimeTracks(libraryId: libraryId);
           break;
       }
     } catch (e) {
       _error = e;
-      _mostPlayedItems = null;
+      _tracks = null;
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -1179,25 +1183,30 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
 
     return Column(
       children: [
-        // Toggle for Tracks/Albums/Artists
+        // Toggle for different track lists
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: SegmentedButton<String>(
             segments: const [
               ButtonSegment(
-                value: 'tracks',
-                label: Text('Tracks'),
-                icon: Icon(Icons.music_note),
+                value: 'mostPlayed',
+                label: Text('Most Played'),
+                icon: Icon(Icons.trending_up),
               ),
               ButtonSegment(
-                value: 'albums',
-                label: Text('Albums'),
-                icon: Icon(Icons.album),
+                value: 'recentlyPlayed',
+                label: Text('Recent'),
+                icon: Icon(Icons.history),
               ),
               ButtonSegment(
-                value: 'artists',
-                label: Text('Artists'),
-                icon: Icon(Icons.person),
+                value: 'recentlyAdded',
+                label: Text('New'),
+                icon: Icon(Icons.fiber_new),
+              ),
+              ButtonSegment(
+                value: 'longest',
+                label: Text('Longest'),
+                icon: Icon(Icons.timer),
               ),
             ],
             selected: {_selectedType},
@@ -1205,7 +1214,7 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
               setState(() {
                 _selectedType = newSelection.first;
               });
-              _loadMostPlayed();
+              _loadTracks();
             },
           ),
         ),
@@ -1229,126 +1238,93 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
           children: [
             Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error),
             const SizedBox(height: 16),
-            Text('Failed to load most played', style: theme.textTheme.titleLarge),
+            Text('Failed to load tracks', style: theme.textTheme.titleLarge),
             const SizedBox(height: 8),
-            Text(_error.toString(), textAlign: TextAlign.center),
+            ElevatedButton.icon(
+              onPressed: _loadTracks,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
           ],
         ),
       );
     }
 
-    if (_mostPlayedItems == null || _mostPlayedItems!.isEmpty) {
+    if (_tracks == null || _tracks!.isEmpty) {
+      String emptyMessage;
+      switch (_selectedType) {
+        case 'mostPlayed':
+          emptyMessage = 'No play history yet';
+          break;
+        case 'recentlyPlayed':
+          emptyMessage = 'No recently played tracks';
+          break;
+        case 'recentlyAdded':
+          emptyMessage = 'No new tracks';
+          break;
+        case 'longest':
+          emptyMessage = 'No tracks found';
+          break;
+        default:
+          emptyMessage = 'No data';
+      }
+      
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.trending_up, size: 64, color: theme.colorScheme.secondary),
+            Icon(Icons.music_note, size: 64, color: theme.colorScheme.secondary.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
-            Text('No data yet', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Text('Start listening to see your most played $_selectedType',
-                style: theme.textTheme.bodyMedium, textAlign: TextAlign.center),
+            Text(emptyMessage, style: theme.textTheme.titleLarge),
           ],
         ),
       );
     }
 
-    switch (_selectedType) {
-      case 'tracks':
-        return _buildTracksList(theme);
-      case 'albums':
-        return _buildAlbumsList(theme);
-      case 'artists':
-        return _buildArtistsList(theme);
-      default:
-        return const SizedBox.shrink();
-    }
-  }
-
-  Widget _buildTracksList(ThemeData theme) {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: _mostPlayedItems!.length,
-      itemBuilder: (context, index) {
-        final track = _mostPlayedItems![index] as JellyfinTrack;
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: theme.colorScheme.primary,
-              child: Text('${index + 1}', style: const TextStyle(color: Colors.white)),
+    return RefreshIndicator(
+      onRefresh: _loadTracks,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _tracks!.length,
+        itemBuilder: (context, index) {
+          final track = _tracks![index];
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: theme.colorScheme.primary,
+                child: Text('${index + 1}', style: const TextStyle(color: Colors.white)),
+              ),
+              title: Text(track.name, style: TextStyle(color: theme.colorScheme.tertiary)),
+              subtitle: Text(track.displayArtist,
+                  style: TextStyle(color: theme.colorScheme.tertiary.withValues(alpha: 0.7))),
+              trailing: track.duration != null
+                  ? Text(_formatDuration(track.duration!),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.tertiary.withValues(alpha: 0.7)))
+                  : null,
+              onTap: () {
+                widget.appState.audioPlayerService.playTrack(
+                  track,
+                  queueContext: _tracks!,
+                );
+              },
             ),
-            title: Text(track.name, style: TextStyle(color: theme.colorScheme.tertiary)),
-            subtitle: Text(track.displayArtist,
-                style: TextStyle(color: theme.colorScheme.tertiary.withValues(alpha: 0.7))),
-            trailing: track.duration != null
-                ? Text(_formatDuration(track.duration!),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.tertiary.withValues(alpha: 0.7)))
-                : null,
-            onTap: () {
-              widget.appState.audioPlayerService.playTrack(
-                track,
-                queueContext: _mostPlayedItems!.cast<JellyfinTrack>(),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildAlbumsList(ThemeData theme) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
-        return GridView.builder(
-          padding: const EdgeInsets.all(16),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: 0.75,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-          ),
-          itemCount: _mostPlayedItems!.length,
-          itemBuilder: (context, index) {
-            final album = _mostPlayedItems![index] as JellyfinAlbum;
-            return _AlbumCard(
-              album: album,
-              onTap: () => widget.onAlbumTap(album),
-              appState: widget.appState,
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildArtistsList(ThemeData theme) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 800 ? 4 : 3;
-        return GridView.builder(
-          padding: const EdgeInsets.all(16),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: 0.75,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-          ),
-          itemCount: _mostPlayedItems!.length,
-          itemBuilder: (context, index) {
-            final artist = _mostPlayedItems![index] as JellyfinArtist;
-            return _ArtistCard(artist: artist, appState: widget.appState);
-          },
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
-    return '${twoDigits(duration.inMinutes.remainder(60))}:${twoDigits(duration.inSeconds.remainder(60))}';
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '$hours:${twoDigits(minutes)}:${twoDigits(seconds)}';
+    }
+    return '$minutes:${twoDigits(seconds)}';
   }
 }
 
