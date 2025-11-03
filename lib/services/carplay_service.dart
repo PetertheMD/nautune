@@ -13,13 +13,24 @@ class CarPlayService {
   void initialize() {
     if (_isInitialized || !Platform.isIOS) return;
     _isInitialized = true;
-    _setupCarPlay();
+    
+    // Safely setup CarPlay with error handling
+    try {
+      _setupCarPlay();
+    } catch (e) {
+      print('⚠️ CarPlay initialization failed (non-critical): $e');
+      // Don't crash the app if CarPlay fails
+    }
   }
   
   void _setupCarPlay() async {
-    // Set root template first, then force update
-    _setRootTemplate();
-    await _carplay.forceUpdateRootTemplate();
+    try {
+      // Set root template first, then force update
+      _setRootTemplate();
+      await _carplay.forceUpdateRootTemplate();
+    } catch (e) {
+      print('⚠️ CarPlay setup error: $e');
+    }
   }
   
   void _setRootTemplate() {
