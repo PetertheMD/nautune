@@ -166,7 +166,7 @@ class _QueueScreenState extends State<QueueScreen> {
                           style: TextStyle(
                             color: isCurrentTrack 
                                 ? theme.colorScheme.primary
-                                : null,
+                                : theme.colorScheme.tertiary,  // Ocean blue for non-current
                             fontWeight: isCurrentTrack 
                                 ? FontWeight.bold 
                                 : FontWeight.normal,
@@ -177,7 +177,7 @@ class _QueueScreenState extends State<QueueScreen> {
                           style: TextStyle(
                             color: isCurrentTrack
                                 ? theme.colorScheme.primary.withOpacity(0.7)
-                                : theme.colorScheme.onSurfaceVariant,
+                                : theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue for non-current
                           ),
                         ),
                         trailing: Row(
@@ -189,7 +189,7 @@ class _QueueScreenState extends State<QueueScreen> {
                                   Duration(microseconds: track.runTimeTicks! ~/ 10),
                                 ),
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
+                                  color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue
                                 ),
                               ),
                             if (!isCurrentTrack) ...[

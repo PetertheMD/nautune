@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'jellyfin_album.dart';
 import 'jellyfin_artist.dart';
 import 'jellyfin_client.dart';
+import 'jellyfin_genre.dart';
 import 'jellyfin_library.dart';
 import 'jellyfin_playlist.dart';
 import 'jellyfin_session.dart';
@@ -23,6 +24,7 @@ class JellyfinService {
   final Map<String, _CacheEntry<List<JellyfinArtist>>> _artistCache = {};
   final Map<String, _CacheEntry<List<JellyfinPlaylist>>> _playlistCache = {};
   final Map<String, _CacheEntry<List<JellyfinTrack>>> _recentCache = {};
+  final Map<String, _CacheEntry<List<JellyfinGenre>>> _genreCache = {};
 
   JellyfinSession? get session => _session;
 
@@ -323,6 +325,9 @@ class JellyfinService {
     String imageType = 'Primary',
     String? tag,
     int maxWidth = 400,
+    int? maxHeight,
+    int quality = 90,
+    String format = 'jpg',  // jpg, webp, png
   }) {
     final session = _session;
     if (session == null) {
@@ -331,9 +336,13 @@ class JellyfinService {
     final buffer = StringBuffer()
       ..write('${session.serverUrl}/Items/$itemId/Images/$imageType');
     final params = <String, String>{
-      'quality': '90',
+      'quality': '$quality',
       'maxWidth': '$maxWidth',
+      'format': format,
     };
+    if (maxHeight != null) {
+      params['maxHeight'] = '$maxHeight';
+    }
     if (tag != null) {
       params['tag'] = tag;
     }
@@ -628,11 +637,133 @@ class JellyfinService {
         .toList();
   }
 
+  /// Load genres for a library
+  Future<List<JellyfinGenre>> loadGenres({
+    String? libraryId,
+    bool forceRefresh = false,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    final cacheKey = 'genres_$libraryId';
+    if (!forceRefresh) {
+      final cached = _genreCache[cacheKey];
+      if (cached != null && !cached.isExpired(_cacheTtl)) {
+        return cached.value;
+      }
+    }
+
+    final genresJson = await client.fetchGenres(
+      session.credentials,
+      parentId: libraryId,
+    );
+
+    final genres = genresJson.map((json) => JellyfinGenre.fromJson(json)).toList();
+    _genreCache[cacheKey] = _CacheEntry(genres);
+
+    return genres;
+  }
+
+  /// Get instant mix based on a track, album, or artist
+  Future<List<JellyfinTrack>> getInstantMix({
+    required String itemId,
+    int limit = 200,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    final tracksJson = await client.fetchInstantMix(
+      session.credentials,
+      itemId: itemId,
+      limit: limit,
+    );
+
+    return tracksJson.map((json) => JellyfinTrack.fromJson(json)).toList();
+  }
+
+  /// Get playback info for an item (formats, bitrates, codecs)
+  Future<Map<String, dynamic>> getPlaybackInfo(String itemId) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    return await client.fetchPlaybackInfo(
+      session.credentials,
+      itemId: itemId,
+    );
+  }
+
+  /// Get most played tracks for a library
+  Future<List<JellyfinTrack>> getMostPlayedTracks({
+    required String libraryId,
+    int limit = 50,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    final tracksJson = await client.fetchMostPlayed(
+      session.credentials,
+      libraryId: libraryId,
+      itemType: 'Audio',
+      limit: limit,
+    );
+
+    return tracksJson.map((json) => JellyfinTrack.fromJson(json)).toList();
+  }
+
+  /// Get most played albums for a library
+  Future<List<JellyfinAlbum>> getMostPlayedAlbums({
+    required String libraryId,
+    int limit = 50,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    final albumsJson = await client.fetchMostPlayed(
+      session.credentials,
+      libraryId: libraryId,
+      itemType: 'MusicAlbum',
+      limit: limit,
+    );
+
+    return albumsJson.map((json) => JellyfinAlbum.fromJson(json)).toList();
+  }
+
+  /// Get most played artists for a library
+  Future<List<JellyfinArtist>> getMostPlayedArtists({
+    required String libraryId,
+    int limit = 50,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    final artistsJson = await client.fetchMostPlayed(
+      session.credentials,
+      libraryId: libraryId,
+      itemType: 'MusicArtist',
+      limit: limit,
+    );
+
+    return artistsJson.map((json) => JellyfinArtist.fromJson(json)).toList();
+  }
+
   void _clearCaches() {
     _albumCache.clear();
     _artistCache.clear();
     _playlistCache.clear();
     _recentCache.clear();
+    _genreCache.clear();
   }
 }
 

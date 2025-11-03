@@ -34,7 +34,7 @@ class _LibraryScreenState extends State<LibraryScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);  // Library, Favorites, Most Played, Playlists, Search
     _tabController.addListener(_handleTabChange);
     _albumsScrollController.addListener(_onAlbumsScroll);
     _playlistsScrollController.addListener(_onPlaylistsScroll);
@@ -70,8 +70,8 @@ class _LibraryScreenState extends State<LibraryScreen>
     setState(() {
       _currentTabIndex = _tabController.index;
     });
-    // Refresh favorites when switching to favorites tab (tab index 3)
-    if (_currentTabIndex == 3) {
+    // Refresh favorites when switching to favorites tab (tab index 1)
+    if (_currentTabIndex == 1) {
       widget.appState.refreshFavorites();
     }
   }
@@ -144,19 +144,10 @@ class _LibraryScreenState extends State<LibraryScreen>
           body = TabBarView(
             controller: _tabController,
             children: [
-              _AlbumsTab(
-                albums: albums,
-                isLoading: isLoadingAlbums,
-                error: albumsError,
-                scrollController: _albumsScrollController,
-                onRefresh: () => widget.appState.refreshAlbums(),
+              _LibraryTab(
+                appState: widget.appState,
                 onAlbumTap: (album) => _navigateToAlbum(context, album),
-                appState: widget.appState,
               ),
-              _ArtistsTab(
-                appState: widget.appState,
-              ),
-              _SearchTab(appState: widget.appState),
               _FavoritesTab(
                 recentTracks: favoriteTracks,
                 isLoading: isLoadingFavorites,
@@ -164,7 +155,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                 onRefresh: () => widget.appState.refreshFavorites(),
                 onTrackTap: (track) => _playTrack(track),
               ),
-              _RecentTab(appState: widget.appState),
+              _MostPlayedTab(appState: widget.appState, onAlbumTap: (album) => _navigateToAlbum(context, album)),
               _PlaylistsTab(
                 playlists: playlists,
                 isLoading: isLoadingPlaylists,
@@ -173,7 +164,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                 onRefresh: () => widget.appState.refreshPlaylists(),
                 appState: widget.appState,
               ),
-              _DownloadsTab(appState: widget.appState),
+              _SearchTab(appState: widget.appState),
             ],
           );
         }
@@ -184,10 +175,23 @@ class _LibraryScreenState extends State<LibraryScreen>
               children: [
                 InkWell(
                   onTap: () {
+                    widget.appState.toggleOfflineMode();
+                  },
+                  onLongPress: () {
+                    // Show downloads management on long press (iOS/Android)
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (context) =>
-                            OfflineLibraryScreen(appState: widget.appState),
+                            OfflineLibraryScreen(appState: widget.appState, initialTab: 1),
+                      ),
+                    );
+                  },
+                  onSecondaryTap: () {
+                    // Show downloads management on right click (Linux/Desktop)
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            OfflineLibraryScreen(appState: widget.appState, initialTab: 1),
                       ),
                     );
                   },
@@ -196,7 +200,9 @@ class _LibraryScreenState extends State<LibraryScreen>
                     padding: const EdgeInsets.all(8.0),
                     child: Icon(
                       Icons.waves,
-                      color: const Color(0xFFB39DDB), // Light purple wavy
+                      color: widget.appState.isOfflineMode 
+                          ? const Color(0xFF7A3DF1)  // Violet when offline
+                          : const Color(0xFFB39DDB),  // Light purple when online
                       size: 28,
                     ),
                   ),
@@ -214,13 +220,25 @@ class _LibraryScreenState extends State<LibraryScreen>
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                    child: Text(
-                      'Nautune',
-                      style: GoogleFonts.pacifico(
-                        fontSize: 24,
-                        color: const Color(0xFFB39DDB), // Light purple wavy
-                        fontWeight: FontWeight.w600,
-                      ),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Nautune',
+                          style: GoogleFonts.pacifico(
+                            fontSize: 24,
+                            color: const Color(0xFFB39DDB),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (widget.appState.isOfflineMode) ...[
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.offline_bolt,
+                            size: 20,
+                            color: const Color(0xFF7A3DF1),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
@@ -252,32 +270,24 @@ class _LibraryScreenState extends State<LibraryScreen>
                 },
                 destinations: const [
                   NavigationDestination(
-                    icon: Icon(Icons.album_outlined),
-                    label: 'Albums',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.person_outline),
-                    label: 'Artists',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.search),
-                    label: 'Search',
+                    icon: Icon(Icons.library_music),
+                    label: 'Library',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.favorite_outline),
                     label: 'Favorites',
                   ),
                   NavigationDestination(
-                    icon: Icon(Icons.history),
-                    label: 'Recent',
+                    icon: Icon(Icons.trending_up),
+                    label: 'Most Played',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.queue_music),
                     label: 'Playlists',
                   ),
                   NavigationDestination(
-                    icon: Icon(Icons.download_outlined),
-                    label: 'Downloads',
+                    icon: Icon(Icons.search),
+                    label: 'Search',
                   ),
                 ],
               ),
@@ -425,6 +435,96 @@ class _LibraryTile extends StatelessWidget {
   }
 }
 
+// New combined Library tab with Albums/Artists toggle
+class _LibraryTab extends StatefulWidget {
+  const _LibraryTab({
+    required this.appState,
+    required this.onAlbumTap,
+  });
+
+  final NautuneAppState appState;
+  final Function(JellyfinAlbum) onAlbumTap;
+
+  @override
+  State<_LibraryTab> createState() => _LibraryTabState();
+}
+
+class _LibraryTabState extends State<_LibraryTab> {
+  String _selectedView = 'albums'; // 'albums', 'artists', or 'genres'
+
+  @override
+  Widget build(BuildContext context) {
+    final isOffline = widget.appState.isOfflineMode;
+    
+    return Column(
+      children: [
+        // Toggle buttons for Albums/Artists/Genres (hide genres in offline mode)
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: SegmentedButton<String>(
+            segments: [
+              const ButtonSegment(
+                value: 'albums',
+                label: Text('Albums'),
+                icon: Icon(Icons.album),
+              ),
+              const ButtonSegment(
+                value: 'artists',
+                label: Text('Artists'),
+                icon: Icon(Icons.person),
+              ),
+              if (!isOffline)
+                const ButtonSegment(
+                  value: 'genres',
+                  label: Text('Genres'),
+                  icon: Icon(Icons.category),
+                ),
+            ],
+            selected: {_selectedView},
+            onSelectionChanged: (Set<String> newSelection) {
+              setState(() {
+                _selectedView = newSelection.first;
+              });
+            },
+          ),
+        ),
+        // Content based on selection
+        Expanded(
+          child: isOffline
+              ? _buildOfflineContent()
+              : _buildOnlineContent(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOfflineContent() {
+    if (_selectedView == 'albums') {
+      return _OfflineAlbumsView(appState: widget.appState, onAlbumTap: widget.onAlbumTap);
+    } else {
+      return _OfflineArtistsView(appState: widget.appState);
+    }
+  }
+
+  Widget _buildOnlineContent() {
+    if (_selectedView == 'albums') {
+      return _AlbumsTab(
+        albums: widget.appState.albums,
+        isLoading: widget.appState.isLoadingAlbums,
+        error: widget.appState.albumsError,
+        scrollController: ScrollController(),
+        onRefresh: () => widget.appState.refreshAlbums(),
+        onAlbumTap: widget.onAlbumTap,
+        appState: widget.appState,
+      );
+    } else if (_selectedView == 'artists') {
+      return _ArtistsTab(appState: widget.appState);
+    } else {
+      return _GenresTab(appState: widget.appState);
+    }
+  }
+}
+
 class _AlbumsTab extends StatelessWidget {
   const _AlbumsTab({
     required this.albums,
@@ -475,25 +575,32 @@ class _AlbumsTab extends StatelessWidget {
     }
     return RefreshIndicator(
       onRefresh: () async => onRefresh(),
-      child: GridView.builder(
-        controller: scrollController,
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          childAspectRatio: 0.75,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-        ),
-        itemCount: albums!.length + (isLoading ? 2 : 0),
-        itemBuilder: (context, index) {
-          if (index >= albums!.length) {
-            return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()));
-          }
-          final album = albums![index];
-          return _AlbumCard(
-            album: album,
-            onTap: () => onAlbumTap(album),
-            appState: appState,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // 4 columns on desktop (>800px), 2 columns on mobile
+          final crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
+          
+          return GridView.builder(
+            controller: scrollController,
+            padding: const EdgeInsets.all(16),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              childAspectRatio: 0.75,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+            ),
+            itemCount: albums!.length + (isLoading ? 2 : 0),
+            itemBuilder: (context, index) {
+              if (index >= albums!.length) {
+                return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()));
+              }
+              final album = albums![index];
+              return _AlbumCard(
+                album: album,
+                onTap: () => onAlbumTap(album),
+                appState: appState,
+              );
+            },
           );
         },
       ),
@@ -553,9 +660,15 @@ class _AlbumCard extends StatelessWidget {
                     ? Image.network(
                         imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(Icons.album, size: 64, color: theme.colorScheme.secondary.withValues(alpha: 0.3)),
+                        errorBuilder: (_, __, ___) => Image.asset(
+                          'assets/no_album_art.png',
+                          fit: BoxFit.cover,
+                        ),
                       )
-                    : Icon(Icons.album, size: 64, color: theme.colorScheme.secondary.withValues(alpha: 0.3)),
+                    : Image.asset(
+                        'assets/no_album_art.png',
+                        fit: BoxFit.cover,
+                      ),
               ),
             ),
             Padding(
@@ -563,10 +676,24 @@ class _AlbumCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(album.name, style: theme.textTheme.titleSmall, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text(
+                    album.name,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: theme.colorScheme.tertiary,  // Ocean blue
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   if (album.artists.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    Text(album.displayArtist, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      album.displayArtist,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue slightly transparent
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ],
               ),
@@ -951,12 +1078,20 @@ class _FavoritesTab extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               leading: Icon(Icons.music_note, color: theme.colorScheme.secondary),
-              title: Text(track.name),
-              subtitle: Text(track.displayArtist),
+              title: Text(
+                track.name,
+                style: TextStyle(color: theme.colorScheme.tertiary),  // Ocean blue
+              ),
+              subtitle: Text(
+                track.displayArtist,
+                style: TextStyle(color: theme.colorScheme.tertiary.withValues(alpha: 0.7)),  // Ocean blue
+              ),
               trailing: track.duration != null
                   ? Text(
                       _formatDuration(track.duration!),
-                      style: theme.textTheme.bodySmall,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue
+                      ),
                     )
                   : null,
               onTap: () => onTrackTap(track),
@@ -964,6 +1099,245 @@ class _FavoritesTab extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    return '${twoDigits(duration.inMinutes.remainder(60))}:${twoDigits(duration.inSeconds.remainder(60))}';
+  }
+}
+
+// Most Played Tab with toggle for Tracks/Albums/Artists
+class _MostPlayedTab extends StatefulWidget {
+  const _MostPlayedTab({
+    required this.appState,
+    required this.onAlbumTap,
+  });
+
+  final NautuneAppState appState;
+  final Function(JellyfinAlbum) onAlbumTap;
+
+  @override
+  State<_MostPlayedTab> createState() => _MostPlayedTabState();
+}
+
+class _MostPlayedTabState extends State<_MostPlayedTab> {
+  String _selectedType = 'tracks'; // 'tracks', 'albums', or 'artists'
+  List<dynamic>? _mostPlayedItems;
+  bool _isLoading = false;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMostPlayed();
+  }
+
+  Future<void> _loadMostPlayed() async {
+    final libraryId = widget.appState.selectedLibraryId;
+    if (libraryId == null) return;
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      switch (_selectedType) {
+        case 'tracks':
+          _mostPlayedItems = await widget.appState.jellyfinService
+              .getMostPlayedTracks(libraryId: libraryId);
+          break;
+        case 'albums':
+          _mostPlayedItems = await widget.appState.jellyfinService
+              .getMostPlayedAlbums(libraryId: libraryId);
+          break;
+        case 'artists':
+          _mostPlayedItems = await widget.appState.jellyfinService
+              .getMostPlayedArtists(libraryId: libraryId);
+          break;
+      }
+    } catch (e) {
+      _error = e;
+      _mostPlayedItems = null;
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      children: [
+        // Toggle for Tracks/Albums/Artists
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                value: 'tracks',
+                label: Text('Tracks'),
+                icon: Icon(Icons.music_note),
+              ),
+              ButtonSegment(
+                value: 'albums',
+                label: Text('Albums'),
+                icon: Icon(Icons.album),
+              ),
+              ButtonSegment(
+                value: 'artists',
+                label: Text('Artists'),
+                icon: Icon(Icons.person),
+              ),
+            ],
+            selected: {_selectedType},
+            onSelectionChanged: (Set<String> newSelection) {
+              setState(() {
+                _selectedType = newSelection.first;
+              });
+              _loadMostPlayed();
+            },
+          ),
+        ),
+        // Content
+        Expanded(
+          child: _buildContent(theme),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContent(ThemeData theme) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error),
+            const SizedBox(height: 16),
+            Text('Failed to load most played', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text(_error.toString(), textAlign: TextAlign.center),
+          ],
+        ),
+      );
+    }
+
+    if (_mostPlayedItems == null || _mostPlayedItems!.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.trending_up, size: 64, color: theme.colorScheme.secondary),
+            const SizedBox(height: 16),
+            Text('No data yet', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text('Start listening to see your most played $_selectedType',
+                style: theme.textTheme.bodyMedium, textAlign: TextAlign.center),
+          ],
+        ),
+      );
+    }
+
+    switch (_selectedType) {
+      case 'tracks':
+        return _buildTracksList(theme);
+      case 'albums':
+        return _buildAlbumsList(theme);
+      case 'artists':
+        return _buildArtistsList(theme);
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildTracksList(ThemeData theme) {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _mostPlayedItems!.length,
+      itemBuilder: (context, index) {
+        final track = _mostPlayedItems![index] as JellyfinTrack;
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: theme.colorScheme.primary,
+              child: Text('${index + 1}', style: const TextStyle(color: Colors.white)),
+            ),
+            title: Text(track.name, style: TextStyle(color: theme.colorScheme.tertiary)),
+            subtitle: Text(track.displayArtist,
+                style: TextStyle(color: theme.colorScheme.tertiary.withValues(alpha: 0.7))),
+            trailing: track.duration != null
+                ? Text(_formatDuration(track.duration!),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.tertiary.withValues(alpha: 0.7)))
+                : null,
+            onTap: () {
+              widget.appState.audioPlayerService.playTrack(
+                track,
+                queueContext: _mostPlayedItems!.cast<JellyfinTrack>(),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAlbumsList(ThemeData theme) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
+        return GridView.builder(
+          padding: const EdgeInsets.all(16),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            childAspectRatio: 0.75,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+          ),
+          itemCount: _mostPlayedItems!.length,
+          itemBuilder: (context, index) {
+            final album = _mostPlayedItems![index] as JellyfinAlbum;
+            return _AlbumCard(
+              album: album,
+              onTap: () => widget.onAlbumTap(album),
+              appState: widget.appState,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildArtistsList(ThemeData theme) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = constraints.maxWidth > 800 ? 4 : 3;
+        return GridView.builder(
+          padding: const EdgeInsets.all(16),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            childAspectRatio: 0.75,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
+          itemCount: _mostPlayedItems!.length,
+          itemBuilder: (context, index) {
+            final artist = _mostPlayedItems![index] as JellyfinArtist;
+            return _ArtistCard(artist: artist, appState: widget.appState);
+          },
+        );
+      },
     );
   }
 
@@ -1139,12 +1513,20 @@ class _RecentTabState extends State<_RecentTab> {
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               leading: Icon(Icons.music_note, color: theme.colorScheme.secondary),
-              title: Text(track.name),
-              subtitle: Text(track.displayArtist),
+              title: Text(
+                track.name,
+                style: TextStyle(color: theme.colorScheme.tertiary),  // Ocean blue
+              ),
+              subtitle: Text(
+                track.displayArtist,
+                style: TextStyle(color: theme.colorScheme.tertiary.withValues(alpha: 0.7)),  // Ocean blue
+              ),
               trailing: track.duration != null
                   ? Text(
                       _formatDuration(track.duration!),
-                      style: theme.textTheme.bodySmall,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue
+                      ),
                     )
                   : null,
               onTap: () {
@@ -1278,19 +1660,398 @@ class _ArtistsTab extends StatelessWidget {
 
     return RefreshIndicator(
       onRefresh: () => appState.refreshLibraryData(),
-      child: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          childAspectRatio: 0.75,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-        ),
-        itemCount: artists.length,
-        itemBuilder: (context, index) {
-          final artist = artists[index];
-          return _ArtistCard(artist: artist, appState: appState);
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // 4 columns on desktop (>800px), 3 columns on mobile
+          final crossAxisCount = constraints.maxWidth > 800 ? 4 : 3;
+          
+          return GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              childAspectRatio: 0.75,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: artists.length,
+            itemBuilder: (context, index) {
+              final artist = artists[index];
+              return _ArtistCard(artist: artist, appState: appState);
+            },
+          );
         },
+      ),
+    );
+  }
+}
+
+// Offline Albums View
+class _OfflineAlbumsView extends StatelessWidget {
+  const _OfflineAlbumsView({required this.appState, required this.onAlbumTap});
+
+  final NautuneAppState appState;
+  final Function(JellyfinAlbum) onAlbumTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ListenableBuilder(
+      listenable: appState.downloadService,
+      builder: (context, _) {
+        final downloads = appState.downloadService.completedDownloads;
+        
+        if (downloads.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.offline_bolt, size: 64, color: theme.colorScheme.secondary),
+                const SizedBox(height: 16),
+                Text('No Offline Albums', style: theme.textTheme.titleLarge),
+                const SizedBox(height: 8),
+                Text('Download albums to listen offline', style: theme.textTheme.bodyMedium),
+              ],
+            ),
+          );
+        }
+
+        // Group by album
+        final albumsMap = <String, List<dynamic>>{};
+        for (final download in downloads) {
+          final albumName = download.track.album ?? 'Unknown Album';
+          albumsMap.putIfAbsent(albumName, () => []).add(download);
+        }
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
+            final albums = albumsMap.entries.toList();
+
+            return GridView.builder(
+              padding: const EdgeInsets.all(16),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                childAspectRatio: 0.75,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              ),
+              itemCount: albums.length,
+              itemBuilder: (context, index) {
+                final entry = albums[index];
+                final albumName = entry.key;
+                final albumDownloads = entry.value;
+                final firstTrack = albumDownloads.first.track;
+
+                return Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () {
+                      // Play album
+                      final tracks = albumDownloads.map((d) => d.track as JellyfinTrack).toList();
+                      appState.audioPlayerService.playTrack(
+                        tracks.first,
+                        queueContext: tracks,
+                      );
+                    },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AspectRatio(
+                          aspectRatio: 1,
+                          child: Container(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            child: Image.asset(
+                              'assets/no_album_art.png',
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                albumName,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  color: theme.colorScheme.tertiary,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                firstTrack.displayArtist,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.tertiary.withValues(alpha: 0.7),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${albumDownloads.length} tracks',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.tertiary.withValues(alpha: 0.5),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// Offline Artists View
+class _OfflineArtistsView extends StatelessWidget {
+  const _OfflineArtistsView({required this.appState});
+
+  final NautuneAppState appState;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ListenableBuilder(
+      listenable: appState.downloadService,
+      builder: (context, _) {
+        final downloads = appState.downloadService.completedDownloads;
+        
+        if (downloads.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.offline_bolt, size: 64, color: theme.colorScheme.secondary),
+                const SizedBox(height: 16),
+                Text('No Offline Artists', style: theme.textTheme.titleLarge),
+              ],
+            ),
+          );
+        }
+
+        // Group by artist
+        final artistsMap = <String, List<dynamic>>{};
+        for (final download in downloads) {
+          final artistName = download.track.displayArtist;
+          artistsMap.putIfAbsent(artistName, () => []).add(download);
+        }
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final crossAxisCount = constraints.maxWidth > 800 ? 4 : 3;
+            final artists = artistsMap.entries.toList();
+
+            return GridView.builder(
+              padding: const EdgeInsets.all(16),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                childAspectRatio: 0.75,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: artists.length,
+              itemBuilder: (context, index) {
+                final entry = artists[index];
+                final artistName = entry.key;
+                final artistDownloads = entry.value;
+
+                return InkWell(
+                  onTap: () {
+                    // Play all tracks by artist
+                    final tracks = artistDownloads.map((d) => d.track as JellyfinTrack).toList();
+                    appState.audioPlayerService.playTrack(
+                      tracks.first,
+                      queueContext: tracks,
+                    );
+                  },
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: AspectRatio(
+                          aspectRatio: 1,
+                          child: ClipOval(
+                            child: Image.asset(
+                              'assets/no_artist_art.png',
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        artistName,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: theme.colorScheme.tertiary,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                      ),
+                      Text(
+                        '${artistDownloads.length} tracks',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.tertiary.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// Genres Tab
+class _GenresTab extends StatelessWidget {
+  const _GenresTab({required this.appState});
+  
+  final NautuneAppState appState;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final genres = appState.genres;
+    final isLoading = appState.isLoadingGenres;
+    final error = appState.genresError;
+    
+    if (isLoading && genres == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (error != null && genres == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error),
+              const SizedBox(height: 16),
+              Text('Failed to load genres', style: theme.textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(error.toString(), style: theme.textTheme.bodyMedium, textAlign: TextAlign.center),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (genres == null || genres.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.category, size: 64, color: theme.colorScheme.secondary),
+            const SizedBox(height: 16),
+            Text('No Genres Found', style: theme.textTheme.titleLarge),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => appState.refreshGenres(),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
+          
+          return GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              childAspectRatio: 1.5,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: genres.length,
+            itemBuilder: (context, index) {
+              final genre = genres[index];
+              return _GenreCard(genre: genre, appState: appState);
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _GenreCard extends StatelessWidget {
+  const _GenreCard({required this.genre, required this.appState});
+
+  final genre;
+  final NautuneAppState appState;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          // TODO: Navigate to genre detail screen showing albums/tracks in this genre
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Genre: ${genre.name} (coming soon)')),
+          );
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary.withValues(alpha: 0.3),
+                theme.colorScheme.secondary.withValues(alpha: 0.3),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  genre.name,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: theme.colorScheme.tertiary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (genre.albumCount != null || genre.trackCount != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    [
+                      if (genre.albumCount != null) '${genre.albumCount} albums',
+                      if (genre.trackCount != null) '${genre.trackCount} tracks',
+                    ].join(' • '),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.tertiary.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1595,26 +2356,19 @@ class _ArtistCard extends StatelessWidget {
           imageUrl,
           fit: BoxFit.cover,
           headers: appState.jellyfinService.imageHeaders(),
-          errorBuilder: (_, __, ___) => Container(
-            color: theme.colorScheme.primaryContainer,
-            child: Icon(
-              Icons.person,
-              size: 48,
-              color: theme.colorScheme.onPrimaryContainer,
+          errorBuilder: (_, __, ___) => ClipOval(
+            child: Image.asset(
+              'assets/no_artist_art.png',
+              fit: BoxFit.cover,
             ),
           ),
         ),
       );
     } else {
-      artwork = Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: theme.colorScheme.primaryContainer,
-        ),
-        child: Icon(
-          Icons.person,
-          size: 48,
-          color: theme.colorScheme.onPrimaryContainer,
+      artwork = ClipOval(
+        child: Image.asset(
+          'assets/no_artist_art.png',
+          fit: BoxFit.cover,
         ),
       );
     }
@@ -1643,6 +2397,7 @@ class _ArtistCard extends StatelessWidget {
             artist.name,
             style: theme.textTheme.bodyMedium?.copyWith(
               fontWeight: FontWeight.w500,
+              color: theme.colorScheme.tertiary,  // Ocean blue
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -1825,6 +2580,7 @@ class _DownloadsTab extends StatelessWidget {
                       ),
                       title: Text(
                         track.name,
+                        style: TextStyle(color: theme.colorScheme.tertiary),  // Ocean blue
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1833,6 +2589,7 @@ class _DownloadsTab extends StatelessWidget {
                         children: [
                           Text(
                             track.displayArtist,
+                            style: TextStyle(color: theme.colorScheme.tertiary.withValues(alpha: 0.7)),  // Ocean blue
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'jellyfin/jellyfin_album.dart';
 import 'jellyfin/jellyfin_artist.dart';
+import 'jellyfin/jellyfin_genre.dart';
 import 'jellyfin/jellyfin_library.dart';
 import 'jellyfin/jellyfin_playlist.dart';
 import 'jellyfin/jellyfin_service.dart';
@@ -59,6 +60,10 @@ class NautuneAppState extends ChangeNotifier {
   bool _isLoadingFavorites = false;
   Object? _favoritesError;
   List<JellyfinTrack>? _favoriteTracks;
+  bool _isLoadingGenres = false;
+  Object? _genresError;
+  List<JellyfinGenre>? _genres;
+  bool _isOfflineMode = false;  // Toggle between online and offline library
 
   bool get isInitialized => _initialized;
   bool get isAuthenticating => _isAuthenticating;
@@ -82,6 +87,10 @@ class NautuneAppState extends ChangeNotifier {
   bool get isLoadingFavorites => _isLoadingFavorites;
   Object? get favoritesError => _favoritesError;
   List<JellyfinTrack>? get favoriteTracks => _favoriteTracks;
+  bool get isLoadingGenres => _isLoadingGenres;
+  Object? get genresError => _genresError;
+  List<JellyfinGenre>? get genres => _genres;
+  bool get isOfflineMode => _isOfflineMode;
   String? get selectedLibraryId => _session?.selectedLibraryId;
   JellyfinLibrary? get selectedLibrary {
     final libs = _libraries;
@@ -338,6 +347,9 @@ class NautuneAppState extends ChangeNotifier {
       _recentTracks = null;
       _recentError = null;
       _isLoadingRecent = false;
+      _genres = null;
+      _genresError = null;
+      _isLoadingGenres = false;
       notifyListeners();
       return;
     }
@@ -348,6 +360,7 @@ class NautuneAppState extends ChangeNotifier {
       _loadPlaylistsForLibrary(libraryId, forceRefresh: forceRefresh),
       _loadRecentForLibrary(libraryId, forceRefresh: forceRefresh),
       _loadFavorites(forceRefresh: forceRefresh),
+      _loadGenres(libraryId, forceRefresh: forceRefresh),
     ]);
   }
 
@@ -495,6 +508,32 @@ class NautuneAppState extends ChangeNotifier {
     await _loadFavorites(forceRefresh: true);
   }
 
+  Future<void> refreshGenres() async {
+    final libraryId = selectedLibraryId;
+    if (libraryId != null) {
+      await _loadGenres(libraryId, forceRefresh: true);
+    }
+  }
+
+  Future<void> _loadGenres(String libraryId, {bool forceRefresh = false}) async {
+    _genresError = null;
+    _isLoadingGenres = true;
+    notifyListeners();
+
+    try {
+      _genres = await _jellyfinService.loadGenres(
+        libraryId: libraryId,
+        forceRefresh: forceRefresh,
+      );
+    } catch (error) {
+      _genresError = error;
+      _genres = null;
+    } finally {
+      _isLoadingGenres = false;
+      notifyListeners();
+    }
+  }
+
   void clearLibrarySelection() {
     _session = _session?.copyWith(selectedLibraryId: null, selectedLibraryName: null);
     _albums = null;
@@ -505,6 +544,11 @@ class NautuneAppState extends ChangeNotifier {
     if (_session != null) {
       _sessionStore.save(_session!);
     }
+  }
+
+  void toggleOfflineMode() {
+    _isOfflineMode = !_isOfflineMode;
+    notifyListeners();
   }
 
   Future<void> disconnect() async {

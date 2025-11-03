@@ -323,16 +323,10 @@ class _AlbumCard extends StatelessWidget {
 class _DefaultArtistArtwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: theme.colorScheme.primaryContainer,
-      ),
-      child: Icon(
-        Icons.person,
-        size: 80,
-        color: theme.colorScheme.onPrimaryContainer,
+    return ClipOval(
+      child: Image.asset(
+        'assets/no_artist_art.png',
+        fit: BoxFit.cover,
       ),
     );
   }

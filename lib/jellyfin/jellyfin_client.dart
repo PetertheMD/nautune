@@ -525,4 +525,130 @@ class JellyfinClient {
 
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
+
+  /// Fetches genres for a library
+  Future<List<Map<String, dynamic>>> fetchGenres(
+    JellyfinCredentials credentials, {
+    String? parentId,
+    String? searchTerm,
+    int? limit,
+  }) async {
+    final queryParams = <String, String>{
+      'UserId': credentials.userId,
+      'IncludeItemTypes': 'MusicGenre',
+      if (parentId != null) 'ParentId': parentId,
+      if (searchTerm != null) 'SearchTerm': searchTerm,
+      if (limit != null) 'Limit': limit.toString(),
+    };
+
+    final uri = _buildUri('/MusicGenres', queryParams);
+    final response = await httpClient.get(
+      uri,
+      headers: _defaultHeaders(credentials),
+    );
+
+    if (response.statusCode != 200) {
+      throw JellyfinRequestException(
+        'Unable to fetch genres: ${response.statusCode}',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>?;
+    final items = data?['Items'] as List<dynamic>? ?? const [];
+
+    return items.whereType<Map<String, dynamic>>().toList();
+  }
+
+  /// Gets instant mix based on an item (track, album, or artist)
+  Future<List<Map<String, dynamic>>> fetchInstantMix(
+    JellyfinCredentials credentials, {
+    required String itemId,
+    int limit = 200,
+  }) async {
+    final queryParams = <String, String>{
+      'UserId': credentials.userId,
+      'Limit': limit.toString(),
+      'Fields': 'AudioInfo,ParentId',
+    };
+
+    final uri = _buildUri('/Items/$itemId/InstantMix', queryParams);
+    final response = await httpClient.get(
+      uri,
+      headers: _defaultHeaders(credentials),
+    );
+
+    if (response.statusCode != 200) {
+      throw JellyfinRequestException(
+        'Unable to fetch instant mix: ${response.statusCode}',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>?;
+    final items = data?['Items'] as List<dynamic>? ?? const [];
+
+    return items.whereType<Map<String, dynamic>>().toList();
+  }
+
+  /// Fetches playback info for an item
+  Future<Map<String, dynamic>> fetchPlaybackInfo(
+    JellyfinCredentials credentials, {
+    required String itemId,
+  }) async {
+    final uri = _buildUri('/Items/$itemId/PlaybackInfo');
+    final response = await httpClient.post(
+      uri,
+      headers: _defaultHeaders(credentials),
+      body: jsonEncode({
+        'UserId': credentials.userId,
+        'DeviceProfile': {
+          'MaxStreamingBitrate': 140000000,
+        },
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw JellyfinRequestException(
+        'Unable to fetch playback info: ${response.statusCode}',
+      );
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// Fetches most played items (tracks, albums, or artists)
+  Future<List<Map<String, dynamic>>> fetchMostPlayed(
+    JellyfinCredentials credentials, {
+    required String libraryId,
+    String itemType = 'Audio', // 'Audio', 'MusicAlbum', 'MusicArtist'
+    int limit = 50,
+  }) async {
+    final queryParams = <String, String>{
+      'UserId': credentials.userId,
+      'ParentId': libraryId,
+      'IncludeItemTypes': itemType,
+      'SortBy': 'PlayCount',
+      'SortOrder': 'Descending',
+      'Recursive': 'true',
+      'Limit': limit.toString(),
+      'Filters': 'IsPlayed',
+      'Fields': 'AudioInfo,ParentId',
+    };
+
+    final uri = _buildUri('/Users/${credentials.userId}/Items', queryParams);
+    final response = await httpClient.get(
+      uri,
+      headers: _defaultHeaders(credentials),
+    );
+
+    if (response.statusCode != 200) {
+      throw JellyfinRequestException(
+        'Unable to fetch most played: ${response.statusCode}',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>?;
+    final items = data?['Items'] as List<dynamic>? ?? const [];
+
+    return items.whereType<Map<String, dynamic>>().toList();
+  }
 }

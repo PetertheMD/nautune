@@ -154,15 +154,21 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                               style: TextStyle(color: theme.colorScheme.onSecondaryContainer),
                             ),
                           ),
-                          title: Text(track.name),
-                          subtitle: Text(track.displayArtist),
+                          title: Text(
+                            track.name,
+                            style: TextStyle(color: theme.colorScheme.tertiary),  // Ocean blue
+                          ),
+                          subtitle: Text(
+                            track.displayArtist,
+                            style: TextStyle(color: theme.colorScheme.tertiary.withValues(alpha: 0.7)),  // Ocean blue
+                          ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
                                 durationText,
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
+                                  color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue
                                 ),
                               ),
                               const SizedBox(width: 8),

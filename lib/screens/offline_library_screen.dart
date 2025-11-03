@@ -4,16 +4,41 @@ import '../jellyfin/jellyfin_album.dart';
 import '../jellyfin/jellyfin_track.dart';
 
 class OfflineLibraryScreen extends StatefulWidget {
-  const OfflineLibraryScreen({super.key, required this.appState});
+  const OfflineLibraryScreen({
+    super.key, 
+    required this.appState,
+    this.initialTab = 0,  // 0 = Offline Library, 1 = Downloads
+  });
 
   final NautuneAppState appState;
+  final int initialTab;
 
   @override
   State<OfflineLibraryScreen> createState() => _OfflineLibraryScreenState();
 }
 
-class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
+class _OfflineLibraryScreenState extends State<OfflineLibraryScreen>
+    with SingleTickerProviderStateMixin {
   bool _showByAlbum = true;
+  late TabController _tabController;
+  int _currentTab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this, initialIndex: widget.initialTab);
+    _tabController.addListener(() {
+      setState(() {
+        _currentTab = _tabController.index;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,91 +50,108 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
           children: [
             Icon(Icons.offline_bolt, color: theme.colorScheme.primary),
             const SizedBox(width: 8),
-            const Text('Offline Library'),
+            const Text('Offline & Downloads'),
+          ],
+        ),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Offline Library', icon: Icon(Icons.library_music)),
+            Tab(text: 'Downloads', icon: Icon(Icons.download)),
           ],
         ),
       ),
-      body: ListenableBuilder(
-        listenable: widget.appState.downloadService,
-        builder: (context, _) {
-          final downloads = widget.appState.downloadService.completedDownloads;
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildOfflineLibrary(context, theme),
+          _buildDownloadsTab(context, theme),
+        ],
+      ),
+    );
+  }
 
-          if (downloads.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildOfflineLibrary(BuildContext context, ThemeData theme) {
+    return ListenableBuilder(
+      listenable: widget.appState.downloadService,
+      builder: (context, _) {
+        final downloads = widget.appState.downloadService.completedDownloads;
+
+        if (downloads.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.cloud_off,
+                  size: 64,
+                  color: theme.colorScheme.secondary.withOpacity(0.5),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No Offline Content',
+                  style: theme.textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Download albums to listen offline',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                border: Border(
+                  bottom: BorderSide(
+                    color: theme.colorScheme.outlineVariant,
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Row(
                 children: [
-                  Icon(
-                    Icons.cloud_off,
-                    size: 64,
-                    color: theme.colorScheme.secondary.withOpacity(0.5),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No Offline Content',
-                    style: theme.textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Download albums to listen offline',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                  Expanded(
+                    child: SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                          value: true,
+                          label: Text('By Album'),
+                          icon: Icon(Icons.album, size: 18),
+                        ),
+                        ButtonSegment(
+                          value: false,
+                          label: Text('By Artist'),
+                          icon: Icon(Icons.person, size: 18),
+                        ),
+                      ],
+                      selected: {_showByAlbum},
+                      onSelectionChanged: (Set<bool> newSelection) {
+                        setState(() {
+                          _showByAlbum = newSelection.first;
+                        });
+                      },
                     ),
                   ),
                 ],
               ),
-            );
-          }
-
-          return Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  border: Border(
-                    bottom: BorderSide(
-                      color: theme.colorScheme.outlineVariant,
-                      width: 1,
-                    ),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(
-                            value: true,
-                            label: Text('By Album'),
-                            icon: Icon(Icons.album, size: 18),
-                          ),
-                          ButtonSegment(
-                            value: false,
-                            label: Text('By Artist'),
-                            icon: Icon(Icons.person, size: 18),
-                          ),
-                        ],
-                        selected: {_showByAlbum},
-                        onSelectionChanged: (Set<bool> newSelection) {
-                          setState(() {
-                            _showByAlbum = newSelection.first;
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: _showByAlbum
-                    ? _buildByAlbum(theme, downloads)
-                    : _buildByArtist(theme, downloads),
-              ),
-            ],
-          );
-        },
-      ),
+            ),
+            Expanded(
+              child: _showByAlbum
+                  ? _buildByAlbum(theme, downloads)
+                  : _buildByArtist(theme, downloads),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -150,11 +192,16 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-                title: Text(track.name),
+                title: Text(
+                  track.name,
+                  style: TextStyle(color: theme.colorScheme.tertiary),  // Ocean blue
+                ),
                 trailing: track.duration != null
                     ? Text(
                         _formatDuration(track.duration!),
-                        style: theme.textTheme.bodySmall,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue
+                        ),
                       )
                     : null,
                 onTap: () {
@@ -230,11 +277,16 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    title: Text(track.name),
+                    title: Text(
+                      track.name,
+                      style: TextStyle(color: theme.colorScheme.tertiary),  // Ocean blue
+                    ),
                     trailing: track.duration != null
                         ? Text(
                             _formatDuration(track.duration!),
-                            style: theme.textTheme.bodySmall,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue
+                            ),
                           )
                         : null,
                     onTap: () {
@@ -260,5 +312,189 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds % 60;
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildDownloadsTab(BuildContext context, ThemeData theme) {
+    return ListenableBuilder(
+      listenable: widget.appState.downloadService,
+      builder: (context, _) {
+        final downloads = widget.appState.downloadService.downloads;
+        final completedCount = widget.appState.downloadService.completedCount;
+        final activeCount = widget.appState.downloadService.activeCount;
+
+        if (downloads.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.download_outlined,
+                    size: 64, color: theme.colorScheme.secondary),
+                const SizedBox(height: 16),
+                Text('No Downloads', style: theme.textTheme.titleLarge),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    'Download albums and tracks for offline listening',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          children: [
+            if (activeCount > 0 || completedCount > 0)
+              Container(
+                padding: const EdgeInsets.all(16),
+                color: theme.colorScheme.surfaceContainerHighest,
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        size: 20, color: theme.colorScheme.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '$completedCount completed • $activeCount active',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                    if (completedCount > 0)
+                      TextButton.icon(
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Clear All Downloads'),
+                              content: Text(
+                                  'Delete all $completedCount downloaded tracks?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(false),
+                                  child: const Text('Cancel'),
+                                ),
+                                FilledButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(true),
+                                  child: const Text('Delete All'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            await widget.appState.downloadService
+                                .clearAllDownloads();
+                          }
+                        },
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: const Text('Clear All'),
+                      ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: downloads.length,
+                itemBuilder: (context, index) {
+                  final download = downloads[index];
+                  final track = download.track;
+
+                  return ListTile(
+                    leading: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        color: theme.colorScheme.primaryContainer,
+                      ),
+                      child: download.isCompleted
+                          ? Icon(Icons.check_circle,
+                              color: theme.colorScheme.primary)
+                          : download.isDownloading
+                              ? CircularProgressIndicator(
+                                  value: download.progress,
+                                  strokeWidth: 3,
+                                )
+                              : download.isFailed
+                                  ? Icon(Icons.error,
+                                      color: theme.colorScheme.error)
+                                  : Icon(Icons.schedule,
+                                      color: theme.colorScheme
+                                          .onPrimaryContainer),
+                    ),
+                    title: Text(
+                      track.name,
+                      style: TextStyle(color: theme.colorScheme.tertiary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          track.displayArtist,
+                          style: TextStyle(
+                              color: theme.colorScheme.tertiary
+                                  .withValues(alpha: 0.7)),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (download.isDownloading)
+                          Text(
+                            '${(download.progress * 100).toStringAsFixed(0)}% • ${_formatFileSize(download.downloadedBytes ?? 0)} / ${_formatFileSize(download.totalBytes ?? 0)}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
+                          )
+                        else if (download.isCompleted &&
+                            download.totalBytes != null)
+                          Text(
+                            _formatFileSize(download.totalBytes!),
+                            style: theme.textTheme.bodySmall,
+                          )
+                        else if (download.isFailed)
+                          Text(
+                            'Download failed',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.error,
+                            ),
+                          )
+                        else
+                          Text(
+                            'Queued',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                      ],
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        widget.appState.downloadService.deleteDownload(track.id);
+                      },
+                      tooltip: 'Cancel download',
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }

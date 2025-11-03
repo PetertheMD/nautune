@@ -441,7 +441,7 @@ class _TrackTile extends StatelessWidget {
                 child: Text(
                   displayTrackNumber,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                    color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                   textAlign: TextAlign.center,
@@ -454,7 +454,9 @@ class _TrackTile extends StatelessWidget {
                   children: [
                     Text(
                       track.name,
-                      style: theme.textTheme.bodyLarge,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: theme.colorScheme.tertiary,  // Ocean blue
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -463,7 +465,7 @@ class _TrackTile extends StatelessWidget {
                       Text(
                         track.displayArtist,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                          color: theme.colorScheme.tertiary.withValues(alpha: 0.6),  // Ocean blue dimmer
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -476,7 +478,7 @@ class _TrackTile extends StatelessWidget {
               Text(
                 durationText,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                  color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue
                 ),
               ),
               const SizedBox(width: 4),
@@ -602,24 +604,9 @@ class _TritonArtwork extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            theme.colorScheme.primary.withValues(alpha: 0.85),
-            theme.colorScheme.secondary.withValues(alpha: 0.85),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: const Center(
-        child: Text(
-          '🔱',
-          style: TextStyle(fontSize: 80),
-        ),
-      ),
+    return Image.asset(
+      'assets/no_album_art.png',
+      fit: BoxFit.cover,
     );
   }
 }
