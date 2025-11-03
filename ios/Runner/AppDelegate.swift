@@ -1,6 +1,5 @@
 import Flutter
 import UIKit
-import CarPlay
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
