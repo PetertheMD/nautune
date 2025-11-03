@@ -638,7 +638,8 @@ class JellyfinClient {
       'Recursive': 'true',
       'Limit': limit.toString(),
       'Filters': 'IsPlayed',
-      'Fields': 'AudioInfo,ParentId',
+      'Fields': 'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber',
+      'EnableImageTypes': 'Primary,Thumb',
     };
 
     final uri = _buildUri('/Users/${credentials.userId}/Items', queryParams);

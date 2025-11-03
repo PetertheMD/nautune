@@ -716,7 +716,12 @@ class JellyfinService {
       limit: limit,
     );
 
-    return tracksJson.map((json) => JellyfinTrack.fromJson(json)).toList();
+    return tracksJson.map((json) => JellyfinTrack.fromJson(
+      json,
+      serverUrl: session.serverUrl,
+      token: session.credentials.accessToken,
+      userId: session.credentials.userId,
+    )).toList();
   }
 
   /// Get most played albums for a library
