@@ -1,0 +1,19 @@
+output: dist/
+releases:
+  - name: dev
+    jobs:
+      - name: release-dev-linux
+        package:
+          platform: linux
+          target: deb
+          build_args:
+            target-platform: linux-x64
+
+  - name: prod
+    jobs:
+      - name: release-prod-linux
+        package:
+          platform: linux
+          target: deb
+          build_args:
+            target-platform: linux-x64
