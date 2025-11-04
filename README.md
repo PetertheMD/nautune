@@ -392,6 +392,10 @@ All iOS features are built and deployed via **Codemagic CI**:
 - [ ] Equalizer and audio settings
 - [ ] **Sorting options** (by name, date added, year for albums/artists)
 - [ ] Cross-platform stability improvements (Windows, macOS, Android)
+- [ ] Volume slider wired to `audioPlayer.setVolume()` for real-time gain control
+- [ ] Headphone controls & resume using `audio_session` for headset focus events
+- [ ] “Smart Resume” that restores current song, queue, shuffle, repeat, and scroll state on app return
+- [ ] Mood tagging pipeline with [`tflite_flutter`](https://pub.dev/packages/tflite_flutter) to auto-label tracks (calm, energetic, speech-heavy, instrumental)
 
 ## 🐛 Known Issues
 
