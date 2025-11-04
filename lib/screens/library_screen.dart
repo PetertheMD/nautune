@@ -178,10 +178,11 @@ class _LibraryScreenState extends State<LibraryScreen>
             title: Row(
               children: [
                 GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTap: () {
                     widget.appState.toggleOfflineMode();
                   },
-                  onLongPress: () {
+                  onLongPressStart: (details) {
                     // Show downloads management on long press (iOS/Android)
                     Navigator.of(context).push(
                       MaterialPageRoute(
