@@ -33,6 +33,7 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.2
 
 flutter:
   uses-material-design: true
@@ -41,3 +42,17 @@ flutter:
     - assets/icon.png
     - assets/no_album_art.png
     - assets/no_artist_art.png
+
+flutter_launcher_icons:
+  android: false
+  ios: true
+  image_path: "assets/icon.png"
+  remove_alpha_ios: true
+  web:
+    generate: false
+  windows:
+    generate: false
+  macos:
+    generate: false
+  linux:
+    generate: false
