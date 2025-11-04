@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/services.dart';
 
 import '../jellyfin/jellyfin_track.dart';
+import 'audio_handler.dart';
 import 'download_service.dart';
 import 'playback_reporting_service.dart';
 import 'playback_state_store.dart';
@@ -15,6 +17,7 @@ class AudioPlayerService {
   final PlaybackStateStore _stateStore = PlaybackStateStore();
   DownloadService? _downloadService;
   PlaybackReportingService? _reportingService;
+  NautuneAudioHandler? _audioHandler;
   
   JellyfinTrack? _currentTrack;
   List<JellyfinTrack> _queue = [];
@@ -56,10 +59,38 @@ class AudioPlayerService {
   AudioPlayerService() {
     _initAudioSession();
     _setupListeners();
+    _initAudioHandler();
     _restorePlaybackState();
   }
 
   String get _deviceId => 'nautune-${Platform.operatingSystem}';
+  
+  Future<void> _initAudioHandler() async {
+    if (!Platform.isIOS && !Platform.isAndroid) return;
+    
+    try {
+      _audioHandler = await AudioService.init(
+        builder: () => NautuneAudioHandler(
+          player: _player,
+          onPlay: () => resume(),
+          onPause: () => pause(),
+          onStop: () => stop(),
+          onSkipToNext: () => skipToNext(),
+          onSkipToPrevious: () => skipToPrevious(),
+          onSeek: (position) => seek(position),
+        ),
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'com.elysiumdisc.nautune.channel.audio',
+          androidNotificationChannelName: 'Nautune Audio',
+          androidNotificationOngoing: true,
+          androidStopForegroundOnPause: true,
+        ),
+      );
+      print('✅ Audio service initialized for lock screen controls');
+    } catch (e) {
+      print('⚠️ Audio service initialization failed: $e');
+    }
+  }
   
   Future<void> _initAudioSession() async {
     try {
@@ -202,6 +233,10 @@ class AudioPlayerService {
     }
     
     _queueController.add(_queue);
+    
+    // Update audio handler with current track metadata
+    _audioHandler?.updateNautuneMediaItem(track);
+    _audioHandler?.updateNautuneQueue(_queue);
     
     final downloadUrl = track.directDownloadUrl();
     final universalUrl = track.universalStreamUrl(
@@ -461,6 +496,7 @@ class AudioPlayerService {
   
   void dispose() {
     _positionSaveTimer?.cancel();
+    _audioHandler?.dispose();
     _player.dispose();
     _currentTrackController.close();
     _playingController.close();

@@ -175,7 +175,7 @@ class _LibraryScreenState extends State<LibraryScreen>
           appBar: AppBar(
             title: Row(
               children: [
-                InkWell(
+                GestureDetector(
                   onTap: () {
                     widget.appState.toggleOfflineMode();
                   },
@@ -197,11 +197,14 @@ class _LibraryScreenState extends State<LibraryScreen>
                       ),
                     );
                   },
-                  borderRadius: BorderRadius.circular(20),
                   child: Tooltip(
                     message: 'Tap: Toggle Offline | Long Press/Right Click: Downloads',
-                    child: Padding(
+                    child: Container(
                       padding: const EdgeInsets.all(8.0),
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                       child: Icon(
                         Icons.waves,
                         color: widget.appState.isOfflineMode 
@@ -1420,15 +1423,18 @@ class _RecentTabState extends State<_RecentTab> {
             children: [
               Expanded(
                 child: SegmentedButton<bool>(
+                  style: SegmentedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
                   segments: const [
                     ButtonSegment(
                       value: true,
-                      label: Text('Recently Played'),
+                      label: Text('Played', style: TextStyle(fontSize: 13)),
                       icon: Icon(Icons.history, size: 18),
                     ),
                     ButtonSegment(
                       value: false,
-                      label: Text('Recently Added'),
+                      label: Text('Added', style: TextStyle(fontSize: 13)),
                       icon: Icon(Icons.new_releases, size: 18),
                     ),
                   ],
@@ -1728,12 +1734,15 @@ class _OfflineAlbumsView extends StatelessWidget {
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
                     onTap: () {
-                      // Play album
-                      final tracks = albumDownloads.map((d) => d.track as JellyfinTrack).toList();
-                      appState.audioPlayerService.playTrack(
-                        tracks.first,
-                        queueContext: tracks,
+                      // Navigate to album detail instead of immediate playback
+                      // Create a JellyfinAlbum object from the downloaded tracks
+                      final album = JellyfinAlbum(
+                        id: firstTrack.albumId,
+                        name: albumName,
+                        artists: [firstTrack.displayArtist],
+                        artistIds: firstTrack.albumArtistIds ?? [],
                       );
+                      onAlbumTap(album);
                     },
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

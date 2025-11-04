@@ -35,6 +35,8 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
   - ✅ Lock screen media controls via audio_service plugin
   - ✅ Album artwork display on lock screen
   - ✅ Play/pause, skip controls work from lock screen
+  - ✅ Seek controls on lock screen
+  - ✅ Background playback state tracking
   - ✅ **Full CarPlay integration** powered by flutter_carplay plugin
   - ✅ CarPlay library browsing (albums, artists, playlists, favorites, downloads)
   - ✅ CarPlay supports offline playback with downloads (airplane mode works!)
@@ -361,12 +363,11 @@ All iOS features are built and deployed via **Codemagic CI**:
 
 ## 🐛 Known Issues
 
-- Long-press gesture on the offline wave toggle works on desktop (right-click) but not on iOS; downloads manager cannot be opened from the phone yet.
-- "Most Played / Most Recent" segmented control text wraps awkwardly on some layouts and needs design polish.
-- Offline mode album cards trigger immediate playback instead of drilling into the album detail; album artwork should be cached alongside downloads and offline search should query the on-device catalog only.
 - **Native FLAC Playback**: Uses direct download URLs for original quality, platform decoders handle FLAC/AAC/etc. natively
 - Infinite scrolling needs backend pagination support
 - CarPlay testing requires physical device or iOS Simulator with CarPlay window
+- Album artwork should be cached alongside downloads for offline mode
+- Offline search should query the on-device catalog only
 
 ## 📝 Development Guidelines
 
