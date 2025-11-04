@@ -91,15 +91,31 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       appBar: AppBar(
         title: Text(widget.playlist.name),
         actions: [
+          // Shuffle button
+          IconButton(
+            icon: const Text(
+              '🌊🌊',
+              style: TextStyle(fontSize: 20),
+            ),
+            onPressed: () {
+              if (_tracks != null && _tracks!.isNotEmpty) {
+                widget.appState.audioService.playShuffled(_tracks!);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Shuffling ${_tracks!.length} tracks from ${widget.playlist.name}'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () => _showRenameDialog(),
-            tooltip: 'Rename Playlist',
           ),
           IconButton(
             icon: const Icon(Icons.delete),
             onPressed: () => _showDeleteDialog(),
-            tooltip: 'Delete Playlist',
           ),
         ],
       ),
@@ -175,7 +191,6 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                               IconButton(
                                 icon: const Icon(Icons.remove_circle_outline),
                                 onPressed: () => _removeTrack(track.id),
-                                tooltip: 'Remove from playlist',
                               ),
                             ],
                           ),

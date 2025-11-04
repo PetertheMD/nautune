@@ -40,9 +40,27 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
     });
 
     try {
-      final tracks = await widget.appState.jellyfinService.loadAlbumTracks(
-        albumId: widget.album.id,
-      );
+      List<JellyfinTrack> tracks;
+      
+      // Check if offline mode - load from downloads
+      if (widget.appState.isOfflineMode || !widget.appState.networkAvailable) {
+        // Get all downloaded tracks for this album
+        final downloads = widget.appState.downloadService.completedDownloads;
+        tracks = downloads
+            .where((d) => d.track.albumId == widget.album.id)
+            .map((d) => d.track)
+            .toList();
+        
+        if (tracks.isEmpty) {
+          throw Exception('No downloaded tracks found for this album');
+        }
+      } else {
+        // Online mode - fetch from Jellyfin
+        tracks = await widget.appState.jellyfinService.loadAlbumTracks(
+          albumId: widget.album.id,
+        );
+      }
+      
       final sorted = List<JellyfinTrack>.from(tracks)
         ..sort((a, b) {
           final discA = a.discNumber ?? 0;
@@ -78,6 +96,13 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
     final theme = Theme.of(context);
     final album = widget.album;
     final isDesktop = MediaQuery.of(context).size.width > 600;
+    final List<JellyfinTrack> tracks = _tracks ?? const <JellyfinTrack>[];
+    final hasMultipleDiscs = tracks
+        .map((t) => t.discNumber)
+        .whereType<int>()
+        .toSet()
+        .length >
+        1;
 
     Widget artwork;
     final tag = album.primaryImageTag;
@@ -106,9 +131,26 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
               onPressed: () => Navigator.of(context).pop(),
-              tooltip: 'Back',
             ),
             actions: [
+              // Shuffle button
+              IconButton(
+                icon: const Text(
+                  '🌊🌊',
+                  style: TextStyle(fontSize: 20),
+                ),
+                onPressed: () {
+                  if (_tracks != null && _tracks!.isNotEmpty) {
+                    widget.appState.audioService.playShuffled(_tracks!);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Shuffling ${_tracks!.length} tracks'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+              ),
               IconButton(
                 icon: const Icon(Icons.playlist_add),
                 onPressed: () async {
@@ -118,7 +160,6 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                     album: widget.album,
                   );
                 },
-                tooltip: 'Add to Playlist',
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
@@ -322,19 +363,26 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    if (index >= _tracks!.length) {
+                    final currentTracks = tracks;
+                    if (index >= currentTracks.length) {
                       return const SizedBox.shrink();
                     }
-                    final track = _tracks![index];
-                    final fallbackNumber = index + 1;
-                    final trackNumber = track.effectiveTrackNumber(fallbackNumber);
+                    final track = currentTracks[index];
+                    final discKey = track.discNumber ?? 1;
+                    final tracksBeforeDisc = currentTracks
+                        .take(index)
+                        .where((t) => (t.discNumber ?? 1) == discKey)
+                        .length;
+                    final fallbackNumber = tracksBeforeDisc + 1;
+                    final trackNumber =
+                        track.effectiveTrackNumber(fallbackNumber);
                     final displayNumber =
                         trackNumber.toString().padLeft(2, '0');
                     final previousDisc = index == 0
                         ? null
-                        : _tracks![index - 1].discNumber;
-                    final showDiscHeader = track.discNumber != null &&
-                        track.discNumber != previousDisc;
+                        : (currentTracks[index - 1].discNumber ?? 1);
+                    final showDiscHeader = hasMultipleDiscs &&
+                        (index == 0 || discKey != previousDisc);
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -347,7 +395,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                               left: 8,
                             ),
                             child: Text(
-                              'Disc ${track.discNumber}',
+                              'Disc $discKey',
                               style: theme.textTheme.titleSmall?.copyWith(
                                 color:
                                     theme.colorScheme.onSurfaceVariant,
@@ -365,7 +413,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                               await widget.appState.audioPlayerService
                                   .playTrack(
                                 track,
-                                queueContext: _tracks,
+                                queueContext: currentTracks,
                                 albumId: widget.album.id,
                                 albumName: widget.album.name,
                               );
@@ -392,7 +440,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                       ],
                     );
                   },
-                  childCount: _tracks!.length,
+                  childCount: tracks.length,
                 ),
               ),
             ),
@@ -485,9 +533,10 @@ class _TrackTile extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.more_vert, size: 20),
                 onPressed: () {
+                  final parentContext = context;
                   showModalBottomSheet(
-                    context: context,
-                    builder: (context) => SafeArea(
+                    context: parentContext,
+                    builder: (sheetContext) => SafeArea(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -495,12 +544,67 @@ class _TrackTile extends StatelessWidget {
                             leading: const Icon(Icons.playlist_add),
                             title: const Text('Add to Playlist'),
                             onTap: () async {
-                              Navigator.pop(context);
+                              Navigator.pop(sheetContext);
                               await showAddToPlaylistDialog(
-                                context: context,
+                                context: parentContext,
                                 appState: appState,
                                 tracks: [track],
                               );
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.download),
+                            title: const Text('Download Track'),
+                            onTap: () async {
+                              Navigator.pop(sheetContext);
+                              final messenger = ScaffoldMessenger.of(parentContext);
+                              final theme = Theme.of(parentContext);
+                              final downloadService = appState.downloadService;
+                              try {
+                                final existing = downloadService.getDownload(track.id);
+                                if (existing != null) {
+                                  if (existing.isCompleted) {
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text('"${track.name}" is already downloaded'),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  if (existing.isFailed) {
+                                    await downloadService.retryDownload(track.id);
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text('Retrying download for ${track.name}'),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text('"${track.name}" is already in the download queue'),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                await downloadService.downloadTrack(track);
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text('Downloading ${track.name}'),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              } catch (e) {
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to download ${track.name}: $e'),
+                                    backgroundColor: theme.colorScheme.error,
+                                  ),
+                                );
+                              }
                             },
                           ),
                         ],

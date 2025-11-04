@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'jellyfin_credentials.dart';
@@ -104,6 +105,8 @@ class JellyfinClient {
     required JellyfinCredentials credentials,
     required String libraryId,
     String? genreIds,
+    int startIndex = 0,
+    int limit = 50,
   }) async {
     final queryParams = {
       'ParentId': libraryId,
@@ -111,6 +114,8 @@ class JellyfinClient {
       'Recursive': 'true',
       'SortBy': 'SortName',
       'Fields': 'PrimaryImageAspectRatio,ProductionYear,Artists,AlbumArtists,ImageTags,Genres,GenreItems',
+      'StartIndex': startIndex.toString(),
+      'Limit': limit.toString(),
     };
     
     if (genreIds != null) {
@@ -142,6 +147,8 @@ class JellyfinClient {
   Future<List<JellyfinArtist>> fetchArtists({
     required JellyfinCredentials credentials,
     required String libraryId,
+    int startIndex = 0,
+    int limit = 50,
   }) async {
     final uri = _buildUri('/Artists', {
       'ParentId': libraryId,
@@ -149,6 +156,8 @@ class JellyfinClient {
       'SortBy': 'SortName',
       'SortOrder': 'Ascending',
       'Fields': 'PrimaryImageAspectRatio,ImageTags',
+      'StartIndex': startIndex.toString(),
+      'Limit': limit.toString(),
     });
 
     final response = await httpClient.get(
@@ -218,6 +227,7 @@ class JellyfinClient {
       'Fields':
           'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber',
       'EnableImageTypes': 'Primary,Thumb',
+      'EnableUserData': 'true',
     });
 
     final response = await httpClient.get(
@@ -261,6 +271,7 @@ class JellyfinClient {
       'Fields':
           'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber',
       'EnableImageTypes': 'Primary,Thumb',
+      'EnableUserData': 'true',
     });
 
     final response = await httpClient.get(
@@ -338,6 +349,7 @@ class JellyfinClient {
       'Fields':
           'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber',
       'EnableImageTypes': 'Primary,Thumb',
+      'EnableUserData': 'true',
     });
 
     final response = await httpClient.get(
@@ -378,6 +390,7 @@ class JellyfinClient {
       'Fields':
           'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber',
       'EnableImageTypes': 'Primary,Thumb',
+      'EnableUserData': 'true',
     });
 
     final response = await httpClient.get(
@@ -521,12 +534,17 @@ class JellyfinClient {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      debugPrint('❌ Jellyfin API error: ${response.statusCode}');
+      debugPrint('❌ Response body: ${response.body}');
       throw JellyfinRequestException(
         'Request failed: ${response.statusCode} ${response.body}',
       );
     }
 
+    debugPrint('✅ Jellyfin API success: ${response.statusCode}');
+    
     if (response.body.isEmpty) {
+      debugPrint('ℹ️  Empty response body');
       return {};
     }
 
@@ -717,6 +735,7 @@ class JellyfinClient {
       'Fields':
           'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber',
       'EnableImageTypes': 'Primary,Thumb',
+      'EnableUserData': 'true',
     });
 
     final response = await httpClient.get(

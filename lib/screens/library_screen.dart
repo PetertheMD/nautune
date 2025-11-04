@@ -57,7 +57,7 @@ class _LibraryScreenState extends State<LibraryScreen>
     if (_albumsScrollController.position.pixels >=
         _albumsScrollController.position.maxScrollExtent - 200) {
       // Load more albums when near bottom
-      // widget.appState.loadMoreAlbums();
+      widget.appState.loadMoreAlbums();
     }
   }
 
@@ -208,21 +208,18 @@ class _LibraryScreenState extends State<LibraryScreen>
                       ),
                     );
                   },
-                  child: Tooltip(
-                    message: 'Toggle Offline Mode',
-                    child: Container(
-                      padding: const EdgeInsets.all(8.0),
-                      decoration: BoxDecoration(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Icon(
-                        Icons.waves,
-                        color: widget.appState.isOfflineMode 
-                            ? const Color(0xFF7A3DF1)  // Violet when offline
-                            : const Color(0xFFB39DDB),  // Light purple when online
-                        size: 28,
-                      ),
+                  child: Container(
+                    padding: const EdgeInsets.all(8.0),
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Icon(
+                      Icons.waves,
+                      color: widget.appState.isOfflineMode 
+                          ? const Color(0xFF7A3DF1)  // Violet when offline
+                          : const Color(0xFFB39DDB),  // Light purple when online
+                      size: 28,
                     ),
                   ),
                 ),
@@ -267,12 +264,10 @@ class _LibraryScreenState extends State<LibraryScreen>
               if (selectedId != null)
                 IconButton(
                   icon: const Icon(Icons.library_books_outlined),
-                  tooltip: 'Change Library',
                   onPressed: () => widget.appState.clearLibrarySelection(),
                 ),
               IconButton(
                 icon: const Icon(Icons.logout),
-                tooltip: 'Logout',
                 onPressed: () => widget.appState.disconnect(),
               ),
             ],
@@ -509,6 +504,27 @@ class _LibraryTab extends StatefulWidget {
 
 class _LibraryTabState extends State<_LibraryTab> {
   String _selectedView = 'albums'; // 'albums', 'artists', or 'genres'
+  late ScrollController _albumsScrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _albumsScrollController = ScrollController();
+    _albumsScrollController.addListener(_onAlbumsScroll);
+  }
+
+  @override
+  void dispose() {
+    _albumsScrollController.dispose();
+    super.dispose();
+  }
+
+  void _onAlbumsScroll() {
+    if (_albumsScrollController.position.pixels >=
+        _albumsScrollController.position.maxScrollExtent - 200) {
+      widget.appState.loadMoreAlbums();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -569,8 +585,9 @@ class _LibraryTabState extends State<_LibraryTab> {
       return _AlbumsTab(
         albums: widget.appState.albums,
         isLoading: widget.appState.isLoadingAlbums,
+        isLoadingMore: widget.appState.isLoadingMoreAlbums,
         error: widget.appState.albumsError,
-        scrollController: ScrollController(),
+        scrollController: _albumsScrollController,
         onRefresh: () => widget.appState.refreshAlbums(),
         onAlbumTap: widget.onAlbumTap,
         appState: widget.appState,
@@ -587,6 +604,7 @@ class _AlbumsTab extends StatelessWidget {
   const _AlbumsTab({
     required this.albums,
     required this.isLoading,
+    required this.isLoadingMore,
     required this.error,
     required this.scrollController,
     required this.onRefresh,
@@ -596,6 +614,7 @@ class _AlbumsTab extends StatelessWidget {
 
   final List<JellyfinAlbum>? albums;
   final bool isLoading;
+  final bool isLoadingMore;
   final Object? error;
   final ScrollController scrollController;
   final VoidCallback onRefresh;
@@ -638,27 +657,76 @@ class _AlbumsTab extends StatelessWidget {
           // 4 columns on desktop (>800px), 2 columns on mobile
           final crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
           
-          return GridView.builder(
+          return CustomScrollView(
             controller: scrollController,
-            padding: const EdgeInsets.all(16),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              childAspectRatio: 0.75,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-            ),
-            itemCount: albums!.length + (isLoading ? 2 : 0),
-            itemBuilder: (context, index) {
-              if (index >= albums!.length) {
-                return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()));
-              }
-              final album = albums![index];
+            slivers: [
+              // Shuffle button header
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: TextButton(
+                    onPressed: () async {
+                      if (albums != null && albums!.isNotEmpty) {
+                        // Get all tracks from all albums
+                        List<JellyfinTrack> allTracks = [];
+                        for (var album in albums!) {
+                          try {
+                            final tracks = await appState.jellyfinService.loadAlbumTracks(albumId: album.id);
+                            allTracks.addAll(tracks);
+                          } catch (e) {
+                            debugPrint('Error loading album ${album.name}: $e');
+                          }
+                        }
+                        if (allTracks.isNotEmpty) {
+                          appState.audioService.playShuffled(allTracks);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Shuffling ${allTracks.length} tracks from ${albums!.length} albums'),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.all(16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('🌊🌊', style: TextStyle(fontSize: 18)),
+                  ),
+                ),
+              ),
+              // Albums grid
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    childAspectRatio: 0.75,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      if (index >= albums!.length) {
+                        return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()));
+                      }
+                      final album = albums![index];
               return _AlbumCard(
                 album: album,
                 onTap: () => onAlbumTap(album),
                 appState: appState,
               );
-            },
+                    },
+                    childCount: albums!.length + (isLoadingMore ? 2 : 0),
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
@@ -824,20 +892,61 @@ class _PlaylistsTab extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         itemCount: playlists!.length + (isLoading ? 1 : 0) + 1, // +1 for header button
         itemBuilder: (context, index) {
-          // Add create button as first item
+          // Add header buttons as first items
           if (index == 0) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  await _showCreatePlaylistDialog(context);
-                },
-                icon: const Icon(Icons.add),
-                label: const Text('Create New Playlist'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      await _showCreatePlaylistDialog(context);
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create New Playlist'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.all(16),
+                    ),
+                  ),
                 ),
-              ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: TextButton(
+                    onPressed: () async {
+                      // Shuffle all playlists
+                      if (playlists != null && playlists!.isNotEmpty) {
+                        List<JellyfinTrack> allTracks = [];
+                        for (var playlist in playlists!) {
+                          try {
+                            final tracks = await appState.getPlaylistTracks(playlist.id);
+                            allTracks.addAll(tracks);
+                          } catch (e) {
+                            debugPrint('Error loading playlist ${playlist.name}: $e');
+                          }
+                        }
+                        if (allTracks.isNotEmpty) {
+                          appState.audioService.playShuffled(allTracks);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Shuffling ${allTracks.length} tracks from all playlists'),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.all(16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('🌊🌊', style: TextStyle(fontSize: 18)),
+                  ),
+                ),
+              ],
             );
           }
           
@@ -1244,22 +1353,18 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
               ButtonSegment(
                 value: 'mostPlayed',
                 icon: Icon(Icons.trending_up),
-                tooltip: 'Most Played',
               ),
               ButtonSegment(
                 value: 'recentlyPlayed',
                 icon: Icon(Icons.history),
-                tooltip: 'Recently Played',
               ),
               ButtonSegment(
                 value: 'recentlyAdded',
                 icon: Icon(Icons.fiber_new),
-                tooltip: 'Recently Added',
               ),
               ButtonSegment(
                 value: 'longest',
                 icon: Icon(Icons.timer),
-                tooltip: 'Longest Runtime',
               ),
             ],
             selected: {_selectedType},
@@ -1702,19 +1807,81 @@ class _ArtistsTab extends StatelessWidget {
           // 4 columns on desktop (>800px), 3 columns on mobile
           final crossAxisCount = constraints.maxWidth > 800 ? 4 : 3;
           
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              childAspectRatio: 0.75,
+          return CustomScrollView(
+            slivers: [
+              // Shuffle button header
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: TextButton(
+                    onPressed: () async {
+                      if (artists != null && artists.isNotEmpty) {
+                        final libraryId = appState.session?.selectedLibraryId;
+                        if (libraryId == null) return;
+                        
+                        // Get all tracks from all artists
+                        List<JellyfinTrack> allTracks = [];
+                        
+                        // Load all albums once
+                        final allAlbums = await appState.jellyfinService.loadAlbums(libraryId: libraryId);
+                        
+                        for (var artist in artists) {
+                          try {
+                            // Filter albums by artist
+                            final artistAlbums = allAlbums.where((album) => album.artists.contains(artist.name)).toList();
+                            
+                            for (var album in artistAlbums) {
+                              final tracks = await appState.jellyfinService.loadAlbumTracks(albumId: album.id);
+                              allTracks.addAll(tracks);
+                            }
+                          } catch (e) {
+                            debugPrint('Error loading artist ${artist.name}: $e');
+                          }
+                        }
+                        
+                        if (allTracks.isNotEmpty) {
+                          appState.audioService.playShuffled(allTracks);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Shuffling ${allTracks.length} tracks from ${artists.length} artists'),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.all(16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('🌊🌊', style: TextStyle(fontSize: 18)),
+                  ),
+                ),
+              ),
+              // Artists grid
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    childAspectRatio: 0.75,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
             ),
-            itemCount: artists.length,
-            itemBuilder: (context, index) {
-              final artist = artists[index];
-              return _ArtistCard(artist: artist, appState: appState);
-            },
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final artist = artists[index];
+                      return _ArtistCard(artist: artist, appState: appState);
+                    },
+                    childCount: artists.length,
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
@@ -2765,7 +2932,6 @@ class _DownloadsTab extends StatelessWidget {
                               icon: const Icon(Icons.refresh),
                               onPressed: () => appState.downloadService
                                   .retryDownload(track.id),
-                              tooltip: 'Retry',
                             )
                           else
                             IconButton(
@@ -2796,7 +2962,6 @@ class _DownloadsTab extends StatelessWidget {
                                       .deleteDownload(track.id);
                                 }
                               },
-                              tooltip: 'Delete',
                             ),
                         ],
                       ),

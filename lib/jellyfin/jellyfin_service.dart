@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'jellyfin_album.dart';
@@ -96,14 +97,18 @@ class JellyfinService {
   Future<List<JellyfinAlbum>> loadAlbums({
     required String libraryId,
     bool forceRefresh = false,
+    int startIndex = 0,
+    int limit = 50,
   }) async {
     final client = _client;
     final session = _session;
     if (client == null || session == null) {
       throw StateError('Authenticate before requesting albums.');
     }
+    
+    // Only use cache for first page and when not forcing refresh
     final cacheKey = libraryId;
-    if (!forceRefresh) {
+    if (!forceRefresh && startIndex == 0) {
       final cached = _albumCache[cacheKey];
       if (cached != null && !cached.isExpired(_cacheTtl)) {
         return cached.value;
@@ -113,22 +118,33 @@ class JellyfinService {
     final albums = await client.fetchAlbums(
       credentials: session.credentials,
       libraryId: libraryId,
+      startIndex: startIndex,
+      limit: limit,
     );
-    _albumCache[cacheKey] = _CacheEntry(albums);
+    
+    // Only cache first page
+    if (startIndex == 0) {
+      _albumCache[cacheKey] = _CacheEntry(albums);
+    }
+    
     return albums;
   }
 
   Future<List<JellyfinArtist>> loadArtists({
     required String libraryId,
     bool forceRefresh = false,
+    int startIndex = 0,
+    int limit = 50,
   }) async {
     final client = _client;
     final session = _session;
     if (client == null || session == null) {
       throw StateError('Authenticate before requesting artists.');
     }
+    
+    // Only use cache for first page and when not forcing refresh
     final cacheKey = libraryId;
-    if (!forceRefresh) {
+    if (!forceRefresh && startIndex == 0) {
       final cached = _artistCache[cacheKey];
       if (cached != null && !cached.isExpired(_cacheTtl)) {
         return cached.value;
@@ -138,8 +154,15 @@ class JellyfinService {
     final artists = await client.fetchArtists(
       credentials: session.credentials,
       libraryId: libraryId,
+      startIndex: startIndex,
+      limit: limit,
     );
-    _artistCache[cacheKey] = _CacheEntry(artists);
+    
+    // Only cache first page
+    if (startIndex == 0) {
+      _artistCache[cacheKey] = _CacheEntry(artists);
+    }
+    
     return artists;
   }
 
@@ -544,34 +567,72 @@ class JellyfinService {
         .toList();
   }
 
-  Future<void> markFavorite(String itemId, bool isFavorite) async {
+  Future<void> markFavorite(String itemId, bool shouldBeFavorite) async {
     final session = _session;
     if (session == null) throw Exception('Not connected');
+    
+    debugPrint('🔵 markFavorite called: itemId=$itemId, shouldBeFavorite=$shouldBeFavorite');
     
     final client = JellyfinClient(
       serverUrl: session.serverUrl,
       httpClient: _httpClient,
     );
 
-    final path = isFavorite
-        ? '/Users/${session.credentials.userId}/FavoriteItems/$itemId'
-        : '/Users/${session.credentials.userId}/FavoriteItems/$itemId';
-
-    if (isFavorite) {
-      await client.request(
-        method: 'POST',
-        path: path,
-        credentials: session.credentials,
-      );
+    if (shouldBeFavorite) {
+      // Add to favorites - POST request (correct endpoint)
+      final addPath = '/Users/${session.credentials.userId}/FavoriteItems/$itemId';
+      debugPrint('🔵 Adding favorite - Sending POST to $addPath');
+      
+      try {
+        final response = await client.request(
+          method: 'POST',
+          path: addPath,
+          credentials: session.credentials,
+        );
+        debugPrint('✅ Add favorite response: $response');
+        debugPrint('✅ Successfully added item $itemId to Jellyfin favorites');
+      } catch (e) {
+        debugPrint('❌ Failed to add favorite: $e');
+        rethrow;
+      }
     } else {
-      await client.request(
-        method: 'DELETE',
-        path: path,
-        credentials: session.credentials,
-      );
+      // Remove from favorites - DELETE request (correct endpoint)
+      final deletePath = '/Users/${session.credentials.userId}/FavoriteItems/$itemId';
+      debugPrint('🔵 Removing favorite - Sending DELETE to $deletePath');
+      
+      try {
+        final response = await client.request(
+          method: 'DELETE',
+          path: deletePath,
+          credentials: session.credentials,
+        );
+        debugPrint('✅ Delete favorite response: $response');
+        
+        // VERIFY: Fetch the item again to confirm it was unfavorited
+        debugPrint('🔍 Verifying item was actually unfavorited...');
+        final verifyPath = '/Users/${session.credentials.userId}/Items/$itemId';
+        final verifyResponse = await client.request(
+          method: 'GET',
+          path: verifyPath,
+          credentials: session.credentials,
+        );
+        final actualIsFavorite = verifyResponse['UserData']?['IsFavorite'] ?? false;
+        debugPrint('🔍 Server confirms IsFavorite=$actualIsFavorite');
+        
+        if (actualIsFavorite) {
+          throw Exception('Failed to unfavorite: Server still shows as favorite!');
+        }
+        
+        debugPrint('✅ Successfully removed item $itemId from Jellyfin favorites');
+      } catch (e) {
+        debugPrint('❌ Failed to remove favorite: $e');
+        rethrow;
+      }
     }
     
+    // Clear caches so next fetch gets updated data
     _clearCaches();
+    debugPrint('🧹 Cleared caches after favorite update');
   }
 
   Future<List<JellyfinAlbum>> getFavoriteAlbums() async {

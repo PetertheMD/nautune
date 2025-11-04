@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' show Random;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../jellyfin/jellyfin_track.dart';
@@ -10,6 +12,12 @@ import 'audio_handler.dart';
 import 'download_service.dart';
 import 'playback_reporting_service.dart';
 import 'playback_state_store.dart';
+
+enum RepeatMode {
+  off,      // No repeat
+  all,      // Repeat queue
+  one,      // Repeat current track
+}
 
 class AudioPlayerService {
   final AudioPlayer _player = AudioPlayer();
@@ -26,6 +34,7 @@ class AudioPlayerService {
   bool _isTransitioning = false;
   Duration _lastPosition = Duration.zero;
   bool _lastPlayingState = false;
+  RepeatMode _repeatMode = RepeatMode.off;
 
   void setDownloadService(DownloadService service) {
     _downloadService = service;
@@ -42,12 +51,14 @@ class AudioPlayerService {
   final StreamController<Duration> _positionController = StreamController<Duration>.broadcast();
   final StreamController<Duration?> _durationController = StreamController<Duration?>.broadcast();
   final StreamController<List<JellyfinTrack>> _queueController = StreamController<List<JellyfinTrack>>.broadcast();
+  final StreamController<RepeatMode> _repeatModeController = StreamController<RepeatMode>.broadcast();
   
   Stream<JellyfinTrack?> get currentTrackStream => _currentTrackController.stream;
   Stream<bool> get playingStream => _playingController.stream;
   Stream<Duration> get positionStream => _positionController.stream;
   Stream<Duration?> get durationStream => _durationController.stream;
   Stream<List<JellyfinTrack>> get queueStream => _queueController.stream;
+  Stream<RepeatMode> get repeatModeStream => _repeatModeController.stream;
   
   JellyfinTrack? get currentTrack => _currentTrack;
   bool get isPlaying => _player.state == PlayerState.playing;
@@ -55,6 +66,22 @@ class AudioPlayerService {
   AudioPlayer get player => _player;
   List<JellyfinTrack> get queue => List.unmodifiable(_queue);
   int get currentIndex => _currentIndex;
+  RepeatMode get repeatMode => _repeatMode;
+  
+  /// Updates the current track (e.g., for favorite status changes)
+  void updateCurrentTrack(JellyfinTrack track) {
+    debugPrint('🔄 AudioService: Updating current track to: ${track.name}, isFavorite=${track.isFavorite}');
+    _currentTrack = track;
+    _currentTrackController.add(track);
+    debugPrint('📡 AudioService: Broadcasted track update to stream');
+    
+    // Also update in queue if present
+    if (_currentIndex >= 0 && _currentIndex < _queue.length) {
+      _queue[_currentIndex] = track;
+      _queueController.add(List.from(_queue));
+      debugPrint('🔄 AudioService: Updated track in queue at index $_currentIndex');
+    }
+  }
   
   AudioPlayerService() {
     _initAudioSession();
@@ -147,6 +174,15 @@ class AudioPlayerService {
   }
   
   Future<void> _gaplessTransition() async {
+    // Handle repeat one mode
+    if (_repeatMode == RepeatMode.one && _currentTrack != null) {
+      debugPrint('🔁 Repeating current track');
+      // Replay the track from beginning
+      await playTrack(_currentTrack!, queueContext: _queue);
+      return;
+    }
+    
+    // Move to next track
     if (_currentIndex + 1 < _queue.length) {
       _isTransitioning = true;
       
@@ -167,8 +203,15 @@ class AudioPlayerService {
       _isTransitioning = false;
       _saveCurrentPosition();
     } else {
-      // Queue finished
-      await stop();
+      // Queue finished - handle repeat all mode
+      if (_repeatMode == RepeatMode.all && _queue.isNotEmpty) {
+        debugPrint('🔁 Repeating queue from beginning');
+        _currentIndex = 0;
+        await playTrack(_queue[0], queueContext: _queue);
+      } else {
+        // Stop playback
+        await stop();
+      }
     }
   }
   
@@ -458,6 +501,57 @@ class AudioPlayerService {
     if (index < 0 || index >= _queue.length) return;
     _currentIndex = index;
     await playTrack(_queue[_currentIndex], queueContext: _queue);
+  }
+  
+  // Shuffle and Repeat functionality
+  void toggleRepeatMode() {
+    switch (_repeatMode) {
+      case RepeatMode.off:
+        _repeatMode = RepeatMode.all;
+        break;
+      case RepeatMode.all:
+        _repeatMode = RepeatMode.one;
+        break;
+      case RepeatMode.one:
+        _repeatMode = RepeatMode.off;
+        break;
+    }
+    _repeatModeController.add(_repeatMode);
+    debugPrint('🔁 Repeat mode: $_repeatMode');
+  }
+  
+  void shuffleQueue() {
+    if (_queue.isEmpty) return;
+    
+    // Keep current track at current position
+    final currentTrack = _currentTrack;
+    final remainingTracks = List<JellyfinTrack>.from(_queue);
+    
+    if (currentTrack != null) {
+      remainingTracks.removeWhere((t) => t.id == currentTrack.id);
+    }
+    
+    // Shuffle remaining tracks
+    remainingTracks.shuffle(Random());
+    
+    // Rebuild queue: current + shuffled rest
+    if (currentTrack != null) {
+      _queue = [currentTrack, ...remainingTracks];
+      _currentIndex = 0;
+    } else {
+      _queue = remainingTracks;
+    }
+    
+    _queueController.add(_queue);
+    debugPrint('🌊 Queue shuffled: ${_queue.length} tracks');
+  }
+  
+  Future<void> playShuffled(List<JellyfinTrack> tracks) async {
+    if (tracks.isEmpty) return;
+    
+    final shuffled = List<JellyfinTrack>.from(tracks)..shuffle(Random());
+    await playTrack(shuffled.first, queueContext: shuffled);
+    debugPrint('🌊 Playing shuffled: ${shuffled.length} tracks');
   }
   
   void _startPositionSaving() {

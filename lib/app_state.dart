@@ -60,9 +60,18 @@ class NautuneAppState extends ChangeNotifier {
   bool _isLoadingAlbums = false;
   Object? _albumsError;
   List<JellyfinAlbum>? _albums;
+  bool _isLoadingMoreAlbums = false;
+  bool _hasMoreAlbums = true;
+  int _albumsPage = 0;
+  static const int _albumsPageSize = 50;
+  
   bool _isLoadingArtists = false;
   Object? _artistsError;
   List<JellyfinArtist>? _artists;
+  bool _isLoadingMoreArtists = false;
+  bool _hasMoreArtists = true;
+  int _artistsPage = 0;
+  static const int _artistsPageSize = 50;
   bool _isLoadingPlaylists = false;
   Object? _playlistsError;
   List<JellyfinPlaylist>? _playlists;
@@ -89,9 +98,13 @@ class NautuneAppState extends ChangeNotifier {
   bool get isLoadingAlbums => _isLoadingAlbums;
   Object? get albumsError => _albumsError;
   List<JellyfinAlbum>? get albums => _albums;
+  bool get isLoadingMoreAlbums => _isLoadingMoreAlbums;
+  bool get hasMoreAlbums => _hasMoreAlbums;
   bool get isLoadingArtists => _isLoadingArtists;
   Object? get artistsError => _artistsError;
   List<JellyfinArtist>? get artists => _artists;
+  bool get isLoadingMoreArtists => _isLoadingMoreArtists;
+  bool get hasMoreArtists => _hasMoreArtists;
   bool get isLoadingPlaylists => _isLoadingPlaylists;
   Object? get playlistsError => _playlistsError;
   List<JellyfinPlaylist>? get playlists => _playlists;
@@ -467,13 +480,19 @@ class NautuneAppState extends ChangeNotifier {
       {bool forceRefresh = false}) async {
     _albumsError = null;
     _isLoadingAlbums = true;
+    _albumsPage = 0;
+    _hasMoreAlbums = true;
     notifyListeners();
 
     try {
-      _albums = await _jellyfinService.loadAlbums(
+      final albums = await _jellyfinService.loadAlbums(
         libraryId: libraryId,
         forceRefresh: forceRefresh,
+        startIndex: 0,
+        limit: _albumsPageSize,
       );
+      _albums = albums;
+      _hasMoreAlbums = albums.length == _albumsPageSize;
     } catch (error) {
       _albumsError = error;
       _albums = null;
@@ -483,22 +502,98 @@ class NautuneAppState extends ChangeNotifier {
     }
   }
 
+  Future<void> loadMoreAlbums() async {
+    final libraryId = _session?.selectedLibraryId;
+    if (libraryId == null || 
+        _isLoadingMoreAlbums || 
+        _isLoadingAlbums || 
+        !_hasMoreAlbums ||
+        _albums == null) {
+      return;
+    }
+
+    _isLoadingMoreAlbums = true;
+    notifyListeners();
+
+    try {
+      _albumsPage++;
+      final newAlbums = await _jellyfinService.loadAlbums(
+        libraryId: libraryId,
+        startIndex: _albumsPage * _albumsPageSize,
+        limit: _albumsPageSize,
+      );
+      
+      if (newAlbums.isEmpty || newAlbums.length < _albumsPageSize) {
+        _hasMoreAlbums = false;
+      }
+      
+      _albums = [..._albums!, ...newAlbums];
+    } catch (error) {
+      debugPrint('Error loading more albums: $error');
+      _albumsPage--; // Revert page on error
+    } finally {
+      _isLoadingMoreAlbums = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> _loadArtistsForLibrary(String libraryId,
       {bool forceRefresh = false}) async {
     _artistsError = null;
     _isLoadingArtists = true;
+    _artistsPage = 0;
+    _hasMoreArtists = true;
     notifyListeners();
 
     try {
-      _artists = await _jellyfinService.loadArtists(
+      final artists = await _jellyfinService.loadArtists(
         libraryId: libraryId,
         forceRefresh: forceRefresh,
+        startIndex: 0,
+        limit: _artistsPageSize,
       );
+      _artists = artists;
+      _hasMoreArtists = artists.length == _artistsPageSize;
     } catch (error) {
       _artistsError = error;
       _artists = null;
     } finally {
       _isLoadingArtists = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMoreArtists() async {
+    final libraryId = _session?.selectedLibraryId;
+    if (libraryId == null || 
+        _isLoadingMoreArtists || 
+        _isLoadingArtists || 
+        !_hasMoreArtists ||
+        _artists == null) {
+      return;
+    }
+
+    _isLoadingMoreArtists = true;
+    notifyListeners();
+
+    try {
+      _artistsPage++;
+      final newArtists = await _jellyfinService.loadArtists(
+        libraryId: libraryId,
+        startIndex: _artistsPage * _artistsPageSize,
+        limit: _artistsPageSize,
+      );
+      
+      if (newArtists.isEmpty || newArtists.length < _artistsPageSize) {
+        _hasMoreArtists = false;
+      }
+      
+      _artists = [..._artists!, ...newArtists];
+    } catch (error) {
+      debugPrint('Error loading more artists: $error');
+      _artistsPage--; // Revert page on error
+    } finally {
+      _isLoadingMoreArtists = false;
       notifyListeners();
     }
   }

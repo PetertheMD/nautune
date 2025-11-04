@@ -26,6 +26,7 @@ class NowPlayingBar extends StatelessWidget {
         builder: (_) => FullPlayerScreen(
           key: UniqueKey(), // Force fresh build
           audioService: audioService,
+          appState: appState,
         ),
       ),
     );
@@ -80,7 +81,6 @@ class NowPlayingBar extends StatelessWidget {
                       Row(
                         children: [
                           IconButton(
-                            tooltip: 'Previous track',
                             icon: const Icon(Icons.skip_previous),
                             onPressed: () => audioService.previous(),
                           ),
@@ -89,7 +89,6 @@ class NowPlayingBar extends StatelessWidget {
                             isPlaying: isPlaying,
                           ),
                           IconButton(
-                            tooltip: 'Stop playback',
                             icon: Icon(
                               Icons.stop,
                               color: theme.colorScheme.error,
@@ -97,7 +96,6 @@ class NowPlayingBar extends StatelessWidget {
                             onPressed: () => audioService.stop(),
                           ),
                           IconButton(
-                            tooltip: 'Next track',
                             icon: const Icon(Icons.skip_next),
                             onPressed: () => audioService.next(),
                           ),
@@ -138,7 +136,6 @@ class NowPlayingBar extends StatelessWidget {
                             ),
                           ),
                           IconButton(
-                            tooltip: 'View queue',
                             icon: const Icon(Icons.queue_music),
                             onPressed: () {
                               Navigator.of(context).push(
@@ -194,7 +191,6 @@ class _PlayPauseButton extends StatelessWidget {
         ],
       ),
       child: IconButton(
-        tooltip: isPlaying ? 'Pause' : 'Play',
         icon: Icon(
           isPlaying ? Icons.pause : Icons.play_arrow,
           color: theme.colorScheme.onPrimary,

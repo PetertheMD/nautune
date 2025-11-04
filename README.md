@@ -64,8 +64,8 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
 - **Album & Artist Art**: Beautiful grid and list layouts with Jellyfin artwork (trident placeholder fallback)
 
 ### 📚 Library Browsing
-- **✅ Albums Tab**: Grid view with album artwork, year, and artist info - click to see tracks
-- **✅ Artists Tab**: Browse all artists with circular profile artwork - click to see their albums
+- **✅ Albums Tab**: Grid view with paginated loading (50 albums per page), album artwork, year, and artist info - click to see tracks
+- **✅ Artists Tab**: Browse all artists with paginated loading (50 per page) and circular profile artwork - click to see their albums
 - **✅ Genres Tab**: Browse music by genre - click any genre to see all albums with that tag (server-filtered)
 - **✅ Most Tab**: Comprehensive music discovery with 4 view modes (icon-only controls)
   - **Most Played Tracks**: Server-tracked most played songs
@@ -79,7 +79,7 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
   - **Tap**: Toggle online/offline mode (violet = offline, light purple = online)
   - **Most Tab**: Automatically becomes Downloads management when offline
   - **Search Tab**: Searches downloaded content only when offline
-  - **🛫 Offline-First Boot**: App automatically enters offline mode if network is unavailable during startup
+  - **🛫 Offline-First Boot**: App automatically enters offline mode if network is unavailable during startup (10-second timeout)
   - **Network Banner**: Visual indicator when offline with retry button to restore connection
   - **Seamless Recovery**: Automatically syncs when internet returns
 - **✅ Recent Tab**: Toggle between recently played tracks (from Jellyfin history) and recently added albums with segmented control
@@ -384,6 +384,7 @@ All iOS features are built and deployed via **Codemagic CI**:
 - [x] **Fixed offline mode toggle** - wave icon tap now works correctly
 - [x] **Offline album detail navigation** - tapping albums in offline mode opens detail instead of immediate playback
 - [x] **🛫 Offline-first boot** - app gracefully handles no network at startup and boots directly into offline mode with downloaded content
+- [x] **📄 Pagination** - albums and artists load 50 at a time with infinite scroll for smooth performance on large libraries
 
 ### 🚧 In Progress / Planned
 - [ ] Full player screen with lyrics display
@@ -394,7 +395,6 @@ All iOS features are built and deployed via **Codemagic CI**:
 
 ## 🐛 Known Issues
 
-- Infinite scrolling needs backend pagination support
 - CarPlay testing requires physical device or iOS Simulator with CarPlay window
 
 ## 📝 Development Guidelines

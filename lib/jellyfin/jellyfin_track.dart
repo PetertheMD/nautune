@@ -197,4 +197,25 @@ class JellyfinTrack {
     };
     return uri.replace(queryParameters: query).toString();
   }
+
+  /// Creates a copy of this track with updated favorite status
+  JellyfinTrack copyWith({bool? isFavorite}) {
+    return JellyfinTrack(
+      id: id,
+      name: name,
+      album: album,
+      artists: artists,
+      runTimeTicks: runTimeTicks,
+      primaryImageTag: primaryImageTag,
+      serverUrl: serverUrl,
+      token: token,
+      userId: userId,
+      indexNumber: indexNumber,
+      parentIndexNumber: parentIndexNumber,
+      albumId: albumId,
+      albumPrimaryImageTag: albumPrimaryImageTag,
+      parentThumbImageTag: parentThumbImageTag,
+      isFavorite: isFavorite ?? this.isFavorite,
+    );
+  }
 }

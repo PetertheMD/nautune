@@ -101,7 +101,6 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
               onPressed: () => Navigator.of(context).pop(),
-              tooltip: 'Back to Artists',
             ),
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(

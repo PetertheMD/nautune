@@ -2,13 +2,19 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../app_state.dart';
 import '../jellyfin/jellyfin_track.dart';
 import '../services/audio_player_service.dart';
 
 class FullPlayerScreen extends StatefulWidget {
-  const FullPlayerScreen({super.key, required this.audioService});
+  const FullPlayerScreen({
+    super.key, 
+    required this.audioService,
+    required this.appState,
+  });
 
   final AudioPlayerService audioService;
+  final NautuneAppState appState;
 
   @override
   State<FullPlayerScreen> createState() => _FullPlayerScreenState();
@@ -152,7 +158,6 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                   IconButton(
                                     icon: const Icon(Icons.expand_more),
                                     onPressed: () => Navigator.of(context).pop(),
-                                    tooltip: 'Close',
                                   ),
                                   const Spacer(),
                                   Text(
@@ -160,19 +165,8 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                     style: theme.textTheme.titleMedium,
                                   ),
                                   const Spacer(),
-                                  IconButton(
-                                    icon: const Icon(Icons.favorite_border),
-                                    onPressed: () {
-                                      // TODO: Toggle favorite
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Favorite feature coming soon!'),
-                                          duration: Duration(seconds: 1),
-                                        ),
-                                      );
-                                    },
-                                    tooltip: 'Add to favorites',
-                                  ),
+                                  // Top-right heart icon removed - use bottom controls instead
+                                  const SizedBox(width: 48), // Maintain spacing
                                 ],
                               ),
                             ),
@@ -308,32 +302,48 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                         size: isDesktop ? 32 : 28,
                                       ),
                                       onPressed: () async {
-                                        final appState = context.findAncestorStateOfType<State>();
-                                        if (appState != null && appState.widget is StatefulWidget) {
-                                          final dynamic nautuneState = appState;
-                                          if (nautuneState is State && nautuneState.mounted) {
-                                            try {
-                                              await (nautuneState as dynamic).appState.jellyfinService.markFavorite(track.id, !track.isFavorite);
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(
-                                                  content: Text(track.isFavorite ? 'Removed from favorites' : 'Added to favorites'),
-                                                  duration: const Duration(seconds: 2),
-                                                ),
-                                              );
-                                            } catch (e) {
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(
-                                                  content: Text('Failed to update favorite: $e'),
-                                                  backgroundColor: theme.colorScheme.error,
-                                                ),
-                                              );
-                                            }
+                                        try {
+                                          final currentFavoriteStatus = track.isFavorite;
+                                          final newFavoriteStatus = !currentFavoriteStatus;
+                                          
+                                          debugPrint('🎯 Favorite button clicked: current=$currentFavoriteStatus, new=$newFavoriteStatus');
+                                          
+                                          // Update Jellyfin server
+                                          await widget.appState.jellyfinService.markFavorite(track.id, newFavoriteStatus);
+                                          
+                                          // Update track object with new favorite status
+                                          final updatedTrack = track.copyWith(isFavorite: newFavoriteStatus);
+                                          debugPrint('🔄 Updating track: old isFavorite=${track.isFavorite}, new isFavorite=${updatedTrack.isFavorite}');
+                                          widget.audioService.updateCurrentTrack(updatedTrack);
+                                          
+                                          // Force UI rebuild
+                                          if (mounted) setState(() {});
+                                          
+                                          // Refresh favorites list in app state
+                                          await widget.appState.refreshFavorites();
+                                          
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text(newFavoriteStatus ? 'Added to favorites' : 'Removed from favorites'),
+                                                duration: const Duration(seconds: 2),
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          debugPrint('❌ Error toggling favorite: $e');
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('Failed to update favorite: $e'),
+                                                backgroundColor: theme.colorScheme.error,
+                                              ),
+                                            );
                                           }
                                         }
-                                      },
-                                      tooltip: track.isFavorite ? 'Remove from favorites' : 'Add to favorites',
-                                      color: track.isFavorite ? Colors.red : null,
-                                    ),
+                                  },
+                                  color: track.isFavorite ? Colors.red : null,
+                                ),
 
                                     SizedBox(width: isDesktop ? 16 : 8),
                                     
@@ -343,7 +353,6 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                         size: isDesktop ? 48 : 40,
                                       ),
                                       onPressed: () => widget.audioService.previous(),
-                                      tooltip: 'Previous',
                                     ),
                                     
                                     SizedBox(width: isDesktop ? 24 : 16),
@@ -354,7 +363,6 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                         size: isDesktop ? 40 : 32,
                                       ),
                                       onPressed: () => widget.audioService.stop(),
-                                      tooltip: 'Stop',
                                       color: theme.colorScheme.error,
                                     ),
                                     
@@ -379,7 +387,6 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                         ),
                                         onPressed: () => widget.audioService.playPause(),
                                         color: theme.colorScheme.onPrimary,
-                                        tooltip: isPlaying ? 'Pause' : 'Play',
                                       ),
                                     ),
                                     
@@ -391,7 +398,43 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                         size: isDesktop ? 48 : 40,
                                       ),
                                       onPressed: () => widget.audioService.next(),
-                                      tooltip: 'Next',
+                                    ),
+                                    
+                                    SizedBox(width: isDesktop ? 16 : 8),
+                                    
+                                    // Repeat button
+                                    StreamBuilder<RepeatMode>(
+                                      stream: widget.audioService.repeatModeStream,
+                                      initialData: widget.audioService.repeatMode,
+                                      builder: (context, snapshot) {
+                                        final repeatMode = snapshot.data ?? RepeatMode.off;
+                                        IconData icon;
+                                        Color? color;
+                                        
+                                        switch (repeatMode) {
+                                          case RepeatMode.off:
+                                            icon = Icons.repeat;
+                                            color = null;
+                                            break;
+                                          case RepeatMode.all:
+                                            icon = Icons.repeat;
+                                            color = theme.colorScheme.primary;
+                                            break;
+                                          case RepeatMode.one:
+                                            icon = Icons.repeat_one;
+                                            color = theme.colorScheme.primary;
+                                            break;
+                                        }
+                                        
+                                        return IconButton(
+                                          icon: Icon(
+                                            icon,
+                                            size: isDesktop ? 32 : 28,
+                                            color: color,
+                                          ),
+                                          onPressed: () => widget.audioService.toggleRepeatMode(),
+                                        );
+                                      },
                                     ),
                                   ],
                                 ),

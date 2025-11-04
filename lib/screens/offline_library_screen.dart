@@ -442,7 +442,6 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
                       onPressed: () {
                         widget.appState.downloadService.deleteDownload(track.id);
                       },
-                      tooltip: 'Cancel download',
                     ),
                   );
                 },
