@@ -152,8 +152,19 @@ class NautuneAppState extends ChangeNotifier {
         // Attempt to load libraries from server
         // If network is unavailable, gracefully fall back to offline mode
         try {
-          await _loadLibraries();
-          await _loadLibraryDependentContent();
+          // Add timeout to prevent infinite spinning on airplane mode
+          await _loadLibraries().timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw TimeoutException('Server unreachable');
+            },
+          );
+          await _loadLibraryDependentContent().timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw TimeoutException('Server unreachable');
+            },
+          );
           _networkAvailable = true;
         } catch (error) {
           debugPrint('Network unavailable during initialization, entering offline mode: $error');

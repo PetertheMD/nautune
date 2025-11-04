@@ -4,10 +4,16 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
 
 ## 🚀 Latest Updates
 - **🛫 Offline-First Boot**: App now boots directly into offline mode when no internet is available, giving instant access to downloaded music even in airplane mode or dead zones.
+  - ✅ 10-second timeout prevents infinite spinning on network failure
   - ✅ Graceful network failure handling during initialization
   - ✅ Cached credentials preserved for when connectivity returns
   - ✅ Offline banner with retry button shows when network is unavailable
   - ✅ Automatic sync when connectivity is restored
+- **🚗 CarPlay Fix**: Fixed CarPlay not appearing on iOS devices by properly calling `FlutterCarplay.setRootTemplate()` during initialization
+  - ✅ CarPlay icon now appears on CarPlay-enabled head units
+  - ✅ Safe async initialization prevents iOS black screen
+  - ✅ Graceful fallback if CarPlay fails
+- **🐧 Linux Icon**: Added `linux/nautune.png` and desktop file for proper Linux desktop integration
 - Reworked iOS bootstrap with a shared `FlutterEngine`, SceneDelegate, and Info.plist scene manifest so `flutter_carplay` can launch reliably on CarPlay-equipped head units (see `ios/Runner/AppDelegate.swift`, `SceneDelegate.swift`, and `Info.plist`).
 - Deferred `NautuneAppState.initialize()` work and CarPlay setup to run after the first Flutter frame, preventing black-screen hangs caused by plugin initialization failures.
 - Hardened startup logging (`Nautune initialization started/finished`) to make it easier to diagnose device issues from Xcode or `flutter logs`.
@@ -275,6 +281,11 @@ flutter test
 
 ## 🌐 Building for Other Platforms
 
+- **Linux**: Builds with `flutter build linux --release`
+  - ✅ Native GStreamer audio backend (FLAC/lossless support)
+  - ✅ Desktop icon included (`linux/nautune.png` + `nautune.desktop`)
+  - ✅ Offline downloads stored in project `downloads/` directory
+  - ✅ All Jellyfin features work on Linux
 - **iOS**: Builds produced by **Codemagic CI** with full feature support
   - ✅ **Native audio playback** via AVFoundation (FLAC/AAC/lossless support)
   - ✅ **Lock screen controls** with album artwork via audio_service
