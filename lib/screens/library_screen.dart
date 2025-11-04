@@ -159,7 +159,10 @@ class _LibraryScreenState extends State<LibraryScreen>
                 onRefresh: () => widget.appState.refreshFavorites(),
                 onTrackTap: (track) => _playTrack(track),
               ),
-              _MostPlayedTab(appState: widget.appState, onAlbumTap: (album) => _navigateToAlbum(context, album)),
+              // Swap Most/Downloads based on offline mode
+              widget.appState.isOfflineMode
+                  ? OfflineLibraryScreen(appState: widget.appState)
+                  : _MostPlayedTab(appState: widget.appState, onAlbumTap: (album) => _navigateToAlbum(context, album)),
               _PlaylistsTab(
                 playlists: playlists,
                 isLoading: isLoadingPlaylists,
@@ -201,7 +204,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                     );
                   },
                   child: Tooltip(
-                    message: 'Tap: Toggle Offline | Long Press/Right Click: Downloads',
+                    message: 'Toggle Offline Mode',
                     child: Container(
                       padding: const EdgeInsets.all(8.0),
                       decoration: BoxDecoration(
@@ -279,24 +282,24 @@ class _LibraryScreenState extends State<LibraryScreen>
                   setState(() => _currentTabIndex = index);
                   _tabController.animateTo(index);
                 },
-                destinations: const [
-                  NavigationDestination(
+                destinations: [
+                  const NavigationDestination(
                     icon: Icon(Icons.library_music),
                     label: 'Library',
                   ),
-                  NavigationDestination(
+                  const NavigationDestination(
                     icon: Icon(Icons.favorite_outline),
                     label: 'Favorites',
                   ),
                   NavigationDestination(
-                    icon: Icon(Icons.trending_up),
-                    label: 'Most',
+                    icon: Icon(widget.appState.isOfflineMode ? Icons.download : Icons.trending_up),
+                    label: widget.appState.isOfflineMode ? 'Downloads' : 'Most',
                   ),
-                  NavigationDestination(
+                  const NavigationDestination(
                     icon: Icon(Icons.queue_music),
                     label: 'Playlists',
                   ),
-                  NavigationDestination(
+                  const NavigationDestination(
                     icon: Icon(Icons.search),
                     label: 'Search',
                   ),
@@ -1196,23 +1199,23 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
             segments: const [
               ButtonSegment(
                 value: 'mostPlayed',
-                label: Text('Most Played'),
                 icon: Icon(Icons.trending_up),
+                tooltip: 'Most Played',
               ),
               ButtonSegment(
                 value: 'recentlyPlayed',
-                label: Text('Recent'),
                 icon: Icon(Icons.history),
+                tooltip: 'Recently Played',
               ),
               ButtonSegment(
                 value: 'recentlyAdded',
-                label: Text('New'),
                 icon: Icon(Icons.fiber_new),
+                tooltip: 'Recently Added',
               ),
               ButtonSegment(
                 value: 'longest',
-                label: Text('Longest'),
                 icon: Icon(Icons.timer),
+                tooltip: 'Longest Runtime',
               ),
             ],
             selected: {_selectedType},
