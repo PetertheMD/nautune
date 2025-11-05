@@ -2,7 +2,34 @@
 
 Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter and delivers a beautiful deep-sea themed experience with smooth native audio playback, animated waveform visualization, and seamless Jellyfin integration.
 
-## 🚀 Latest Updates
+## 🚀 Latest Updates (v1.0.4.1+)
+- **💾 Advanced Playback Persistence**: Full playback state restoration across app restarts
+  - ✅ Saves and restores current track, position, queue, and playback state
+  - ✅ Preserves repeat mode (off/all/one) and shuffle state
+  - ✅ Restores volume level and UI preferences (library tab, scroll positions)
+  - ✅ Smart restoration: automatically resumes from last position on app launch
+  - ✅ **Stop clears persistence**: Pressing stop resets to clean state (no auto-resume on next launch)
+- **🔀 Shuffle & Repeat Modes**: Full playback control with queue management
+  - ✅ Shuffle: Randomizes queue while preserving current track
+  - ✅ Repeat modes: Off, All (repeat queue), One (repeat current track)
+  - ✅ Queue persistence: Shuffle/repeat state saved and restored
+  - ✅ Visual indicators for active modes
+- **📥 Enhanced Downloads**: Individual track downloads with batch album support
+  - ✅ Download single tracks from any screen (long-press or menu)
+  - ✅ Download entire albums with one tap
+  - ✅ Progress tracking for individual tracks and batches
+  - ✅ Download cancellation support
+  - ✅ Smart duplicate detection (won't re-download existing files)
+- **💿 Multi-Disc Album Support**: Proper handling of multi-disc releases
+  - ✅ Disc number grouping in album detail view
+  - ✅ Disc separators with clear labeling (Disc 1, Disc 2, etc.)
+  - ✅ Correct track ordering across discs
+  - ✅ Preserves disc structure in queue and playback
+- **🎚️ Volume Slider**: Direct audio control in now playing bar
+  - ✅ Real-time volume adjustment via slider
+  - ✅ Wired directly to audio player for instant response
+  - ✅ Volume level persisted across sessions
+  - ✅ Toggleable visibility (show/hide volume bar)
 - **🛫 Offline-First Boot**: App now boots directly into offline mode when no internet is available, giving instant access to downloaded music even in airplane mode or dead zones.
   - ✅ 10-second timeout prevents infinite spinning on network failure
   - ✅ Graceful network failure handling during initialization
@@ -34,8 +61,19 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
   - ✅ Reduced server load
 - **Original Quality Downloads**: Downloads always use original lossless format (FLAC preferred)
 - **Album Queueing**: One tap queues the whole album in disc/track-number order with seamless previous/next navigation
-- **Resume & Persist**: Playback position is saved every second and restored on launch
+- **Advanced Playback State Persistence**: Complete session restoration
+  - ✅ Saves current track, position, queue, repeat mode, shuffle state
+  - ✅ Preserves volume level and UI preferences (library tab, scroll positions)
+  - ✅ Smart restoration: automatically resumes from last position on launch
+  - ✅ Stop button clears persistence for clean restart
+  - ✅ Position saved every second for accurate resume
+- **Shuffle & Repeat**: Full playback control
+  - ✅ Shuffle mode: Randomizes queue while keeping current track
+  - ✅ Repeat modes: Off, All (repeat queue), One (repeat current track)
+  - ✅ State persisted across sessions
+  - ✅ Visual indicators for active modes
 - **Background Audio**: Keeps playing while the app is in the background
+- **Volume Control**: Direct audio volume adjustment with persistent slider in now playing bar
 - **Playback Reporting**: Full Jellyfin server integration
   - ✅ Reports playback start with play method (DirectPlay/DirectStream)
   - ✅ Real-time progress updates (position, pause state)
@@ -60,6 +98,9 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
 - **Scrubbable Mini Player**: Waveform strip and slider both seek playback instantly
 - **Now Playing Bar**: Always-visible controls, real-time progress indicator, and quick access to the full player
 - **Full Screen Player**: Auto-updating UI with StreamBuilder - play/pause, progress bar, and track info always in sync
+  - ✅ Compact, centered button layout optimized for mobile devices
+  - ✅ All playback controls in one row (favorite, skip, stop, play/pause, next, repeat)
+  - ✅ Visual indicators for active repeat/shuffle modes
 - **Deep Sea Purple Theme**: Oceanic gradient color scheme with light purple "Nautune" title (Pacifico font)
 - **Album & Artist Art**: Beautiful grid and list layouts with Jellyfin artwork (trident placeholder fallback)
 
@@ -97,12 +138,21 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
   - ✅ Remove tracks from playlists
   - ✅ Play playlists with queue support
   - ✅ All changes sync to Jellyfin server instantly
-- **✅ Downloads Tab**: Full offline download support with original quality (FLAC/lossless), progress tracking, album batch downloads, and file management
+- **✅ Downloads Tab**: Full offline download support with original quality (FLAC/lossless), progress tracking, album batch downloads, individual track downloads, and file management
+  - ✅ **Download Albums**: Tap download icon on album cards or in album detail view
+  - ✅ **Download Tracks**: Long-press or use menu button on individual tracks
+  - ✅ **Progress Tracking**: Real-time progress bars for downloads
+  - ✅ **Cancellation**: Cancel in-progress downloads anytime
+  - ✅ **Smart Detection**: Won't re-download existing files
+  - ✅ **Original Quality**: Always downloads lossless format (FLAC preferred)
 - **✅ Offline Library**: Click wave icon (🌊) to browse downloads by album or artist - **works in airplane mode!**
 - **✅ Settings**: Click "Nautune" title to view server info and about section (native quality playback always enabled)
 - **✅ Favorite Button**: Heart icon in fullscreen player synced with Jellyfin favorites API
 - **✅ Queue View**: Browse and reorder currently queued tracks via queue button in now playing bar
-- **Track Listings**: Full album detail screens with ordered track lists, durations, and padded numbers (multi-disc aware)
+- **Track Listings**: Full album detail screens with ordered track lists, durations, and padded numbers (multi-disc aware with disc separators)
+  - ✅ **Multi-Disc Support**: Disc separators (Disc 1, Disc 2, etc.) for box sets and compilations
+  - ✅ **Proper Ordering**: Tracks sorted by disc number then track number
+  - ✅ **Disc Grouping**: Visual separation between discs for clarity
 - **Artist Discography**: View all albums by an artist
 - **Bottom Navigation**: Icon-only rail keeps the most-used sections a single tap away on every platform
 - **Library Search Tab**: Dedicated search experience for quickly finding albums by name, showing artist and year context
@@ -247,10 +297,15 @@ lib/
 - Configures native audio session for optimal performance
 
 ### Playback State Persistence
-- Saves: current track, position, queue, album context
-- Stored in `SharedPreferences` as JSON
-- Restores automatically on app launch
-- Survives app restarts and force-closes
+- **Complete Session Restoration**: Full playback state saved and restored
+  - ✅ Current track, position, queue, album context
+  - ✅ Repeat mode (off/all/one) and shuffle state
+  - ✅ Volume level and UI preferences (library tab, scroll positions)
+  - ✅ Show/hide volume bar preference
+- **Smart Restoration**: Automatically resumes from last position on app launch
+- **Stop Clears State**: Pressing stop resets persistence to default (clean slate on next launch)
+- **Real-time Saving**: Position saved every second for accurate resume
+- **Stored in SharedPreferences**: Persists across app restarts and force-closes
 
 ## 🔧 Development
 
@@ -350,12 +405,18 @@ All iOS features are built and deployed via **Codemagic CI**:
 - [x] **Artist detail screen showing all albums**
 - [x] Playlists and recently added tracks
 - [x] **Album detail view with full track listings**
+- [x] **Multi-disc album support with disc separators**
 - [x] **Audio playback with native engine (direct streaming)**
-- [x] **Persistent playback state (position, queue, track)**
+- [x] **Advanced playback state persistence** (track, position, queue, repeat, shuffle, volume, UI state)
+- [x] **Stop clears persistence** for clean restart
+- [x] **Shuffle mode** with queue randomization
+- [x] **Repeat modes** (off/all/one) with persistence
 - [x] **Gapless playback** with track preloading
 - [x] **Native FLAC Playback**: Uses direct download URLs for original quality, platform decoders handle FLAC/AAC/etc. natively
 - [x] **Jellyfin Playback Reporting integration** for activity tracking
-- [x] **Offline downloads** with progress tracking and album batch downloads
+- [x] **Individual track downloads** with progress tracking
+- [x] **Album batch downloads** with cancellation support
+- [x] **Smart download detection** (no duplicate downloads)
 - [x] **Recent tab with toggle** between recently played and recently added
 - [x] **iOS CarPlay** powered by flutter_carplay plugin with full library browsing (albums, artists, playlists, favorites, downloads) and **offline support**
 - [x] **Most Tab with 4 view modes**: Most Played, Recently Played, Recently Added, and Longest Runtime tracks (all playable with tap-to-play)
@@ -364,9 +425,9 @@ All iOS features are built and deployed via **Codemagic CI**:
 - [x] **Settings screen** with transcoding options accessible from app title
 - [x] **Now playing bar with controls and real-time waveform**
 - [x] **Full-screen player** with auto-updating UI (play/pause state, progress bar synced)
-- [x] **Volume slider** wired directly to `audioPlayer.setVolume()` for instant gain control
+- [x] **Volume slider** wired directly to `audioPlayer.setVolume()` for instant gain control with persistent show/hide preference
 - [x] **Headphone interruption handling** via `audio_session` (pause/resume & noisy events)
-- [x] **Favorite button** in fullscreen player (heart icon, ready for API)
+- [x] **Favorite button** in fullscreen player (heart icon, synced with Jellyfin API)
 - [x] **Full playlist management with Jellyfin integration**
   - [x] Create playlists on Jellyfin server
   - [x] Rename/edit playlists

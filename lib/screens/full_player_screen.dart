@@ -344,7 +344,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                     IconButton(
                                       icon: Icon(
                                         track.isFavorite ? Icons.favorite : Icons.favorite_border,
-                                        size: isDesktop ? 32 : 28,
+                                        size: isDesktop ? 32 : 26,
                                       ),
                                       onPressed: () async {
                                         try {
@@ -390,7 +390,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                   color: track.isFavorite ? Colors.red : null,
                                 ),
 
-                                    SizedBox(width: isDesktop ? 16 : 8),
+                                    SizedBox(width: isDesktop ? 16 : 4),
                                     
                                     IconButton(
                                       icon: Icon(
@@ -400,7 +400,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                       onPressed: () => widget.audioService.previous(),
                                     ),
                                     
-                                    SizedBox(width: isDesktop ? 24 : 16),
+                                    SizedBox(width: isDesktop ? 24 : 8),
 
                                     IconButton(
                                       icon: Icon(
@@ -411,7 +411,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                       color: theme.colorScheme.error,
                                     ),
                                     
-                                    SizedBox(width: isDesktop ? 24 : 16),
+                                    SizedBox(width: isDesktop ? 24 : 8),
 
                                     Container(
                                       decoration: BoxDecoration(
@@ -435,7 +435,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                       ),
                                     ),
                                     
-                                    SizedBox(width: isDesktop ? 24 : 16),
+                                    SizedBox(width: isDesktop ? 24 : 8),
 
                                     IconButton(
                                       icon: Icon(
@@ -445,7 +445,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                       onPressed: () => widget.audioService.next(),
                                     ),
                                     
-                                    SizedBox(width: isDesktop ? 16 : 8),
+                                    SizedBox(width: isDesktop ? 16 : 4),
                                     
                                     // Repeat button
                                     StreamBuilder<RepeatMode>(
@@ -474,7 +474,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                                         return IconButton(
                                           icon: Icon(
                                             icon,
-                                            size: isDesktop ? 32 : 28,
+                                            size: isDesktop ? 32 : 26,
                                             color: color,
                                           ),
                                           onPressed: () => widget.audioService.toggleRepeatMode(),

@@ -2,7 +2,7 @@ name: nautune
 description: "Nautune - Poseidon Music Player for Jellyfin"
 publish_to: 'none'
 
-version: 1.0.4+1
+version: 1.0.9+1
 
 environment:
   sdk: ^3.9.2
@@ -26,7 +26,7 @@ dependencies:
   audio_session: ^0.2.2
   audio_service: ^0.18.15
   flutter_carplay: ^1.1.4
-  connectivity_plus: ^6.1.2
+  connectivity_plus: ^7.0.0
 
 dev_dependencies:
   flutter_test:
