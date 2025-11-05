@@ -292,6 +292,51 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
 
                                 SizedBox(height: isDesktop ? 48 : 32),
 
+                                // Volume
+                                StreamBuilder<double>(
+                                  stream: widget.audioService.volumeStream,
+                                  initialData: widget.audioService.volume,
+                                  builder: (context, volumeSnapshot) {
+                                    final double volume =
+                                        volumeSnapshot.data ?? widget.audioService.volume;
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.volume_mute, size: 20),
+                                          Expanded(
+                                            child: SliderTheme(
+                                              data: SliderTheme.of(context).copyWith(
+                                                activeTrackColor: theme.colorScheme.tertiary,
+                                                inactiveTrackColor: theme.colorScheme.tertiary.withValues(alpha: 0.2),
+                                                thumbColor: theme.colorScheme.tertiary,
+                                                overlayColor: theme.colorScheme.tertiary.withValues(alpha: 0.1),
+                                              ),
+                                              child: Slider(
+                                                value: volume,
+                                                min: 0,
+                                                max: 1,
+                                                onChanged: (value) {
+                                                  widget.audioService.setVolume(value);
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            '${(volume * 100).round()}%',
+                                            style: theme.textTheme.bodySmall,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Icon(Icons.volume_up, size: 20),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+
+                                SizedBox(height: isDesktop ? 36 : 24),
+
                                 // Controls
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,

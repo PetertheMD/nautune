@@ -26,6 +26,7 @@ class AudioPlayerService {
   DownloadService? _downloadService;
   PlaybackReportingService? _reportingService;
   NautuneAudioHandler? _audioHandler;
+  double _volume = 1.0;
   
   JellyfinTrack? _currentTrack;
   List<JellyfinTrack> _queue = [];
@@ -35,6 +36,9 @@ class AudioPlayerService {
   Duration _lastPosition = Duration.zero;
   bool _lastPlayingState = false;
   RepeatMode _repeatMode = RepeatMode.off;
+  final StreamController<double> _volumeController = StreamController<double>.broadcast();
+  StreamSubscription<AudioInterruptionEvent>? _interruptionSubscription;
+  StreamSubscription<void>? _becomingNoisySubscription;
 
   void setDownloadService(DownloadService service) {
     _downloadService = service;
@@ -59,6 +63,7 @@ class AudioPlayerService {
   Stream<Duration?> get durationStream => _durationController.stream;
   Stream<List<JellyfinTrack>> get queueStream => _queueController.stream;
   Stream<RepeatMode> get repeatModeStream => _repeatModeController.stream;
+  Stream<double> get volumeStream => _volumeController.stream;
   
   JellyfinTrack? get currentTrack => _currentTrack;
   bool get isPlaying => _player.state == PlayerState.playing;
@@ -67,6 +72,7 @@ class AudioPlayerService {
   List<JellyfinTrack> get queue => List.unmodifiable(_queue);
   int get currentIndex => _currentIndex;
   RepeatMode get repeatMode => _repeatMode;
+  double get volume => _volume;
   
   /// Updates the current track (e.g., for favorite status changes)
   void updateCurrentTrack(JellyfinTrack track) {
@@ -83,10 +89,23 @@ class AudioPlayerService {
     }
   }
   
+  Future<void> setVolume(double value) async {
+    final clamped = value.clamp(0.0, 1.0) as double;
+    _volume = clamped;
+    _volumeController.add(_volume);
+    await Future.wait([
+      _player.setVolume(_volume),
+      _nextPlayer.setVolume(_volume),
+    ]);
+  }
+  
   AudioPlayerService() {
     _initAudioSession();
     _setupListeners();
     _initAudioHandler();
+    _player.setVolume(_volume);
+    _nextPlayer.setVolume(_volume);
+    _volumeController.add(_volume);
     _restorePlaybackState();
   }
 
@@ -123,6 +142,28 @@ class AudioPlayerService {
     try {
       final session = await AudioSession.instance;
       await session.configure(const AudioSessionConfiguration.music());
+      
+      // Handle audio interruptions (phone calls, other media apps)
+      await _interruptionSubscription?.cancel();
+      _interruptionSubscription = session.interruptionEventStream.listen((event) {
+        if (event.begin) {
+          if (event.type == AudioInterruptionType.pause ||
+              event.type == AudioInterruptionType.duck ||
+              event.type == AudioInterruptionType.unknown) {
+            unawaited(pause());
+          }
+        } else {
+          if (event.type == AudioInterruptionType.pause && !isPlaying) {
+            unawaited(resume());
+          }
+        }
+      });
+
+      // Pause when headphones are unplugged / audio becomes noisy
+      await _becomingNoisySubscription?.cancel();
+      _becomingNoisySubscription = session.becomingNoisyEventStream.listen((_) {
+        unawaited(pause());
+      });
     } catch (e) {
       print('Audio session setup failed: $e');
     }
@@ -224,6 +265,7 @@ class AudioPlayerService {
     if (url != null) {
       try {
         await _nextPlayer.setSource(UrlSource(url));
+        await _nextPlayer.setVolume(_volume);
       } catch (e) {
         // Preload failed, will try regular load on track change
       }
@@ -299,6 +341,7 @@ class AudioPlayerService {
         } else {
           await _player.setSource(UrlSource(url));
         }
+        await _player.setVolume(_volume);
         return true;
       } on PlatformException {
         return false;
@@ -590,12 +633,17 @@ class AudioPlayerService {
   
   void dispose() {
     _positionSaveTimer?.cancel();
+    _interruptionSubscription?.cancel();
+    _becomingNoisySubscription?.cancel();
     _audioHandler?.dispose();
     _player.dispose();
+    _nextPlayer.dispose();
     _currentTrackController.close();
     _playingController.close();
     _positionController.close();
     _durationController.close();
     _queueController.close();
+    _repeatModeController.close();
+    _volumeController.close();
   }
 }
