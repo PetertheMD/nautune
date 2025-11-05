@@ -17,6 +17,7 @@ class OfflineLibraryScreen extends StatefulWidget {
 
 class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
   bool _showByAlbum = true;
+  int _currentTab = 0; // 0 = Library, 1 = Downloads Management
 
   @override
   Widget build(BuildContext context) {
@@ -26,13 +27,30 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            Icon(Icons.download, color: theme.colorScheme.primary),
+            Icon(
+              _currentTab == 0 ? Icons.library_music : Icons.download,
+              color: theme.colorScheme.primary,
+            ),
             const SizedBox(width: 8),
-            const Text('Downloads'),
+            Text(_currentTab == 0 ? 'Offline Library' : 'Download Manager'),
           ],
         ),
+        actions: [
+          // Toggle between library view and download management
+          IconButton(
+            icon: Icon(_currentTab == 0 ? Icons.manage_accounts : Icons.library_music),
+            tooltip: _currentTab == 0 ? 'Manage Downloads' : 'View Library',
+            onPressed: () {
+              setState(() {
+                _currentTab = _currentTab == 0 ? 1 : 0;
+              });
+            },
+          ),
+        ],
       ),
-      body: _buildDownloadsTab(context, theme),
+      body: _currentTab == 0 
+        ? _buildOfflineLibrary(context, theme)
+        : _buildDownloadsTab(context, theme),
     );
   }
 

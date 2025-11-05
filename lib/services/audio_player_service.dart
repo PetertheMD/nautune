@@ -635,12 +635,23 @@ class AudioPlayerService {
   }
 
   Future<void> stop() async {
-    // Report stop to Jellyfin before stopping
-    if (_currentTrack != null && _reportingService != null) {
-      await _reportingService!.reportPlaybackStopped(
-        _currentTrack!,
-        _lastPosition,
+    // Save the current track state BEFORE clearing, to preserve favorite status
+    if (_currentTrack != null) {
+      await _stateStore.savePlaybackSnapshot(
+        currentTrack: _currentTrack,
+        position: _lastPosition,
+        queue: _queue,
+        currentQueueIndex: _currentIndex,
+        isPlaying: false,
       );
+      
+      // Report stop to Jellyfin
+      if (_reportingService != null) {
+        await _reportingService!.reportPlaybackStopped(
+          _currentTrack!,
+          _lastPosition,
+        );
+      }
     }
     
     await _player.stop();

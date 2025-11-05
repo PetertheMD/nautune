@@ -107,11 +107,101 @@ class _LibraryScreenState extends State<LibraryScreen>
 
         Widget body;
 
-        // If we're in offline mode due to network issues, show offline library
-        if (widget.appState.isOfflineMode && 
-            !widget.appState.networkAvailable && 
-            (libraries == null || libraries.isEmpty)) {
-          body = OfflineLibraryScreen(appState: widget.appState);
+        // If we're in offline mode or have no network, prioritize showing offline content
+        if (!widget.appState.networkAvailable || 
+            (widget.appState.isOfflineMode && widget.appState.downloadService.completedCount > 0)) {
+          // Show offline library directly
+          return Scaffold(
+            appBar: AppBar(
+              title: Row(
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      widget.appState.toggleOfflineMode();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Icon(
+                        Icons.waves,
+                        color: const Color(0xFF7A3DF1),  // Violet when offline
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Offline Library',
+                    style: GoogleFonts.pacifico(
+                      fontSize: 24,
+                      color: const Color(0xFFB39DDB),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.offline_bolt,
+                    size: 20,
+                    color: const Color(0xFF7A3DF1),
+                  ),
+                ],
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () => widget.appState.refreshLibraries(),
+                  tooltip: 'Retry connection',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.logout),
+                  onPressed: () => widget.appState.disconnect(),
+                ),
+              ],
+            ),
+            body: Column(
+              children: [
+                // Offline mode banner
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  color: theme.colorScheme.tertiaryContainer,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.cloud_off,
+                        size: 20,
+                        color: theme.colorScheme.onTertiaryContainer,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'No internet connection. Showing downloaded content only.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onTertiaryContainer,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => widget.appState.refreshLibraries(),
+                        child: Text(
+                          'Retry',
+                          style: TextStyle(
+                            color: theme.colorScheme.onTertiaryContainer,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(child: OfflineLibraryScreen(appState: widget.appState)),
+              ],
+            ),
+            bottomNavigationBar: NowPlayingBar(
+              audioService: widget.appState.audioPlayerService,
+              appState: widget.appState,
+            ),
+          );
         } else if (isLoadingLibraries && (libraries == null || libraries.isEmpty)) {
           body = const Center(child: CircularProgressIndicator());
         } else if (libraryError != null) {
