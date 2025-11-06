@@ -17,6 +17,8 @@ class PlaybackState {
     this.scrollOffsets = const <String, double>{},
     this.libraryTabIndex = 0,
     this.showVolumeBar = true,
+    this.crossfadeEnabled = false,
+    this.crossfadeDurationSeconds = 3,
   });
 
   final String? currentTrackId;
@@ -34,6 +36,8 @@ class PlaybackState {
   final Map<String, double> scrollOffsets;
   final int libraryTabIndex;
   final bool showVolumeBar;
+  final bool crossfadeEnabled;
+  final int crossfadeDurationSeconds;
 
   bool get hasTrack => currentTrackId != null;
 
@@ -53,6 +57,8 @@ class PlaybackState {
     Map<String, double>? scrollOffsets,
     int? libraryTabIndex,
     bool? showVolumeBar,
+    bool? crossfadeEnabled,
+    int? crossfadeDurationSeconds,
   }) {
     return PlaybackState(
       currentTrackId: currentTrackId ?? this.currentTrackId,
@@ -70,6 +76,8 @@ class PlaybackState {
       scrollOffsets: scrollOffsets ?? this.scrollOffsets,
       libraryTabIndex: libraryTabIndex ?? this.libraryTabIndex,
       showVolumeBar: showVolumeBar ?? this.showVolumeBar,
+      crossfadeEnabled: crossfadeEnabled ?? this.crossfadeEnabled,
+      crossfadeDurationSeconds: crossfadeDurationSeconds ?? this.crossfadeDurationSeconds,
     );
   }
 
@@ -90,6 +98,8 @@ class PlaybackState {
       'scrollOffsets': scrollOffsets,
       'libraryTabIndex': libraryTabIndex,
       'showVolumeBar': showVolumeBar,
+      'crossfadeEnabled': crossfadeEnabled,
+      'crossfadeDurationSeconds': crossfadeDurationSeconds,
     };
   }
 
@@ -119,6 +129,8 @@ class PlaybackState {
       ),
       libraryTabIndex: json['libraryTabIndex'] as int? ?? 0,
       showVolumeBar: json['showVolumeBar'] as bool? ?? true,
+      crossfadeEnabled: json['crossfadeEnabled'] as bool? ?? false,
+      crossfadeDurationSeconds: json['crossfadeDurationSeconds'] as int? ?? 3,
     );
   }
 

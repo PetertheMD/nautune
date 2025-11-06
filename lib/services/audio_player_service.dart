@@ -35,6 +35,15 @@ class AudioPlayerService {
   bool _hasRestored = false;
   PlaybackState? _pendingState;
   
+  // Crossfade support
+  AudioPlayer? _crossfadePlayer;
+  bool _crossfadeEnabled = false;
+  int _crossfadeDurationSeconds = 3;
+  Timer? _crossfadeTimer;
+  bool _isCrossfading = false;
+  String? _currentAlbumId;
+  String? _nextTrackAlbumId;
+  
   JellyfinTrack? _currentTrack;
   List<JellyfinTrack> _queue = [];
   int _currentIndex = 0;
@@ -56,6 +65,25 @@ class AudioPlayerService {
   void setReportingService(PlaybackReportingService service) {
     _reportingService = service;
     _reportingService!.attachPositionProvider(() => _lastPosition);
+  }
+
+  void setCrossfadeEnabled(bool enabled) {
+    _crossfadeEnabled = enabled;
+    if (!enabled) {
+      _cancelCrossfade();
+    }
+  }
+
+  void setCrossfadeDuration(int seconds) {
+    _crossfadeDurationSeconds = seconds.clamp(0, 10);
+  }
+
+  void _cancelCrossfade() {
+    _crossfadeTimer?.cancel();
+    _crossfadeTimer = null;
+    _isCrossfading = false;
+    _crossfadePlayer?.dispose();
+    _crossfadePlayer = null;
   }
 
   void setJellyfinService(JellyfinService service) {
@@ -203,6 +231,8 @@ class AudioPlayerService {
       if (_player.state == PlayerState.playing) {
         _emitVisualizerFrame(position);
       }
+      // Check if we should start crossfade
+      _checkCrossfadeTrigger(position);
     });
 
     // Duration updates
@@ -871,13 +901,165 @@ class AudioPlayerService {
     }
   }
   
+  
+  // ========== CROSSFADE METHODS ==========
+  
+  /// Check if we should trigger crossfade based on current position
+  void _checkCrossfadeTrigger(Duration position) async {
+    if (!_crossfadeEnabled || _isCrossfading || _crossfadeDurationSeconds == 0) {
+      return;
+    }
+
+    final duration = await _player.getDuration();
+    if (duration == null || _currentTrack == null) return;
+
+    // Calculate trigger point (crossfade duration before track ends)
+    final triggerPoint = duration - Duration(seconds: _crossfadeDurationSeconds);
+    
+    // Don't trigger if we're not near the end
+    if (position < triggerPoint) return;
+
+    // Check if next track exists
+    final nextIndex = _currentIndex + 1;
+    if (nextIndex >= _queue.length && _repeatMode != RepeatMode.all) return;
+
+    // Get next track
+    final nextTrack = nextIndex < _queue.length ? _queue[nextIndex] : _queue[0];
+
+    // SMART: Don't crossfade within same album (respect artist intent)
+    final currentAlbumId = _currentTrack!.albumId;
+    final nextAlbumId = nextTrack.albumId;
+    
+    if (currentAlbumId != null && 
+        nextAlbumId != null && 
+        currentAlbumId == nextAlbumId) {
+      debugPrint('🎵 Same album - skipping crossfade');
+      return;
+    }
+
+    // Trigger crossfade
+    debugPrint('🌊 Starting crossfade: ${_currentTrack!.name} → ${nextTrack.name}');
+    _startCrossfade(nextTrack, nextIndex);
+  }
+
+  /// Start crossfade to next track
+  Future<void> _startCrossfade(JellyfinTrack nextTrack, int nextIndex) async {
+    if (_isCrossfading) return;
+    _isCrossfading = true;
+
+    try {
+      // Create crossfade player
+      _crossfadePlayer = AudioPlayer();
+      
+      // Prepare next track
+      final prepared = await _prepareTrackForCrossfade(nextTrack);
+      if (!prepared) {
+        throw Exception('Failed to prepare next track');
+      }
+      
+      // Execute the crossfade
+      await _executeCrossfade(nextTrack, nextIndex);
+      
+    } catch (e) {
+      debugPrint('❌ Crossfade failed: $e');
+      _cancelCrossfade();
+    }
+  }
+
+  /// Prepare next track for crossfade
+  Future<bool> _prepareTrackForCrossfade(JellyfinTrack track) async {
+    if (_crossfadePlayer == null) return false;
+
+    try {
+      // Check for local file first
+      final localPath = _downloadService?.getLocalPath(track.id);
+      if (localPath != null) {
+        final file = File(localPath);
+        if (await file.exists()) {
+          await _crossfadePlayer!.setSourceDeviceFile(localPath);
+          debugPrint('✅ Crossfade: loaded local file');
+          return true;
+        }
+      }
+      
+      // Fall back to streaming
+      final downloadUrl = track.downloadUrl(_jellyfinService?.baseUrl, _jellyfinService?.token);
+      await _crossfadePlayer!.setSourceUrl(downloadUrl);
+      debugPrint('✅ Crossfade: loaded stream');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Crossfade prep failed: $e');
+      return false;
+    }
+  }
+
+  /// Execute the crossfade (volume fade)
+  Future<void> _executeCrossfade(JellyfinTrack nextTrack, int nextIndex) async {
+    if (_crossfadePlayer == null) return;
+
+    final steps = 30; // Number of fade steps (smooth)
+    final stepDuration = Duration(milliseconds: (_crossfadeDurationSeconds * 1000) ~/ steps);
+    
+    // Start next track at 0 volume
+    await _crossfadePlayer!.setVolume(0.0);
+    await _crossfadePlayer!.resume();
+    
+    // Fade volumes over time
+    for (int i = 0; i <= steps; i++) {
+      if (!_isCrossfading || _crossfadePlayer == null) break;
+      
+      final progress = i / steps;
+      
+      // Exponential curves for natural sound
+      final fadeOut = 1.0 - (progress * progress); // Quadratic fade out
+      final fadeIn = progress * progress; // Quadratic fade in
+      
+      await _player.setVolume(_volume * fadeOut);
+      await _crossfadePlayer!.setVolume(_volume * fadeIn);
+      
+      if (i < steps) {
+        await Future.delayed(stepDuration);
+      }
+    }
+    
+    // Complete the transition
+    await _completeCrossfadeTransition(nextTrack, nextIndex);
+  }
+
+  /// Complete crossfade and switch to next track
+  Future<void> _completeCrossfadeTransition(JellyfinTrack nextTrack, int nextIndex) async {
+    // Stop current player
+    await _player.stop();
+    await _player.setVolume(_volume); // Reset volume
+    
+    // Update track info
+    _currentIndex = nextIndex;
+    _currentTrack = nextTrack;
+    _currentAlbumId = nextTrack.albumId;
+    _currentTrackController.add(_currentTrack);
+    
+    // Report to Jellyfin
+    if (_reportingService != null) {
+      await _reportingService!.reportPlaybackStart(nextTrack, playMethod: 'DirectPlay');
+    }
+    
+    // Clean up
+    _crossfadePlayer?.dispose();
+    _crossfadePlayer = null;
+    _isCrossfading = false;
+    
+    debugPrint('✅ Crossfade complete → ${nextTrack.name}');
+  }
+
   void dispose() {
     _positionSaveTimer?.cancel();
+    _crossfadeTimer?.cancel();
     _interruptionSubscription?.cancel();
     _becomingNoisySubscription?.cancel();
     _audioHandler?.dispose();
     _player.dispose();
     _nextPlayer.dispose();
+    _crossfadePlayer?.dispose();
     _currentTrackController.close();
     _playingController.close();
     _positionController.close();

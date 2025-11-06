@@ -61,6 +61,8 @@ class NautuneAppState extends ChangeNotifier {
   Map<String, double> _libraryScrollOffsets = {};
   int _restoredLibraryTabIndex = 0;
   bool _showVolumeBar = true;
+  bool _crossfadeEnabled = false;
+  int _crossfadeDurationSeconds = 3;
 
   bool _initialized = false;
   JellyfinSession? _session;
@@ -131,6 +133,8 @@ class NautuneAppState extends ChangeNotifier {
   List<JellyfinGenre>? get genres => _genres;
   bool get isOfflineMode => _isOfflineMode;
   bool get showVolumeBar => _showVolumeBar;
+  bool get crossfadeEnabled => _crossfadeEnabled;
+  int get crossfadeDurationSeconds => _crossfadeDurationSeconds;
   int get initialLibraryTabIndex => _restoredLibraryTabIndex;
   double? scrollOffsetFor(String key) => _libraryScrollOffsets[key];
   String? get selectedLibraryId => _session?.selectedLibraryId;
@@ -165,6 +169,26 @@ class NautuneAppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleCrossfade(bool enabled) {
+    _crossfadeEnabled = enabled;
+    _audioPlayerService.setCrossfadeEnabled(enabled);
+    unawaited(_playbackStateStore.saveUiState(
+      crossfadeEnabled: enabled,
+      crossfadeDurationSeconds: _crossfadeDurationSeconds,
+    ));
+    notifyListeners();
+  }
+
+  void setCrossfadeDuration(int seconds) {
+    _crossfadeDurationSeconds = seconds.clamp(0, 10);
+    _audioPlayerService.setCrossfadeDuration(_crossfadeDurationSeconds);
+    unawaited(_playbackStateStore.saveUiState(
+      crossfadeEnabled: _crossfadeEnabled,
+      crossfadeDurationSeconds: _crossfadeDurationSeconds,
+    ));
+    notifyListeners();
+  }
+
   void updateLibraryTabIndex(int index) {
     if (_restoredLibraryTabIndex == index) return;
     _restoredLibraryTabIndex = index;
@@ -193,10 +217,14 @@ class NautuneAppState extends ChangeNotifier {
     final storedPlaybackState = await _playbackStateStore.load();
     if (storedPlaybackState != null) {
       _showVolumeBar = storedPlaybackState.showVolumeBar;
+      _crossfadeEnabled = storedPlaybackState.crossfadeEnabled;
+      _crossfadeDurationSeconds = storedPlaybackState.crossfadeDurationSeconds;
       _restoredLibraryTabIndex = storedPlaybackState.libraryTabIndex;
       _libraryScrollOffsets =
           Map<String, double>.from(storedPlaybackState.scrollOffsets);
       await _audioPlayerService.hydrateFromPersistence(storedPlaybackState);
+      _audioPlayerService.setCrossfadeEnabled(_crossfadeEnabled);
+      _audioPlayerService.setCrossfadeDuration(_crossfadeDurationSeconds);
     }
     try {
       final storedSession = await _sessionStore.load();

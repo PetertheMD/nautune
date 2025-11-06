@@ -61,20 +61,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             leading: Icon(Icons.tune, color: theme.colorScheme.primary),
             title: const Text('Crossfade'),
-            subtitle: const Text('Smooth transitions between tracks'),
+            subtitle: Text(
+              widget.appState.crossfadeEnabled 
+                ? 'Enabled (${widget.appState.crossfadeDurationSeconds}s)'
+                : 'Smooth transitions between tracks'
+            ),
             trailing: Switch(
-              value: false, // TODO: Wire to actual state
+              value: widget.appState.crossfadeEnabled,
               onChanged: (value) {
-                // TODO: Implement crossfade
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Crossfade coming soon!'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
+                widget.appState.toggleCrossfade(value);
+                setState(() {});
               },
             ),
           ),
+          if (widget.appState.crossfadeEnabled)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Duration: ${widget.appState.crossfadeDurationSeconds} seconds',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  Slider(
+                    value: widget.appState.crossfadeDurationSeconds.toDouble(),
+                    min: 0,
+                    max: 10,
+                    divisions: 10,
+                    label: '${widget.appState.crossfadeDurationSeconds}s',
+                    onChanged: (value) {
+                      widget.appState.setCrossfadeDuration(value.round());
+                      setState(() {});
+                    },
+                  ),
+                  Text(
+                    'Automatically skips crossfade within same album',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
           const Divider(),
           Padding(
             padding: const EdgeInsets.all(16),

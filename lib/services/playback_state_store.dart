@@ -76,6 +76,8 @@ class PlaybackStateStore {
     int? libraryTabIndex,
     Map<String, double>? scrollOffsets,
     bool? showVolumeBar,
+    bool? crossfadeEnabled,
+    int? crossfadeDurationSeconds,
   }) async {
     await update((state) {
       final mergedOffsets = Map<String, double>.from(state.scrollOffsets);
@@ -86,6 +88,8 @@ class PlaybackStateStore {
         libraryTabIndex: libraryTabIndex ?? state.libraryTabIndex,
         scrollOffsets: scrollOffsets != null ? mergedOffsets : state.scrollOffsets,
         showVolumeBar: showVolumeBar ?? state.showVolumeBar,
+        crossfadeEnabled: crossfadeEnabled ?? state.crossfadeEnabled,
+        crossfadeDurationSeconds: crossfadeDurationSeconds ?? state.crossfadeDurationSeconds,
       );
     });
   }
