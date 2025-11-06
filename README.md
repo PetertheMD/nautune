@@ -241,6 +241,17 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
   - ✅ Download progress tracking and cancellation
   - ✅ Batch album downloads
 
+## 📸 Screenshots
+
+### Linux
+<img src="screenshots/Screenshot_20251105_163913.png" width="400" alt="Nautune on Linux">
+<img src="screenshots/Screenshot_20251105_164039.png" width="400" alt="Nautune on Linux">
+
+### iOS
+<img src="screenshots/IMG_9047.jpg" width="300" alt="Nautune on iOS">
+<img src="screenshots/IMG_9048.jpg" width="300" alt="Nautune on iOS">
+<img src="screenshots/IMG_9052.jpg" width="300" alt="Nautune on iOS">
+
 ## 🚀 Getting Started
 
 ### Prerequisites
