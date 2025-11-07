@@ -195,7 +195,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                     Text(
                       artist.overview!,
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                        color: const Color(0xFF9CC7F2),
                       ),
                     ),
                   ],

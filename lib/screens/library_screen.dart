@@ -2632,12 +2632,23 @@ class _SearchTabState extends State<_SearchTab> {
                 : const CircleAvatar(
                     child: Icon(Icons.person_outline),
                   ),
-            title: Text(artist.name),
-            subtitle: subtitle != null ? Text(
-              subtitle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ) : null,
+            title: Text(
+              artist.name,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: const Color(0xFF8CB1D9),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: subtitle != null
+                ? Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF9CC7F2),
+                    ),
+                  )
+                : null,
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.of(context).push(

@@ -5,11 +5,10 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
 ## 🚀 Latest Updates (v1.0.4.1+)
 - **🎵 Smart Crossfade (Level 2)**: Intelligent audio transitions
   - ✅ **Album-aware crossfade**: Automatically skips crossfade within same album (respects artist intent)
-  - ✅ **Configurable duration**: Slider from 0-10 seconds
   - ✅ **Smooth exponential curves**: Natural-sounding quadratic fade in/out
   - ✅ **Works offline**: Crossfades both streamed and downloaded tracks
-  - ✅ **Settings integration**: Toggle and slider in Audio Options
-  - ✅ **Persistent**: Remembers your crossfade preferences
+  - ✅ **Settings integration**: One-tap toggle in Audio Options
+  - ✅ **Persistent**: Remembers your crossfade preference
   - ✅ **Queue-aware**: Works with repeat modes and shuffle
 - **📥 Enhanced Downloads**: Individual track downloads with batch album support
   - ✅ Download single tracks from any screen (long-press or menu)
@@ -36,8 +35,7 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
   - ✅ Orange notification messages for queued actions
 - **🎨 Refined Settings**: Streamlined audio options
   - ✅ Removed redundant playback/download sections
-  - ✅ **Crossfade feature**: Full implementation with duration slider
-  - ✅ Smart album-aware crossfade (skips within albums)
+  - ✅ **Crossfade feature**: Album-aware toggle for smooth transitions
   - ✅ Cleaner, more focused settings UI
 - **🗂️ Library Selection Filter**: Only music libraries shown
   - ✅ Playlists no longer appear as selectable libraries
@@ -148,7 +146,7 @@ Apple's Guideline 2.1 requires working reviewer access. Nautune includes an on-d
 - **Album & Artist Art**: Beautiful grid and list layouts with Jellyfin artwork (trident placeholder fallback)
 - **Smart Crossfade**: Smooth audio transitions between tracks
   - ✅ Album-aware: No crossfade within same album (preserves artist's vision)
-  - ✅ Configurable duration: 0-10 seconds
+  - ✅ Simple toggle in settings
   - ✅ Exponential fade curves for natural sound
   - ✅ Works with streaming and offline playback
 
@@ -539,12 +537,11 @@ All iOS features are built and deployed via **Codemagic CI**:
 - [x] **📄 Pagination** - albums and artists load 50 at a time with infinite scroll for smooth performance on large libraries
 - [x] **🎯 Library selection filter** - only music libraries shown (no playlists, audiobooks, or videos)
 - [x] **🎵 Smart Crossfade (Level 2)** - album-aware audio transitions
-  - [x] Configurable duration (0-10 seconds)
   - [x] Album-aware logic (no crossfade within same album)
   - [x] Exponential fade curves (natural sound)
-  - [x] Settings integration with toggle and slider
+  - [x] Settings integration with simple toggle
   - [x] Works with both streaming and offline
-  - [x] Persistent preferences
+  - [x] Persistent preference
 
 ### 🚧 In Progress / Planned
 - [ ] Full player screen with lyrics display
