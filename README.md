@@ -50,7 +50,6 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
   - ✅ Real-time volume adjustment via slider
   - ✅ Wired directly to audio player for instant response
   - ✅ Volume level persisted across sessions
-  - ✅ Toggleable visibility (show/hide volume bar)
 - **🛫 Offline-First Boot**: App now boots directly into offline mode when no internet is available, giving instant access to downloaded music even in airplane mode or dead zones.
   - ✅ 10-second timeout prevents infinite spinning on network failure
   - ✅ Graceful network failure handling during initialization
