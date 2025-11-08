@@ -370,6 +370,25 @@ class JellyfinService {
       query: query,
     );
   }
+  
+  Future<List<JellyfinTrack>> searchTracks({
+    required String libraryId,
+    required String query,
+  }) async {
+    final client = _client;
+    final session = _session;
+    if (client == null || session == null) {
+      throw StateError('Authenticate before searching tracks.');
+    }
+    if (query.trim().isEmpty) {
+      return const [];
+    }
+    return client.searchTracks(
+      credentials: session.credentials,
+      libraryId: libraryId,
+      query: query,
+    );
+  }
 
   String buildImageUrl({
     required String itemId,

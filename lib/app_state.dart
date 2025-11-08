@@ -172,6 +172,8 @@ class NautuneAppState extends ChangeNotifier {
       _demoContent?.albums ?? const <JellyfinAlbum>[];
   List<JellyfinArtist> get demoArtists =>
       _demoContent?.artists ?? const <JellyfinArtist>[];
+  List<JellyfinTrack> get demoTracks =>
+      _demoTracks.values.toList(growable: false);
 
   List<JellyfinTrack> _demoTracksFromIds(List<String> ids) {
     if (!_isDemoMode) {

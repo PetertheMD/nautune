@@ -564,6 +564,48 @@ class JellyfinClient {
         .map(JellyfinArtist.fromJson)
         .toList();
   }
+  
+  Future<List<JellyfinTrack>> searchTracks({
+    required JellyfinCredentials credentials,
+    required String libraryId,
+    required String query,
+  }) async {
+    final uri = _buildUri('/Users/${credentials.userId}/Items', {
+      'ParentId': libraryId,
+      'IncludeItemTypes': 'Audio',
+      'Recursive': 'true',
+      'SearchTerm': query,
+      'SortBy': 'Album,ParentIndexNumber,IndexNumber,SortName',
+      'Fields':
+          'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber',
+      'EnableImageTypes': 'Primary,Thumb',
+      'EnableUserData': 'true',
+    });
+
+    final response = await httpClient.get(
+      uri,
+      headers: _defaultHeaders(credentials),
+    );
+
+    if (response.statusCode != 200) {
+      throw JellyfinRequestException(
+        'Unable to search tracks: ${response.statusCode}',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>?;
+    final items = data?['Items'] as List<dynamic>? ?? const [];
+
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map((json) => JellyfinTrack.fromJson(
+              json,
+              serverUrl: serverUrl,
+              token: credentials.accessToken,
+              userId: credentials.userId,
+            ))
+        .toList();
+  }
 
   Map<String, String> _defaultHeaders([JellyfinCredentials? credentials]) {
     final headers = <String, String>{

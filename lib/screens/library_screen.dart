@@ -10,6 +10,7 @@ import '../jellyfin/jellyfin_genre.dart';
 import '../jellyfin/jellyfin_library.dart';
 import '../jellyfin/jellyfin_playlist.dart';
 import '../jellyfin/jellyfin_track.dart';
+import '../models/download_item.dart';
 import '../widgets/add_to_playlist_dialog.dart';
 import '../widgets/now_playing_bar.dart';
 import 'album_detail_screen.dart';
@@ -2240,7 +2241,7 @@ class _GenreCard extends StatelessWidget {
   }
 }
 
-enum _SearchScope { albums, artists }
+enum _SearchScope { albums, artists, tracks }
 
 class _SearchTab extends StatefulWidget {
   const _SearchTab({required this.appState});
@@ -2255,6 +2256,7 @@ class _SearchTabState extends State<_SearchTab> {
   final TextEditingController _controller = TextEditingController();
   List<JellyfinAlbum> _albumResults = const [];
   List<JellyfinArtist> _artistResults = const [];
+  List<JellyfinTrack> _trackResults = const [];
   bool _isLoading = false;
   Object? _error;
   String _lastQuery = '';
@@ -2268,6 +2270,7 @@ class _SearchTabState extends State<_SearchTab> {
 
   Future<void> _performSearch(String query) async {
     final trimmed = query.trim();
+    final lowerQuery = trimmed.toLowerCase();
     setState(() {
       _lastQuery = trimmed;
       _error = null;
@@ -2277,6 +2280,7 @@ class _SearchTabState extends State<_SearchTab> {
       setState(() {
         _albumResults = const [];
         _artistResults = const [];
+        _trackResults = const [];
         _isLoading = false;
       });
       return;
@@ -2286,29 +2290,45 @@ class _SearchTabState extends State<_SearchTab> {
 
     // Demo mode: search bundled showcase data
     if (widget.appState.isDemoMode) {
-      final lower = trimmed.toLowerCase();
       if (_scope == _SearchScope.albums) {
         final albums = widget.appState.demoAlbums;
         final matches = albums
             .where((album) =>
-                album.name.toLowerCase().contains(lower) ||
-                album.displayArtist.toLowerCase().contains(lower))
+                album.name.toLowerCase().contains(lowerQuery) ||
+                album.displayArtist.toLowerCase().contains(lowerQuery))
             .toList();
         if (!mounted || _lastQuery != trimmed) return;
         setState(() {
           _albumResults = matches;
           _artistResults = const [];
+          _trackResults = const [];
           _isLoading = false;
         });
-      } else {
+      } else if (_scope == _SearchScope.artists) {
         final artists = widget.appState.demoArtists;
         final matches = artists
-            .where((artist) => artist.name.toLowerCase().contains(lower))
+            .where((artist) => artist.name.toLowerCase().contains(lowerQuery))
             .toList();
         if (!mounted || _lastQuery != trimmed) return;
         setState(() {
           _artistResults = matches;
           _albumResults = const [];
+          _trackResults = const [];
+          _isLoading = false;
+        });
+      } else {
+        final tracks = widget.appState.demoTracks;
+        final matches = tracks
+            .where((track) =>
+                track.name.toLowerCase().contains(lowerQuery) ||
+                (track.album?.toLowerCase().contains(lowerQuery) ?? false) ||
+                track.displayArtist.toLowerCase().contains(lowerQuery))
+            .toList();
+        if (!mounted || _lastQuery != trimmed) return;
+        setState(() {
+          _trackResults = matches;
+          _albumResults = const [];
+          _artistResults = const [];
           _isLoading = false;
         });
       }
@@ -2318,9 +2338,9 @@ class _SearchTabState extends State<_SearchTab> {
     // Offline mode: search downloaded content only
     if (widget.appState.isOfflineMode) {
       try {
+        final downloads = widget.appState.downloadService.completedDownloads;
         if (_scope == _SearchScope.albums) {
-          final downloads = widget.appState.downloadService.completedDownloads;
-          final Map<String, List> albumGroups = {};
+          final Map<String, List<DownloadItem>> albumGroups = {};
           
           for (final download in downloads) {
             final albumName = download.track.album ?? 'Unknown Album';
@@ -2332,14 +2352,14 @@ class _SearchTabState extends State<_SearchTab> {
           
           // Filter albums by query
           final matchingAlbums = albumGroups.entries
-              .where((entry) => entry.key.toLowerCase().contains(trimmed.toLowerCase()))
+              .where((entry) => entry.key.toLowerCase().contains(lowerQuery))
               .map((entry) {
             final firstTrack = entry.value.first.track;
             return JellyfinAlbum(
-              id: firstTrack.albumId,
+              id: firstTrack.albumId ?? firstTrack.id,
               name: entry.key,
               artists: [firstTrack.displayArtist],
-              artistIds: firstTrack.albumArtistIds ?? [],
+              artistIds: const [],
             );
           }).toList();
           
@@ -2347,12 +2367,12 @@ class _SearchTabState extends State<_SearchTab> {
           setState(() {
             _albumResults = matchingAlbums;
             _artistResults = const [];
+            _trackResults = const [];
             _isLoading = false;
           });
-        } else {
+        } else if (_scope == _SearchScope.artists) {
           // Search artists in offline mode
-          final downloads = widget.appState.downloadService.completedDownloads;
-          final Map<String, List> artistGroups = {};
+          final Map<String, List<DownloadItem>> artistGroups = {};
           
           for (final download in downloads) {
             final artistName = download.track.displayArtist;
@@ -2364,7 +2384,7 @@ class _SearchTabState extends State<_SearchTab> {
           
           // Filter artists by query
           final matchingArtists = artistGroups.keys
-              .where((name) => name.toLowerCase().contains(trimmed.toLowerCase()))
+              .where((name) => name.toLowerCase().contains(lowerQuery))
               .map((name) => JellyfinArtist(
                 id: 'offline_$name',
                 name: name,
@@ -2375,6 +2395,24 @@ class _SearchTabState extends State<_SearchTab> {
           setState(() {
             _albumResults = const [];
             _artistResults = matchingArtists;
+            _trackResults = const [];
+            _isLoading = false;
+          });
+        } else {
+          final matches = downloads
+              .map((download) => download.track)
+              .where((track) {
+                final albumName = track.album?.toLowerCase() ?? '';
+                return track.name.toLowerCase().contains(lowerQuery) ||
+                    track.displayArtist.toLowerCase().contains(lowerQuery) ||
+                    albumName.contains(lowerQuery);
+              })
+              .toList();
+          if (!mounted || _lastQuery != trimmed) return;
+          setState(() {
+            _albumResults = const [];
+            _artistResults = const [];
+            _trackResults = matches;
             _isLoading = false;
           });
         }
@@ -2384,6 +2422,7 @@ class _SearchTabState extends State<_SearchTab> {
           _error = e;
           _albumResults = const [];
           _artistResults = const [];
+          _trackResults = const [];
           _isLoading = false;
         });
       }
@@ -2397,6 +2436,7 @@ class _SearchTabState extends State<_SearchTab> {
         _error = 'Select a music library to search.';
         _albumResults = const [];
         _artistResults = const [];
+        _trackResults = const [];
         _isLoading = false;
       });
       return;
@@ -2412,9 +2452,10 @@ class _SearchTabState extends State<_SearchTab> {
         setState(() {
           _albumResults = albums;
           _artistResults = const [];
+          _trackResults = const [];
           _isLoading = false;
         });
-      } else {
+      } else if (_scope == _SearchScope.artists) {
         final artists = await widget.appState.jellyfinService.searchArtists(
           libraryId: libraryId,
           query: trimmed,
@@ -2423,6 +2464,19 @@ class _SearchTabState extends State<_SearchTab> {
         setState(() {
           _artistResults = artists;
           _albumResults = const [];
+          _trackResults = const [];
+          _isLoading = false;
+        });
+      } else {
+        final tracks = await widget.appState.jellyfinService.searchTracks(
+          libraryId: libraryId,
+          query: trimmed,
+        );
+        if (!mounted || _lastQuery != trimmed) return;
+        setState(() {
+          _trackResults = tracks;
+          _albumResults = const [];
+          _artistResults = const [];
           _isLoading = false;
         });
       }
@@ -2434,6 +2488,7 @@ class _SearchTabState extends State<_SearchTab> {
         _isLoading = false;
         _albumResults = const [];
         _artistResults = const [];
+        _trackResults = const [];
       });
     }
   }
@@ -2468,6 +2523,11 @@ class _SearchTabState extends State<_SearchTab> {
                 icon: Icon(Icons.person_outline),
                 label: Text('Artists'),
               ),
+              ButtonSegment(
+                value: _SearchScope.tracks,
+                icon: Icon(Icons.music_note_outlined),
+                label: Text('Tracks'),
+              ),
             ],
             selected: {_scope},
             onSelectionChanged: (selection) {
@@ -2476,6 +2536,7 @@ class _SearchTabState extends State<_SearchTab> {
                 _scope = scope;
                 _albumResults = const [];
                 _artistResults = const [];
+                _trackResults = const [];
               });
               if (_lastQuery.isNotEmpty) {
                 _performSearch(_lastQuery);
@@ -2491,9 +2552,11 @@ class _SearchTabState extends State<_SearchTab> {
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search),
-              hintText: _scope == _SearchScope.albums
-                  ? 'Search albums'
-                  : 'Search artists',
+              hintText: switch (_scope) {
+                _SearchScope.albums => 'Search albums',
+                _SearchScope.artists => 'Search artists',
+                _SearchScope.tracks => 'Search tracks',
+              },
               filled: true,
               fillColor: theme.colorScheme.surfaceContainerHighest,
               border: OutlineInputBorder(
@@ -2538,9 +2601,14 @@ class _SearchTabState extends State<_SearchTab> {
     if (_lastQuery.isEmpty) {
       return Center(
         child: Text(
-          _scope == _SearchScope.albums
-              ? 'Search your library by album name.'
-              : 'Search your library by artist name.',
+          switch (_scope) {
+            _SearchScope.albums =>
+              'Search your library by album name.',
+            _SearchScope.artists =>
+              'Search your library by artist name.',
+            _SearchScope.tracks =>
+              'Search across tracks you can play.',
+          },
           style: theme.textTheme.titleMedium,
           textAlign: TextAlign.center,
         ),
@@ -2568,8 +2636,9 @@ class _SearchTabState extends State<_SearchTab> {
               leading: const Icon(Icons.album_outlined),
               title: Text(album.name),
               subtitle: Text(album.displayArtist),
-              trailing:
-                  album.productionYear != null ? Text('${album.productionYear}') : null,
+              trailing: album.productionYear != null
+                  ? Text('${album.productionYear}')
+                  : null,
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
@@ -2586,10 +2655,93 @@ class _SearchTabState extends State<_SearchTab> {
       );
     }
 
-    if (_artistResults.isEmpty) {
+    if (_scope == _SearchScope.artists) {
+      if (_artistResults.isEmpty) {
+        return Center(
+          child: Text(
+            'No artists found for "$_lastQuery"',
+            style: theme.textTheme.titleMedium,
+            textAlign: TextAlign.center,
+          ),
+        );
+      }
+
+      return ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        itemCount: _artistResults.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final artist = _artistResults[index];
+          
+          // Build subtitle with genres and counts
+          final subtitleParts = <String>[];
+          if (artist.genres != null && artist.genres!.isNotEmpty) {
+            subtitleParts.add(artist.genres!.take(3).join(', '));
+          }
+          if (artist.albumCount != null && artist.albumCount! > 0) {
+            subtitleParts.add('${artist.albumCount} albums');
+          }
+          if (artist.songCount != null && artist.songCount! > 0) {
+            subtitleParts.add('${artist.songCount} songs');
+          }
+          
+          final subtitle = subtitleParts.isNotEmpty
+              ? subtitleParts.join(' • ')
+              : null;
+          
+          return Card(
+            child: ListTile(
+              leading: artist.primaryImageTag != null
+                  ? CircleAvatar(
+                      backgroundImage: NetworkImage(
+                        widget.appState.jellyfinService.buildImageUrl(
+                          itemId: artist.id,
+                          tag: artist.primaryImageTag!,
+                          maxWidth: 100,
+                        ),
+                      ),
+                    )
+                  : const CircleAvatar(
+                      child: Icon(Icons.person_outline),
+                    ),
+              title: Text(
+                artist.name,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: const Color(0xFF8CB1D9),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: subtitle != null
+                  ? Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF9CC7F2),
+                      ),
+                    )
+                  : null,
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ArtistDetailScreen(
+                      artist: artist,
+                      appState: widget.appState,
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      );
+    }
+
+    if (_trackResults.isEmpty) {
       return Center(
         child: Text(
-          'No artists found for "$_lastQuery"',
+          'No tracks found for "$_lastQuery"',
           style: theme.textTheme.titleMedium,
           textAlign: TextAlign.center,
         ),
@@ -2598,72 +2750,64 @@ class _SearchTabState extends State<_SearchTab> {
 
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      itemCount: _artistResults.length,
+      itemCount: _trackResults.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
-        final artist = _artistResults[index];
-        
-        // Build subtitle with genres and counts
-        final subtitleParts = <String>[];
-        if (artist.genres != null && artist.genres!.isNotEmpty) {
-          subtitleParts.add(artist.genres!.take(3).join(', '));
-        }
-        if (artist.albumCount != null && artist.albumCount! > 0) {
-          subtitleParts.add('${artist.albumCount} albums');
-        }
-        if (artist.songCount != null && artist.songCount! > 0) {
-          subtitleParts.add('${artist.songCount} songs');
-        }
-        
-        final subtitle = subtitleParts.isNotEmpty ? subtitleParts.join(' • ') : null;
-        
+        final track = _trackResults[index];
+        final subtitleParts = <String>[
+          track.displayArtist,
+          if (track.album != null && track.album!.isNotEmpty) track.album!,
+        ];
+        final visibleSubtitleParts =
+            subtitleParts.where((part) => part.isNotEmpty).toList();
+
         return Card(
           child: ListTile(
-            leading: artist.primaryImageTag != null
-                ? CircleAvatar(
-                    backgroundImage: NetworkImage(
-                      widget.appState.jellyfinService.buildImageUrl(
-                        itemId: artist.id,
-                        tag: artist.primaryImageTag!,
-                        maxWidth: 100,
-                      ),
-                    ),
-                  )
-                : const CircleAvatar(
-                    child: Icon(Icons.person_outline),
-                  ),
-            title: Text(
-              artist.name,
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: const Color(0xFF8CB1D9),
-                fontWeight: FontWeight.w600,
+            leading: CircleAvatar(
+              backgroundColor: theme.colorScheme.primaryContainer,
+              child: Icon(
+                Icons.music_note,
+                color: theme.colorScheme.onPrimaryContainer,
               ),
             ),
-            subtitle: subtitle != null
+            title: Text(
+              track.name,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.tertiary,
+              ),
+            ),
+            subtitle: visibleSubtitleParts.isNotEmpty
                 ? Text(
-                    subtitle,
-                    maxLines: 2,
+                    visibleSubtitleParts.join(' • '),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  )
+                : null,
+            trailing: track.duration != null
+                ? Text(
+                    _formatDuration(track.duration!),
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF9CC7F2),
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   )
                 : null,
-            trailing: const Icon(Icons.chevron_right),
             onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ArtistDetailScreen(
-                    artist: artist,
-                    appState: widget.appState,
-                  ),
-                ),
+              widget.appState.audioPlayerService.playTrack(
+                track,
+                queueContext: _trackResults,
               );
             },
           ),
         );
       },
     );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds.remainder(60);
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }
 
