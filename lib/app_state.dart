@@ -19,6 +19,7 @@ import 'jellyfin/jellyfin_track.dart';
 import 'services/audio_player_service.dart';
 import 'services/bootstrap_service.dart';
 import 'services/carplay_service.dart';
+import 'services/connectivity_service.dart';
 import 'services/download_service.dart';
 import 'services/local_cache_service.dart';
 import 'services/playback_reporting_service.dart';
@@ -32,6 +33,7 @@ class NautuneAppState extends ChangeNotifier {
     required PlaybackStateStore playbackStateStore,
     required LocalCacheService cacheService,
     required BootstrapService bootstrapService,
+    required ConnectivityService connectivityService,
     JellyfinPlaylistStore? playlistStore,
     PlaylistSyncQueue? syncQueue,
   })  : _jellyfinService = jellyfinService,
@@ -39,6 +41,7 @@ class NautuneAppState extends ChangeNotifier {
         _playbackStateStore = playbackStateStore,
         _cacheService = cacheService,
         _bootstrapService = bootstrapService,
+        _connectivityService = connectivityService,
         _playlistStore = playlistStore ?? JellyfinPlaylistStore(),
         _syncQueue = syncQueue ?? PlaylistSyncQueue() {
     _audioPlayerService = AudioPlayerService();
@@ -63,11 +66,14 @@ class NautuneAppState extends ChangeNotifier {
   final PlaybackStateStore _playbackStateStore;
   final LocalCacheService _cacheService;
   final BootstrapService _bootstrapService;
+  final ConnectivityService _connectivityService;
   final JellyfinPlaylistStore _playlistStore;
   final PlaylistSyncQueue _syncQueue;
   late final AudioPlayerService _audioPlayerService;
   late final DownloadService _downloadService;
   CarPlayService? _carPlayService;
+  StreamSubscription<bool>? _connectivitySubscription;
+  bool _connectivityMonitorInitialized = false;
   Map<String, double> _libraryScrollOffsets = {};
   int _restoredLibraryTabIndex = 0;
   bool _showVolumeBar = true;
@@ -398,8 +404,57 @@ class NautuneAppState extends ChangeNotifier {
     );
   }
 
+  Future<void> _ensureConnectivityMonitoring() async {
+    if (_connectivityMonitorInitialized) {
+      return;
+    }
+    try {
+      final isOnline = await _connectivityService.hasNetworkConnection();
+      _networkAvailable = isOnline;
+      if (!isOnline && !_isOfflineMode && !_isDemoMode) {
+        _isOfflineMode = true;
+      }
+    } catch (error) {
+      debugPrint('Connectivity probe failed: $error');
+      _networkAvailable = false;
+      if (!_isOfflineMode && !_isDemoMode) {
+        _isOfflineMode = true;
+      }
+    }
+
+    _connectivitySubscription =
+        _connectivityService.onStatusChange.listen(_handleConnectivityStatusChange);
+    _connectivityMonitorInitialized = true;
+  }
+
+  void _handleConnectivityStatusChange(bool isOnline) {
+    final wasOnline = _networkAvailable;
+    _networkAvailable = isOnline;
+    if (!isOnline && !_isOfflineMode && !_isDemoMode) {
+      _isOfflineMode = true;
+    }
+    if (wasOnline != isOnline) {
+      notifyListeners();
+    }
+
+    if (isOnline && !wasOnline) {
+      final session = _session;
+      if (session != null && !_isDemoMode) {
+        _startBootstrapSync(session);
+        unawaited(() async {
+          try {
+            await refreshLibraries();
+          } catch (error) {
+            debugPrint('Refresh after reconnect failed: $error');
+          }
+        }());
+      }
+    }
+  }
+
   Future<void> initialize() async {
     debugPrint('Nautune initialization started');
+    await _ensureConnectivityMonitoring();
     final storedPlaybackState = await _playbackStateStore.load();
     if (storedPlaybackState != null) {
       _showVolumeBar = storedPlaybackState.showVolumeBar;
@@ -439,7 +494,11 @@ class NautuneAppState extends ChangeNotifier {
           session: storedSession,
         );
         await _applyBootstrapSnapshot(snapshot);
-        _startBootstrapSync(storedSession);
+        if (_networkAvailable) {
+          _startBootstrapSync(storedSession);
+        } else {
+          debugPrint('Skipping bootstrap sync: offline at startup');
+        }
       }
     } catch (error, stackTrace) {
       _lastError = error;
@@ -1594,6 +1653,12 @@ class NautuneAppState extends ChangeNotifier {
 
   Future<void> disconnect() async {
     await logout();
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    super.dispose();
   }
 
   AudioPlayerService get audioService => _audioPlayerService;

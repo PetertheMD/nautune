@@ -76,6 +76,7 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
   - ✅ Wired directly to audio player for instant response
   - ✅ Volume level persisted across sessions
 - **🛫 Offline-First Boot**: App now boots directly into offline mode when no internet is available, giving instant access to downloaded music even in airplane mode or dead zones.
+  - ✅ Connectivity probe (connectivity_plus + DNS lookup) detects real internet reachability before Jellyfin refreshes begin
   - ✅ 10-second timeout prevents infinite spinning on network failure
   - ✅ Graceful network failure handling during initialization
   - ✅ Cached credentials preserved for when connectivity returns
@@ -292,6 +293,11 @@ Apple's Guideline 2.1 requires working reviewer access. Nautune includes an on-d
   - ✅ Download progress tracking and cancellation
   - ✅ Batch album downloads
 
+### Offline Boot Troubleshooting
+- If you previously ran Nautune before the new connectivity boot logic, the cached Hive data may use legacy map types. A `_Map<dynamic, dynamic>` cast error on launch means the cache needs to be cleared.
+- Delete the `nautune_cache.*` files in the platform data directory (e.g., Linux: `~/.local/share/nautune/`, macOS: `~/Library/Application Support/nautune/`, Windows: `%LOCALAPPDATA%\\nautune\\`). The app will rebuild the cache automatically on the next successful sync.
+- After clearing the cache, you can start the app offline—ConnectivityService will detect the missing network and the Library screen will immediately show downloads.
+
 ## 📸 Screenshots
 
 ### Linux
@@ -345,7 +351,7 @@ audio_service: ^0.18.15   # iOS lock screen controls and media notifications
 flutter_carplay: ^1.1.4   # iOS CarPlay integration with tab-based UI
 
 # Network & Connectivity
-connectivity_plus: ^6.1.2  # Network connectivity detection for offline-first boot
+connectivity_plus: ^7.0.0  # ConnectivityService uses DNS probes to decide if we should boot offline
 
 # Data & State
 shared_preferences: ^2.3.2 # Persistent storage for sessions and playback state
