@@ -583,9 +583,16 @@ class NautuneAppState extends ChangeNotifier {
   void _handleConnectivityStatusChange(bool isOnline) {
     final wasOnline = _networkAvailable;
     _networkAvailable = isOnline;
+
+    // Update offline mode based on connectivity
     if (!isOnline && !_isOfflineMode && !_isDemoMode) {
       _isOfflineMode = true;
+      debugPrint('📴 Going offline: Network lost');
+    } else if (isOnline && _isOfflineMode && !_isDemoMode) {
+      _isOfflineMode = false;
+      debugPrint('📶 Going online: Network restored');
     }
+
     if (wasOnline != isOnline) {
       notifyListeners();
     }
@@ -1729,17 +1736,26 @@ class NautuneAppState extends ChangeNotifier {
 
   void toggleOfflineMode() {
     _isOfflineMode = !_isOfflineMode;
+    debugPrint('🔄 Toggled offline mode: $_isOfflineMode (Demo mode: $isDemoMode)');
     notifyListeners();
-    
+
+    // In demo mode, offline toggle just switches between demo content and offline library view
+    // No need to refresh or sync anything
+    if (isDemoMode) {
+      debugPrint('📱 Demo mode active - offline toggle is UI-only');
+      return;
+    }
+
     // If switching to online mode and we have a session, try to refresh data
     if (!_isOfflineMode && _session != null && _networkAvailable) {
+      debugPrint('📶 Switching to online mode - refreshing libraries');
       refreshLibraries().catchError((error) {
         debugPrint('Failed to refresh libraries when going online: $error');
         _isOfflineMode = true;
         _networkAvailable = false;
         notifyListeners();
       });
-      
+
       // Sync pending playlist actions
       _syncPendingPlaylistActions();
     }

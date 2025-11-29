@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../jellyfin/jellyfin_artist.dart';
@@ -10,11 +11,9 @@ class ArtistDetailScreen extends StatefulWidget {
   const ArtistDetailScreen({
     super.key,
     required this.artist,
-    required this.appState,
   });
 
   final JellyfinArtist artist;
-  final NautuneAppState appState;
 
   @override
   State<ArtistDetailScreen> createState() => _ArtistDetailScreenState();
@@ -24,11 +23,18 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
   bool _isLoading = false;
   Object? _error;
   List<JellyfinAlbum>? _albums;
+  late NautuneAppState _appState;
 
   @override
   void initState() {
     super.initState();
     _loadAlbums();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _appState = Provider.of<NautuneAppState>(context, listen: false);
   }
 
   Future<void> _loadAlbums() async {
@@ -39,7 +45,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
 
     try {
       // Use efficient API to get albums directly by artist ID
-      final artistAlbums = await widget.appState.jellyfinService.loadAlbumsByArtist(
+      final artistAlbums = await _appState.jellyfinService.loadAlbumsByArtist(
         artistId: widget.artist.id,
       );
       
@@ -68,7 +74,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
     Widget artwork;
     final tag = artist.primaryImageTag;
     if (tag != null && tag.isNotEmpty) {
-      final imageUrl = widget.appState.jellyfinService.buildImageUrl(
+      final imageUrl = _appState.jellyfinService.buildImageUrl(
         itemId: artist.id,
         tag: tag,
         maxWidth: 800,
@@ -77,7 +83,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
         child: Image.network(
           imageUrl,
           fit: BoxFit.cover,
-          headers: widget.appState.jellyfinService.imageHeaders(),
+          headers: _appState.jellyfinService.imageHeaders(),
           errorBuilder: (context, error, stackTrace) => _DefaultArtistArtwork(),
         ),
       );
@@ -268,7 +274,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                     final album = _albums![index];
                     return _AlbumCard(
                       album: album,
-                      appState: widget.appState,
+                      appState: _appState,
                     );
                   },
                   childCount: _albums!.length,
@@ -278,8 +284,8 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
         ],
       ),
       bottomNavigationBar: NowPlayingBar(
-        audioService: widget.appState.audioPlayerService,
-        appState: widget.appState,
+        audioService: _appState.audioPlayerService,
+        appState: _appState,
       ),
     );
   }
@@ -334,7 +340,6 @@ class _AlbumCard extends StatelessWidget {
           MaterialPageRoute(
             builder: (_) => AlbumDetailScreen(
               album: album,
-              appState: appState,
             ),
           ),
         );

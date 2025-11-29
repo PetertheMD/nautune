@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
 
-import '../app_state.dart';
+import '../providers/session_provider.dart';
+import '../providers/ui_state_provider.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.appState});
-
-  final NautuneAppState appState;
+  const SettingsScreen({super.key});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -24,6 +24,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final sessionProvider = Provider.of<SessionProvider>(context);
+    final uiStateProvider = Provider.of<UIStateProvider>(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -43,7 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           ListTile(
             title: const Text('Server URL'),
-            subtitle: Text(widget.appState.session?.serverUrl ?? 'Not connected'),
+            subtitle: Text(sessionProvider.session?.serverUrl ?? 'Not connected'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               // TODO: Allow changing server
@@ -51,11 +53,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           ListTile(
             title: const Text('Username'),
-            subtitle: Text(widget.appState.session?.username ?? 'Not logged in'),
+            subtitle: Text(sessionProvider.session?.username ?? 'Not logged in'),
           ),
           ListTile(
             title: const Text('Library'),
-            subtitle: Text(widget.appState.selectedLibrary?.name ?? 'None selected'),
+            subtitle: Text(sessionProvider.session?.selectedLibraryName ?? 'None selected'),
           ),
           const Divider(),
           Padding(
@@ -72,37 +74,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: Icon(Icons.tune, color: theme.colorScheme.primary),
             title: const Text('Crossfade'),
             subtitle: Text(
-              widget.appState.crossfadeEnabled 
-                ? 'Enabled (${widget.appState.crossfadeDurationSeconds}s)'
+              uiStateProvider.crossfadeEnabled
+                ? 'Enabled (${uiStateProvider.crossfadeDurationSeconds}s)'
                 : 'Smooth transitions between tracks'
             ),
             trailing: Switch(
-              value: widget.appState.crossfadeEnabled,
+              value: uiStateProvider.crossfadeEnabled,
               onChanged: (value) {
-                widget.appState.toggleCrossfade(value);
-                setState(() {});
+                uiStateProvider.toggleCrossfade(value);
               },
             ),
           ),
-          if (widget.appState.crossfadeEnabled)
+          if (uiStateProvider.crossfadeEnabled)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Duration: ${widget.appState.crossfadeDurationSeconds} seconds',
+                    'Duration: ${uiStateProvider.crossfadeDurationSeconds} seconds',
                     style: theme.textTheme.bodyMedium,
                   ),
                   Slider(
-                    value: widget.appState.crossfadeDurationSeconds.toDouble(),
+                    value: uiStateProvider.crossfadeDurationSeconds.toDouble(),
                     min: 0,
                     max: 10,
                     divisions: 10,
-                    label: '${widget.appState.crossfadeDurationSeconds}s',
+                    label: '${uiStateProvider.crossfadeDurationSeconds}s',
                     onChanged: (value) {
-                      widget.appState.setCrossfadeDuration(value.round());
-                      setState(() {});
+                      uiStateProvider.setCrossfadeDuration(value.round());
                     },
                   ),
                   Text(

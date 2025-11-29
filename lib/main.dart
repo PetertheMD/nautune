@@ -131,7 +131,7 @@ class NautuneApp extends StatelessWidget {
         theme: NautuneTheme.build(),
         debugShowCheckedModeBanner: false,
         routes: {
-          '/queue': (context) => QueueScreen(appState: appState),
+          '/queue': (context) => const QueueScreen(),
         },
         home: Consumer2<SessionProvider, NautuneAppState>(
           builder: (context, session, app, _) {

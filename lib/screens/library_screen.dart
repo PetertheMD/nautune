@@ -319,8 +319,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) =>
-                            SettingsScreen(appState: widget.appState),
+                        builder: (context) => const SettingsScreen(),
                       ),
                     );
                   },
@@ -451,7 +450,6 @@ class _LibraryScreenState extends State<LibraryScreen>
       MaterialPageRoute(
         builder: (context) => AlbumDetailScreen(
           album: album,
-          appState: widget.appState,
         ),
       ),
     );
@@ -1798,34 +1796,88 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
   }
 
   Widget _buildTrackFilters() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: SegmentedButton<String>(
-        segments: const [
-          ButtonSegment(
-            value: 'mostPlayed',
-            icon: Icon(Icons.trending_up),
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+          child: Text(
+            'Explore Tracks',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.primary,
+            ),
           ),
-          ButtonSegment(
-            value: 'recentlyPlayed',
-            icon: Icon(Icons.history),
+        ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              _buildFilterChip(
+                'Most Played',
+                Icons.trending_up,
+                'mostPlayed',
+                theme,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                'History',
+                Icons.history,
+                'recentlyPlayed',
+                theme,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                'New Additions',
+                Icons.fiber_new,
+                'recentlyAdded',
+                theme,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                'Longest',
+                Icons.timer,
+                'longest',
+                theme,
+              ),
+            ],
           ),
-          ButtonSegment(
-            value: 'recentlyAdded',
-            icon: Icon(Icons.fiber_new),
-          ),
-          ButtonSegment(
-            value: 'longest',
-            icon: Icon(Icons.timer),
-          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _buildFilterChip(String label, IconData icon, String value, ThemeData theme) {
+    final isSelected = _selectedType == value;
+
+    return FilterChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 6),
+          Text(label),
         ],
-        selected: {_selectedType},
-        onSelectionChanged: (Set<String> newSelection) {
+      ),
+      selected: isSelected,
+      onSelected: (selected) {
+        if (selected) {
           setState(() {
-            _selectedType = newSelection.first;
+            _selectedType = value;
           });
           _loadTracks();
-        },
+        }
+      },
+      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+      selectedColor: theme.colorScheme.primaryContainer,
+      checkmarkColor: theme.colorScheme.primary,
+      labelStyle: TextStyle(
+        color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface,
+        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
       ),
     );
   }
@@ -1874,8 +1926,10 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
     }
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (showContinue)
+        const SizedBox(height: 16),
+        if (showContinue) ...[
           _ContinueListeningShelf(
             tracks: continueTracks,
             isLoading: continueLoading,
@@ -1888,7 +1942,9 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
             },
             onRefresh: () => widget.appState.refreshRecent(),
           ),
-        if (showRecentlyAdded)
+          const SizedBox(height: 20),
+        ],
+        if (showRecentlyAdded) ...[
           _RecentlyAddedShelf(
             albums: recentlyAdded,
             isLoading: recentlyAddedLoading,
@@ -1896,7 +1952,8 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
             onAlbumTap: widget.onAlbumTap,
             onRefresh: () => widget.appState.refreshRecentlyAdded(),
           ),
-        const SizedBox(height: 8),
+          const SizedBox(height: 12),
+        ],
       ],
     );
   }
@@ -2153,7 +2210,6 @@ class _RecentTabState extends State<_RecentTab> {
                 MaterialPageRoute(
                   builder: (context) => AlbumDetailScreen(
                     album: album,
-                    appState: widget.appState,
                   ),
                 ),
               );
@@ -3166,7 +3222,6 @@ class _SearchTabState extends State<_SearchTab> {
                   MaterialPageRoute(
                     builder: (_) => AlbumDetailScreen(
                       album: album,
-                      appState: widget.appState,
                     ),
                   ),
                 );
@@ -3249,7 +3304,6 @@ class _SearchTabState extends State<_SearchTab> {
                   MaterialPageRoute(
                     builder: (_) => ArtistDetailScreen(
                       artist: artist,
-                      appState: widget.appState,
                     ),
                   ),
                 );
@@ -3379,7 +3433,6 @@ class _ArtistCard extends StatelessWidget {
           MaterialPageRoute(
             builder: (_) => ArtistDetailScreen(
               artist: artist,
-              appState: appState,
             ),
           ),
         );

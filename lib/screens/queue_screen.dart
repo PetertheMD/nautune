@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../app_state.dart';
 import '../jellyfin/jellyfin_track.dart';
 
 class QueueScreen extends StatefulWidget {
-  const QueueScreen({super.key, required this.appState});
-
-  final NautuneAppState appState;
+  const QueueScreen({super.key});
 
   @override
   State<QueueScreen> createState() => _QueueScreenState();
@@ -15,7 +15,8 @@ class _QueueScreenState extends State<QueueScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final audioService = widget.appState.audioService;
+    final appState = Provider.of<NautuneAppState>(context, listen: false);
+    final audioService = appState.audioService;
 
     return Scaffold(
       appBar: AppBar(

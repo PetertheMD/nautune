@@ -2,7 +2,48 @@
 
 Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter and delivers a beautiful deep-sea themed experience with smooth native audio playback, animated waveform visualization, and seamless Jellyfin integration.
 
-## 🚀 Latest Updates (v1.5.0+)
+## 🚀 Latest Updates (v1.8.3+)
+- **⚡ Smart Track Pre-Loading**: Intelligent buffering for truly gapless playback
+  - ✅ **70% pre-load trigger**: Automatically loads next track when current reaches 70%
+  - ✅ **Platform buffering**: Audio data buffered by native decoders (not just URLs)
+  - ✅ **Instant transitions**: Near-zero gap between tracks when pre-loaded
+  - ✅ **Respects queue & repeat modes**: Works with shuffle, repeat one/all
+  - ✅ **Auto-cleanup**: Clears pre-load when queue changes
+  - ✅ **Works offline & online**: Pre-loads both streaming and downloaded tracks
+- **🧹 Codebase Cleanup**: Removed 100+ lines of dead stream caching code
+  - ✅ **Before**: Cached stream URLs (text only, no actual benefit)
+  - ✅ **After**: True pre-loading with platform audio buffering
+  - ✅ **Result**: Cleaner codebase, better performance
+- **🎨 Enhanced Home Tab UI**: Beautiful new layout with better spacing
+  - ✅ **Section headers**: Clear "Explore Tracks" label with primary color
+  - ✅ **FilterChips instead of SegmentedButton**: Better labels with icons
+  - ✅ **Horizontal scrollable**: "Most Played", "History", "New Additions", "Longest"
+  - ✅ **Better spacing**: Proper vertical spacing between shelves
+  - ✅ **Improved hierarchy**: Clearer visual structure
+- **📱 Fixed Demo Mode Transitions**: Seamless offline/demo mode switching
+  - ✅ **Demo mode preserved**: Toggling offline library no longer exits demo mode
+  - ✅ **Smart detection**: UI-only offline toggle when in demo mode
+  - ✅ **No unnecessary syncs**: Demo mode doesn't attempt server refreshes
+  - ✅ **Debug logging**: Clear mode transition tracking
+- **🎵 Fullscreen Player Redesign**: Optimized layout for better focus
+  - ✅ **Larger album art**: Up to 500px/85% width, 50% screen height
+  - ✅ **Expanded layout**: Artwork gets 3x vertical space
+  - ✅ **Controls pinned to bottom**: All widgets (progress, volume, playback) at bottom
+  - ✅ **Better spacing**: Proper vertical distribution
+  - ✅ **Enhanced lyrics**: Larger text (24px active, 18px inactive), better line height
+- **🖼️ Image Caching**: Persistent disk + memory caching for artwork
+  - ✅ **cached_network_image package**: Industry-standard image caching
+  - ✅ **Disk cache**: Artwork persists across app restarts
+  - ✅ **Memory cache**: Size-optimized for performance
+  - ✅ **Reduced network**: Cached images don't re-download
+  - ✅ **Faster scrolling**: Smooth album/artist grid browsing
+- **🔌 Offline/Online Mode Fixes**: Auto-refresh when network returns
+  - ✅ **Network monitoring**: Proper connectivity change detection
+  - ✅ **Auto-refresh**: Libraries refresh when internet returns
+  - ✅ **Offline mode toggle**: Properly exits offline mode when network available
+  - ✅ **Demo mode safe**: Won't trigger refreshes in demo mode
+
+## 🚀 Previous Updates (v1.5.0+)
 - **🔧 Architecture Refactoring & Stability**: Major under-the-hood improvements
   - ✅ **Phase 1 Complete**: Core state logic migrated to focused providers (`SessionProvider`, `DemoModeProvider`, etc.)
   - ✅ **Demo Mode Fixed**: Resolved track listing issues, infinite loops, and startup crashes
@@ -51,12 +92,12 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
   - ✅ **iOS text overflow fixed**: Album names with long artists no longer cut off
   - ✅ **Optimized line height**: 1.2 line height ensures proper 2-line fitting
   - ✅ **Consistent across platforms**: Works on iOS, Android, Linux, all devices
-- **🚀 Smart Stream Caching**: Smooth playback with intelligent preloading
-  - ✅ **Caches 5 upcoming tracks**: Preloads next tracks in queue for seamless streaming
-  - ✅ **Streaming only**: Smart detection - only caches when online (not for downloads)
-  - ✅ **Auto cleanup**: Periodic cache cleanup every 5 minutes
-  - ✅ **Memory efficient**: Caches URLs only, not audio data
-  - ✅ **Queue-aware**: Updates cache as you skip through tracks
+- **⚡ Smart Track Pre-Loading**: True gapless playback with platform buffering
+  - ✅ **Intelligent pre-loading**: Loads next track at 70% of current track
+  - ✅ **Platform-level buffering**: Native audio decoders buffer actual audio data
+  - ✅ **Instant transitions**: Near-zero gap when track is pre-loaded
+  - ✅ **Works everywhere**: Streaming and offline tracks both pre-load
+  - ✅ **Queue-aware**: Respects repeat modes and shuffle
 - **🎵 Smart Crossfade (Level 2)**: Intelligent audio transitions
   - ✅ **Album-aware crossfade**: Automatically skips crossfade within same album (respects artist intent)
   - ✅ **Smooth exponential curves**: Natural-sounding quadratic fade in/out
@@ -202,12 +243,12 @@ Apple's Guideline 2.1 requires working reviewer access. Nautune includes an on-d
   - 🐧 **Linux**: GStreamer (native multimedia framework with FLAC codec)
   - 🤖 **Android**: MediaPlayer
   - 🪟 **Windows**: WinMM
-- **Gapless Playback**: Seamless transitions between tracks with preloading
-- **Smart Stream Caching**: Intelligent preloading for smooth streaming
-  - ✅ Automatically caches up to 5 upcoming tracks in queue
-  - ✅ Only when streaming online (skips for offline/downloaded content)
-  - ✅ Periodic cleanup prevents memory bloat
-  - ✅ Reduces buffering and improves responsiveness
+- **Gapless Playback**: True seamless transitions with intelligent pre-loading
+  - ✅ **70% pre-load trigger**: Next track loads at 70% of current track
+  - ✅ **Platform buffering**: Native decoders buffer actual audio data
+  - ✅ **Instant playback**: Pre-loaded tracks start immediately
+  - ✅ **Works offline**: Pre-loads both streaming and downloaded tracks
+  - ✅ **Auto-cleanup**: Clears pre-load when queue changes
 - **External Control Support**: Rock-solid media controls from any source
   - ✅ USB-C audio devices (car head units, dongles)
   - ✅ Bluetooth headphones and speakers

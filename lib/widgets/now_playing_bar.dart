@@ -23,8 +23,6 @@ class NowPlayingBar extends StatelessWidget {
       MaterialPageRoute(
         builder: (_) => FullPlayerScreen(
           key: UniqueKey(), // Force fresh build
-          audioService: audioService,
-          appState: appState,
         ),
       ),
     );
@@ -138,7 +136,7 @@ class NowPlayingBar extends StatelessWidget {
                             onPressed: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (context) => QueueScreen(appState: appState),
+                                  builder: (context) => const QueueScreen(),
                                 ),
                               );
                             },

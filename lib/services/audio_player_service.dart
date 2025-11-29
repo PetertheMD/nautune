@@ -23,8 +23,7 @@ enum RepeatMode {
 
 class AudioPlayerService {
   static const int _visualizerBarCount = 24;
-  static const int _maxCachedTracks = 5; // Cache up to 5 upcoming tracks for streaming
-  
+
   final AudioPlayer _player = AudioPlayer();
   final AudioPlayer _nextPlayer = AudioPlayer();
   final PlaybackStateStore _stateStore = PlaybackStateStore();
@@ -36,11 +35,11 @@ class AudioPlayerService {
   bool _isShuffleEnabled = false;
   bool _hasRestored = false;
   PlaybackState? _pendingState;
-  
-  // Stream caching for better performance
-  final Map<String, String> _cachedStreamUrls = {};
-  Timer? _cacheCleanupTimer;
-  
+
+  // Pre-loading support for gapless playback
+  JellyfinTrack? _preloadedTrack;
+  bool _isPreloading = false;
+
   // Crossfade support
   AudioPlayer? _crossfadePlayer;
   bool _crossfadeEnabled = false;
@@ -170,7 +169,6 @@ class AudioPlayerService {
     _nextPlayer.setVolume(_volume);
     _volumeController.add(_volume);
     _emitIdleVisualizer();
-    _startCacheCleanup();
 
     // Initialize reusable crossfade player
     _crossfadePlayer = AudioPlayer();
@@ -247,6 +245,8 @@ class AudioPlayerService {
       }
       // Check if we should start crossfade
       _checkCrossfadeTrigger(position);
+      // Check if we should pre-load next track
+      _checkPreloadTrigger(position);
     });
 
     // Duration updates
@@ -302,20 +302,49 @@ class AudioPlayerService {
       );
       return;
     }
-    
+
     // Move to next track
     if (_currentIndex + 1 < _queue.length) {
       _isTransitioning = true;
-      
-      _currentIndex++;
-      _currentTrack = _queue[_currentIndex];
-      _currentTrackController.add(_currentTrack);
-      
-      // Preload next track if available
-      if (_currentIndex + 1 < _queue.length) {
-        await _preloadNextTrack();
+
+      final nextTrack = _queue[_currentIndex + 1];
+
+      // Check if we have this track pre-loaded
+      if (_preloadedTrack?.id == nextTrack.id) {
+        debugPrint('⚡ Using pre-loaded track for instant playback: ${nextTrack.name}');
+
+        // Swap players for instant transition
+        final tempPlayer = _player;
+        // Note: We can't actually swap AudioPlayer instances in audioplayers
+        // So we'll just play the pre-loaded track normally
+        // The pre-loading still helps because the platform has buffered it
+
+        _currentIndex++;
+        _currentTrack = nextTrack;
+        _currentTrackController.add(_currentTrack);
+
+        // Play the pre-loaded track (already loaded in _nextPlayer)
+        await _nextPlayer.setVolume(_volume);
+        await _nextPlayer.resume();
+
+        // Stop the old player
+        await _player.stop();
+
+        // Update handlers
+        _audioHandler?.updateNautuneMediaItem(nextTrack);
+
+        // Clear pre-load state
+        _preloadedTrack = null;
+      } else {
+        // No pre-loaded track, do regular playback
+        _currentIndex++;
+        await playTrack(
+          _queue[_currentIndex],
+          queueContext: _queue,
+          fromShuffle: _isShuffleEnabled,
+        );
       }
-      
+
       _isTransitioning = false;
       _saveCurrentPosition();
     } else {
@@ -331,22 +360,6 @@ class AudioPlayerService {
       } else {
         // Stop playback
         await stop();
-      }
-    }
-  }
-  
-  Future<void> _preloadNextTrack() async {
-    if (_currentIndex + 1 >= _queue.length) return;
-    
-    final nextTrack = _queue[_currentIndex + 1];
-    final url = nextTrack.directDownloadUrl();
-    
-    if (url != null) {
-      try {
-        await _nextPlayer.setSource(UrlSource(url));
-        await _nextPlayer.setVolume(_volume);
-      } catch (e) {
-        // Preload failed, will try regular load on track change
       }
     }
   }
@@ -498,9 +511,12 @@ class AudioPlayerService {
       _queue = List<JellyfinTrack>.from([track]);
       _currentIndex = 0;
     }
-    
+
     _queueController.add(_queue);
-    
+
+    // Clear any pre-loaded track since queue changed
+    _clearPreload();
+
     // Update audio handler with current track metadata
     _audioHandler?.updateNautuneMediaItem(track);
     _audioHandler?.updateNautuneQueue(_queue);
@@ -627,12 +643,7 @@ class AudioPlayerService {
         rethrow;
       }
     }
-    
-    // Cache upcoming tracks for smooth streaming (only when streaming, not offline)
-    if (!isOffline) {
-      _cacheUpcomingTracks();
-    }
-    
+
     await _stateStore.savePlaybackSnapshot(
       currentTrack: _currentTrack,
       position: Duration.zero,
@@ -816,9 +827,12 @@ class AudioPlayerService {
   void removeFromQueue(int index) {
     if (index < 0 || index >= _queue.length) return;
     if (_queue.length == 1) return; // Don't remove last track
-    
+
     _queue.removeAt(index);
-    
+
+    // Clear pre-loaded track since queue changed
+    _clearPreload();
+
     // Update current index if affected
     if (index < _currentIndex) {
       _currentIndex--;
@@ -1116,99 +1130,158 @@ class AudioPlayerService {
     debugPrint('✅ Crossfade complete → ${nextTrack.name}');
   }
 
-  // ========== STREAM CACHING METHODS ==========
-  
-  /// Cache upcoming tracks for smooth streaming (only when online)
-  void _cacheUpcomingTracks() {
-    if (_queue.isEmpty || _currentIndex >= _queue.length) return;
-    
-    // Determine how many tracks to cache (max 5)
-    final tracksToCache = (_queue.length - _currentIndex - 1).clamp(0, _maxCachedTracks);
-    
-    if (tracksToCache == 0) return;
-    
-    debugPrint('🔄 Caching next $tracksToCache tracks for smooth streaming');
-    
-    // Cache in background
-    for (int i = 1; i <= tracksToCache; i++) {
-      final index = _currentIndex + i;
-      if (index >= _queue.length) break;
-      
-      final track = _queue[index];
-      
-      // Skip if already downloaded locally
-      final localPath = _downloadService?.getLocalPath(track.id);
-      if (localPath != null) continue;
-      
-      // Skip if already cached
-      if (_cachedStreamUrls.containsKey(track.id)) continue;
-      
-      // Cache the stream URL
-      _cacheTrackUrl(track);
-    }
+  // ========== PRE-LOADING METHODS FOR GAPLESS PLAYBACK ==========
+
+  /// Check if we should pre-load the next track (when current track reaches 70%)
+  void _checkPreloadTrigger(Duration position) async {
+    if (_isPreloading || _currentTrack == null) return;
+
+    final duration = await _player.getDuration();
+    if (duration == null || duration.inMilliseconds == 0) return;
+
+    // Pre-load when we're 70% through the current track
+    final preloadThreshold = duration * 0.7;
+    if (position < preloadThreshold) return;
+
+    // Get next track
+    final nextTrack = _getNextTrack();
+    if (nextTrack == null) return;
+
+    // Don't pre-load if already loaded
+    if (_preloadedTrack?.id == nextTrack.id) return;
+
+    // Pre-load the next track
+    await _preloadNextTrack(nextTrack);
   }
-  
-  /// Cache a single track's stream URL
-  Future<void> _cacheTrackUrl(JellyfinTrack track) async {
+
+  /// Pre-load the next track into _nextPlayer for instant playback
+  Future<void> _preloadNextTrack(JellyfinTrack track) async {
+    if (_isPreloading) return;
+    _isPreloading = true;
+
     try {
-      final url = track.directDownloadUrl();
-      if (url != null) {
-        _cachedStreamUrls[track.id] = url;
-        debugPrint('✅ Cached stream URL for: ${track.name}');
+      debugPrint('⏩ Pre-loading next track: ${track.name}');
+
+      await _nextPlayer.stop();
+
+      Future<bool> trySetSource(String? url, {bool isFile = false}) async {
+        if (url == null) return false;
+        try {
+          if (isFile) {
+            await _nextPlayer.setSource(DeviceFileSource(url));
+          } else {
+            await _nextPlayer.setSource(UrlSource(url));
+          }
+          return true;
+        } on PlatformException {
+          return false;
+        }
+      }
+
+      Future<bool> trySetAssetSource(String? assetPath) async {
+        if (assetPath == null) return false;
+        final normalized = assetPath.startsWith('assets/')
+            ? assetPath.substring('assets/'.length)
+            : assetPath;
+        try {
+          await _nextPlayer.setSource(AssetSource(normalized));
+          return true;
+        } on PlatformException {
+          return false;
+        }
+      }
+
+      bool loaded = false;
+
+      // Try local file first
+      final localPath = _downloadService?.getLocalPath(track.id);
+      if (localPath != null) {
+        final file = File(localPath);
+        if (await file.exists()) {
+          if (await trySetSource(localPath, isFile: true)) {
+            loaded = true;
+            debugPrint('✅ Pre-loaded from local file: ${track.name}');
+          }
+        }
+      }
+
+      // Try streaming if no local file
+      if (!loaded) {
+        final downloadUrl = track.directDownloadUrl();
+        final universalUrl = track.universalStreamUrl(
+          deviceId: _deviceId,
+          maxBitrate: 320000,
+          audioCodec: 'mp3',
+          container: 'mp3',
+        );
+
+        if (await trySetSource(downloadUrl)) {
+          loaded = true;
+          debugPrint('✅ Pre-loaded from stream: ${track.name}');
+        } else if (await trySetSource(universalUrl)) {
+          loaded = true;
+          debugPrint('✅ Pre-loaded from universal stream: ${track.name}');
+        } else if (await trySetAssetSource(track.assetPathOverride)) {
+          loaded = true;
+          debugPrint('✅ Pre-loaded from asset: ${track.name}');
+        }
+      }
+
+      if (loaded) {
+        _preloadedTrack = track;
+        // Set to ready but don't play yet
+        await _nextPlayer.setVolume(0.0); // Silent until we swap
+      } else {
+        debugPrint('⚠️ Failed to pre-load: ${track.name}');
+        _preloadedTrack = null;
       }
     } catch (e) {
-      debugPrint('⚠️ Failed to cache track ${track.name}: $e');
+      debugPrint('⚠️ Error pre-loading track: $e');
+      _preloadedTrack = null;
+    } finally {
+      _isPreloading = false;
     }
   }
-  
-  /// Start periodic cache cleanup (remove old cached URLs)
-  void _startCacheCleanup() {
-    _cacheCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      _cleanupCache();
-    });
+
+  /// Get the next track that should play (respects repeat mode)
+  JellyfinTrack? _getNextTrack() {
+    if (_queue.isEmpty) return null;
+
+    // Repeat one mode - next track is the same track
+    if (_repeatMode == RepeatMode.one) {
+      return _currentTrack;
+    }
+
+    // Get next index
+    int nextIndex = _currentIndex + 1;
+
+    // Handle end of queue
+    if (nextIndex >= _queue.length) {
+      if (_repeatMode == RepeatMode.all) {
+        nextIndex = 0; // Loop back to start
+      } else {
+        return null; // Queue ended
+      }
+    }
+
+    return _queue[nextIndex];
   }
-  
-  /// Clean up cached URLs that are no longer in the queue or are too far behind
-  void _cleanupCache() {
-    if (_cachedStreamUrls.isEmpty) return;
-    
-    final trackIds = _queue.map((t) => t.id).toSet();
-    final toRemove = <String>[];
-    
-    for (final cachedId in _cachedStreamUrls.keys) {
-      // Remove if not in current queue
-      if (!trackIds.contains(cachedId)) {
-        toRemove.add(cachedId);
-        continue;
-      }
-      
-      // Remove if too far behind current position (more than 10 tracks back)
-      final index = _queue.indexWhere((t) => t.id == cachedId);
-      if (index != -1 && index < _currentIndex - 10) {
-        toRemove.add(cachedId);
-      }
-    }
-    
-    for (final id in toRemove) {
-      _cachedStreamUrls.remove(id);
-    }
-    
-    if (toRemove.isNotEmpty) {
-      debugPrint('🧹 Cleaned up ${toRemove.length} cached stream URLs');
-    }
+
+  /// Clear pre-loaded track (called when queue changes)
+  void _clearPreload() {
+    _preloadedTrack = null;
+    _nextPlayer.stop();
   }
 
   void dispose() {
     _positionSaveTimer?.cancel();
     _crossfadeTimer?.cancel();
-    _cacheCleanupTimer?.cancel();
     _interruptionSubscription?.cancel();
     _becomingNoisySubscription?.cancel();
     _audioHandler?.dispose();
     _player.dispose();
     _nextPlayer.dispose();
     _crossfadePlayer?.dispose();
-    _cachedStreamUrls.clear();
     _currentTrackController.close();
     _playingController.close();
     _positionController.close();

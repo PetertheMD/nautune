@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui show FontFeature, Image;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../jellyfin/jellyfin_album.dart';
@@ -14,11 +15,9 @@ class AlbumDetailScreen extends StatefulWidget {
   const AlbumDetailScreen({
     super.key,
     required this.album,
-    required this.appState,
   });
 
   final JellyfinAlbum album;
-  final NautuneAppState appState;
 
   @override
   State<AlbumDetailScreen> createState() => _AlbumDetailScreenState();
@@ -29,6 +28,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
   Object? _error;
   List<JellyfinTrack>? _tracks;
   List<Color>? _paletteColors;
+  late NautuneAppState _appState;
 
   @override
   void initState() {
@@ -37,20 +37,26 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
     _extractColors();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _appState = Provider.of<NautuneAppState>(context, listen: false);
+  }
+
   Future<void> _extractColors() async {
     final tag = widget.album.primaryImageTag;
     if (tag == null || tag.isEmpty) return;
 
     try {
-      final imageUrl = widget.appState.jellyfinService.buildImageUrl(
+      final imageUrl = _appState.jellyfinService.buildImageUrl(
         itemId: widget.album.id,
         tag: tag,
         maxWidth: 100,
       );
-      
+
       final imageProvider = NetworkImage(
         imageUrl,
-        headers: widget.appState.jellyfinService.imageHeaders(),
+        headers: _appState.jellyfinService.imageHeaders(),
       );
       
       final imageStream = imageProvider.resolve(const ImageConfiguration());
@@ -107,15 +113,15 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
     try {
       List<JellyfinTrack> tracks;
       
-      if (widget.appState.isDemoMode) {
-        tracks = await widget.appState.getAlbumTracks(widget.album.id);
+      if (_appState.isDemoMode) {
+        tracks = await _appState.getAlbumTracks(widget.album.id);
         if (tracks.isEmpty) {
           throw Exception('Demo content unavailable for this album');
         }
-      } else if (widget.appState.isOfflineMode ||
-          !widget.appState.networkAvailable) {
+      } else if (_appState.isOfflineMode ||
+          !_appState.networkAvailable) {
         // Get all downloaded tracks for this album
-        final downloads = widget.appState.downloadService.completedDownloads;
+        final downloads = _appState.downloadService.completedDownloads;
         tracks = downloads
             .where((d) => d.track.albumId == widget.album.id)
             .map((d) => d.track)
@@ -126,7 +132,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
         }
       } else {
         // Online mode - fetch from Jellyfin
-        tracks = await widget.appState.jellyfinService.loadAlbumTracks(
+        tracks = await _appState.jellyfinService.loadAlbumTracks(
           albumId: widget.album.id,
         );
       }
@@ -177,7 +183,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
     Widget artwork;
     final tag = album.primaryImageTag;
     if (tag != null && tag.isNotEmpty) {
-      final imageUrl = widget.appState.jellyfinService.buildImageUrl(
+      final imageUrl = _appState.jellyfinService.buildImageUrl(
         itemId: album.id,
         tag: tag,
         maxWidth: 800,
@@ -185,7 +191,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
       artwork = Image.network(
         imageUrl,
         fit: BoxFit.cover,
-        headers: widget.appState.jellyfinService.imageHeaders(),
+        headers: _appState.jellyfinService.imageHeaders(),
         errorBuilder: (context, error, stackTrace) => const _TritonArtwork(),
       );
     } else {
@@ -226,7 +232,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                 ),
                 onPressed: () {
                   if (_tracks != null && _tracks!.isNotEmpty) {
-                    widget.appState.audioService.playShuffled(_tracks!);
+                    _appState.audioService.playShuffled(_tracks!);
                   }
                 },
               ),
@@ -235,7 +241,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                 onPressed: () async {
                   await showAddToPlaylistDialog(
                     context: context,
-                    appState: widget.appState,
+                    appState: _appState,
                     album: widget.album,
                   );
                 },
@@ -297,7 +303,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                         FilledButton.icon(
                           onPressed: () async {
                             try {
-                              await widget.appState.audioPlayerService.playAlbum(
+                              await _appState.audioPlayerService.playAlbum(
                                 _tracks!,
                                 albumId: album.id,
                                 albumName: album.name,
@@ -317,15 +323,15 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                         ),
                         const SizedBox(width: 12),
                         ListenableBuilder(
-                          listenable: widget.appState.downloadService,
+                          listenable: _appState.downloadService,
                           builder: (context, _) {
                             final allDownloaded = _tracks!.every(
-                              (track) => widget.appState.downloadService
+                              (track) => _appState.downloadService
                                   .isDownloaded(track.id),
                             );
                             final anyDownloading = _tracks!.any(
                               (track) {
-                                final download = widget.appState.downloadService
+                                final download = _appState.downloadService
                                     .getDownload(track.id);
                                 return download != null &&
                                     (download.isDownloading || download.isQueued);
@@ -358,7 +364,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                                   if (!context.mounted) return;
                                   if (confirm == true) {
                                     for (final track in _tracks!) {
-                                      await widget.appState.downloadService
+                                      await _appState.downloadService
                                           .deleteDownload(track.id);
                                     }
                                     if (!context.mounted) return;
@@ -379,7 +385,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                               onPressed: anyDownloading
                                   ? null
                                   : () async {
-                                      await widget.appState.downloadService
+                                      await _appState.downloadService
                                           .downloadAlbum(album);
                                       if (!context.mounted) return;
                                       ScaffoldMessenger.of(context).showSnackBar(
@@ -477,10 +483,10 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                         _TrackTile(
                           track: track,
                           displayTrackNumber: displayNumber,
-                          appState: widget.appState,
+                          appState: _appState,
                           onTap: () async {
                             try {
-                              await widget.appState.audioPlayerService
+                              await _appState.audioPlayerService
                                   .playTrack(
                                 track,
                                 queueContext: currentTracks,
@@ -510,8 +516,8 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
         ),
       ),
       bottomNavigationBar: NowPlayingBar(
-        audioService: widget.appState.audioPlayerService,
-        appState: widget.appState,
+        audioService: _appState.audioPlayerService,
+        appState: _appState,
       ),
     );
   }
