@@ -72,7 +72,7 @@ Future<void> main() async {
     connectivityService: connectivityService,
     downloadService: downloadService,
     demoModeProvider: demoModeProvider,
-  );
+    sessionProvider: sessionProvider,);
 
   // Initialize providers in sequence
   await sessionProvider.initialize();

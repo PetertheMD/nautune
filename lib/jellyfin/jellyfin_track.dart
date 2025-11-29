@@ -42,29 +42,51 @@ class JellyfinTrack {
   final double? normalizationGain; // dB adjustment for ReplayGain
 
   factory JellyfinTrack.fromJson(Map<String, dynamic> json, {String? serverUrl, String? token, String? userId}) {
+    // Helper to safely read nested maps from dynamic JSON shapes (Hive may produce Map<dynamic, dynamic>)
+    dynamic readMapField(dynamic m, String key) {
+      if (m is Map) return m[key];
+      return null;
+    }
+
+    final rawArtists = json['Artists'];
+    final artistsList = (rawArtists is List) ? rawArtists.whereType<String>().toList() : <String>[];
+
+    final imageTags = json['ImageTags'];
+    final primaryImageTag = imageTags is Map ? (imageTags['Primary'] is String ? imageTags['Primary'] as String : null) : null;
+
+    final userData = json['UserData'];
+    bool isFavorite = false;
+    if (userData is Map) {
+      final fav = userData['IsFavorite'];
+      if (fav is bool) isFavorite = fav;
+      else if (fav is num) isFavorite = fav != 0;
+    }
+
+    final runTimeTicksVal = json['RunTimeTicks'];
+    final runTimeTicks = runTimeTicksVal is int ? runTimeTicksVal : (runTimeTicksVal is num ? runTimeTicksVal.toInt() : null);
+
+    final normVal = json['NormalizationGain'];
+    final normalizationGain = normVal is num ? normVal.toDouble() : null;
+
     return JellyfinTrack(
-      id: json['Id'] as String? ?? '',
-      name: json['Name'] as String? ?? '',
-      album: json['Album'] as String?,
-      artists: (json['Artists'] as List<dynamic>?)
-          ?.whereType<String>()
-          .toList() ??
-          const <String>[],
-      runTimeTicks: json['RunTimeTicks'] as int?,
-      primaryImageTag:
-          (json['ImageTags'] as Map<String, dynamic>?)?['Primary'] as String?,
+      id: json['Id'] is String ? json['Id'] as String : '',
+      name: json['Name'] is String ? json['Name'] as String : '',
+      album: json['Album'] is String ? json['Album'] as String : null,
+      artists: artistsList,
+      runTimeTicks: runTimeTicks,
+      primaryImageTag: primaryImageTag,
       serverUrl: serverUrl,
       token: token,
       userId: userId,
-      indexNumber: json['IndexNumber'] as int?,
-      parentIndexNumber: json['ParentIndexNumber'] as int?,
-      albumId: json['AlbumId'] as String?,
-      albumPrimaryImageTag: json['AlbumPrimaryImageTag'] as String?,
-      parentThumbImageTag: json['ParentThumbImageTag'] as String?,
-      isFavorite: (json['UserData'] as Map<String, dynamic>?)?['IsFavorite'] as bool? ?? false,
+      indexNumber: json['IndexNumber'] is int ? json['IndexNumber'] as int : (json['IndexNumber'] is num ? (json['IndexNumber'] as num).toInt() : null),
+      parentIndexNumber: json['ParentIndexNumber'] is int ? json['ParentIndexNumber'] as int : (json['ParentIndexNumber'] is num ? (json['ParentIndexNumber'] as num).toInt() : null),
+      albumId: json['AlbumId'] is String ? json['AlbumId'] as String : null,
+      albumPrimaryImageTag: json['AlbumPrimaryImageTag'] is String ? json['AlbumPrimaryImageTag'] as String : null,
+      parentThumbImageTag: json['ParentThumbImageTag'] is String ? json['ParentThumbImageTag'] as String : null,
+      isFavorite: isFavorite,
       streamUrlOverride: null,
       assetPathOverride: null,
-      normalizationGain: json['NormalizationGain'] as double?,
+      normalizationGain: normalizationGain,
     );
   }
 
@@ -295,28 +317,34 @@ class JellyfinTrack {
   }
 
   static JellyfinTrack fromStorageJson(Map<String, dynamic> json) {
+    final rawArtists = json['artists'];
+    final artistsList = (rawArtists is List) ? rawArtists.whereType<String>().toList() : <String>[];
+
+    final runTimeTicksVal = json['runTimeTicks'];
+    final runTimeTicks = runTimeTicksVal is int ? runTimeTicksVal : (runTimeTicksVal is num ? runTimeTicksVal.toInt() : null);
+
+    final normVal = json['normalizationGain'];
+    final normalizationGain = normVal is num ? normVal.toDouble() : null;
+
     return JellyfinTrack(
-      id: json['id'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      album: json['album'] as String?,
-      artists: (json['artists'] as List<dynamic>?)
-              ?.whereType<String>()
-              .toList() ??
-          const <String>[],
-      runTimeTicks: json['runTimeTicks'] as int?,
-      primaryImageTag: json['primaryImageTag'] as String?,
-      serverUrl: json['serverUrl'] as String?,
-      token: json['token'] as String?,
-      userId: json['userId'] as String?,
-      indexNumber: json['indexNumber'] as int?,
-      parentIndexNumber: json['parentIndexNumber'] as int?,
-      albumId: json['albumId'] as String?,
-      albumPrimaryImageTag: json['albumPrimaryImageTag'] as String?,
-      parentThumbImageTag: json['parentThumbImageTag'] as String?,
-      isFavorite: json['isFavorite'] as bool? ?? false,
-      streamUrlOverride: json['streamUrlOverride'] as String?,
-      assetPathOverride: json['assetPathOverride'] as String?,
-      normalizationGain: json['normalizationGain'] as double?,
+      id: json['id'] is String ? json['id'] as String : '',
+      name: json['name'] is String ? json['name'] as String : '',
+      album: json['album'] is String ? json['album'] as String : null,
+      artists: artistsList,
+      runTimeTicks: runTimeTicks,
+      primaryImageTag: json['primaryImageTag'] is String ? json['primaryImageTag'] as String : null,
+      serverUrl: json['serverUrl'] is String ? json['serverUrl'] as String : null,
+      token: json['token'] is String ? json['token'] as String : null,
+      userId: json['userId'] is String ? json['userId'] as String : null,
+      indexNumber: json['indexNumber'] is int ? json['indexNumber'] as int : (json['indexNumber'] is num ? (json['indexNumber'] as num).toInt() : null),
+      parentIndexNumber: json['parentIndexNumber'] is int ? json['parentIndexNumber'] as int : (json['parentIndexNumber'] is num ? (json['parentIndexNumber'] as num).toInt() : null),
+      albumId: json['albumId'] is String ? json['albumId'] as String : null,
+      albumPrimaryImageTag: json['albumPrimaryImageTag'] is String ? json['albumPrimaryImageTag'] as String : null,
+      parentThumbImageTag: json['parentThumbImageTag'] is String ? json['parentThumbImageTag'] as String : null,
+      isFavorite: json['isFavorite'] is bool ? json['isFavorite'] as bool : (json['isFavorite'] is num ? (json['isFavorite'] as num) != 0 : false),
+      streamUrlOverride: json['streamUrlOverride'] is String ? json['streamUrlOverride'] as String : null,
+      assetPathOverride: json['assetPathOverride'] is String ? json['assetPathOverride'] as String : null,
+      normalizationGain: normalizationGain,
     );
   }
 

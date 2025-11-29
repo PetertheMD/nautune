@@ -23,7 +23,7 @@ class JellyfinAlbum {
     List<Map<String, dynamic>> extractArtistMaps(String key) {
       final raw = json[key];
       if (raw is List) {
-        return raw.whereType<Map<String, dynamic>>().toList();
+        return raw.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
       }
       return const [];
     }
@@ -38,28 +38,42 @@ class JellyfinAlbum {
         if (artist['Id'] is String) artist['Id'] as String,
     };
 
+    String extractArtistName(dynamic artist) {
+      if (artist is Map) {
+        final name = artist['Name'];
+        return name is String ? name : '';
+      }
+      return '';
+    }
+
+    final artistsList = (json['AlbumArtists'] as List<dynamic>?)
+            ?.map(extractArtistName)
+            .where((name) => name.isNotEmpty)
+            .toList() ??
+        (json['Artists'] as List<dynamic>?)?.whereType<String>().toList() ??
+        const <String>[];
+
+    final imageTags = json['ImageTags'];
+    final userData = json['UserData'];
+
+    final genresList = (json['Genres'] as List<dynamic>?)
+            ?.whereType<String>()
+            .toList() ??
+        (json['GenreItems'] as List<dynamic>?)
+            ?.whereType<Map>()
+            .map((g) => g['Name'])
+            .whereType<String>()
+            .toList();
+
     return JellyfinAlbum(
       id: json['Id'] as String? ?? '',
       name: json['Name'] as String? ?? '',
-      artists: (json['AlbumArtists'] as List<dynamic>?)
-              ?.map((artist) =>
-                  (artist as Map<String, dynamic>)['Name'] as String? ?? '')
-              .where((name) => name.isNotEmpty)
-              .toList() ??
-          (json['Artists'] as List<dynamic>?)?.whereType<String>().toList() ??
-          const [],
+      artists: artistsList,
       artistIds: combinedArtistIds.toList(),
       productionYear: json['ProductionYear'] as int?,
-      primaryImageTag:
-          (json['ImageTags'] as Map<String, dynamic>?)?['Primary'] as String?,
-      isFavorite: (json['UserData'] as Map<String, dynamic>?)?['IsFavorite'] as bool? ?? false,
-      genres: (json['Genres'] as List<dynamic>?)
-              ?.whereType<String>()
-              .toList() ??
-          (json['GenreItems'] as List<dynamic>?)
-              ?.map((g) => (g as Map<String, dynamic>)['Name'] as String?)
-              .whereType<String>()
-              .toList(),
+      primaryImageTag: imageTags is Map ? (imageTags['Primary'] as String?) : null,
+      isFavorite: userData is Map ? (userData['IsFavorite'] as bool? ?? false) : false,
+      genres: genresList,
     );
   }
 

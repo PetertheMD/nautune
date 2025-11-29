@@ -491,11 +491,11 @@ class AudioPlayerService {
       }
       _currentIndex = _queue.indexWhere((t) => t.id == track.id);
       if (_currentIndex == -1) {
-        _queue = [track];
+        _queue = List<JellyfinTrack>.from([track]);
         _currentIndex = 0;
       }
     } else {
-      _queue = [track];
+      _queue = List<JellyfinTrack>.from([track]);
       _currentIndex = 0;
     }
     
@@ -764,7 +764,7 @@ class AudioPlayerService {
     await _player.stop();
     _currentTrack = null;
     _currentTrackController.add(null);
-    _queue.clear();
+    _queue = []; // Create new growable list instead of clearing
     _currentIndex = 0;
     _lastPosition = Duration.zero;
     _isShuffleEnabled = false;

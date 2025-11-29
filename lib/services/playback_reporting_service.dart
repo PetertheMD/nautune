@@ -29,6 +29,8 @@ class PlaybackReportingService {
     JellyfinTrack track, {
     String playMethod = 'DirectPlay',
   }) async {
+    if (serverUrl.startsWith('demo://')) return;
+
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
     
     debugPrint('📡 Reporting to Jellyfin: $serverUrl/Sessions/Playing');
@@ -84,7 +86,7 @@ class PlaybackReportingService {
     Duration position,
     bool isPaused,
   ) async {
-    if (_currentSessionId == null) return;
+    if (_currentSessionId == null || serverUrl.startsWith('demo://')) return;
 
     final url = Uri.parse('$serverUrl/Sessions/Playing/Progress');
     final positionTicks = position.inMicroseconds * 10;
@@ -125,7 +127,7 @@ class PlaybackReportingService {
   ) async {
     _progressTimer?.cancel();
     
-    if (_currentSessionId == null) return;
+    if (_currentSessionId == null || serverUrl.startsWith('demo://')) return;
 
     final url = Uri.parse('$serverUrl/Sessions/Playing/Stopped');
     final positionTicks = position.inMicroseconds * 10;

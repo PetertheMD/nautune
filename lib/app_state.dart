@@ -27,6 +27,9 @@ import 'services/playback_reporting_service.dart';
 import 'services/playback_state_store.dart';
 import 'services/playlist_sync_queue.dart';
 
+// Import SessionProvider - this is new
+import 'providers/session_provider.dart';
+
 class NautuneAppState extends ChangeNotifier {
   NautuneAppState({
     required JellyfinService jellyfinService,
@@ -39,6 +42,7 @@ class NautuneAppState extends ChangeNotifier {
     JellyfinPlaylistStore? playlistStore,
     PlaylistSyncQueue? syncQueue,
     DemoModeProvider? demoModeProvider,
+    SessionProvider? sessionProvider, // New parameter for SessionProvider
   })  : _jellyfinService = jellyfinService,
         _sessionStore = sessionStore,
         _playbackStateStore = playbackStateStore,
@@ -48,6 +52,7 @@ class NautuneAppState extends ChangeNotifier {
         _playlistStore = playlistStore ?? JellyfinPlaylistStore(),
         _syncQueue = syncQueue ?? PlaylistSyncQueue(),
         _demoModeProvider = demoModeProvider,
+        _sessionProvider = sessionProvider, // Initialize the new field
         _downloadService = downloadService {
     _audioPlayerService = AudioPlayerService();
     // Link download service to audio player for offline playback
@@ -66,6 +71,10 @@ class NautuneAppState extends ChangeNotifier {
 
     // Listen to demo mode provider changes
     _demoModeProvider?.addListener(_onDemoModeChanged);
+
+    // Listen to session provider changes (Bridge for Phase 2)
+    _sessionProvider?.addListener(_onSessionChanged);
+    _onSessionChanged(); // Sync initial state
   }
 
   final JellyfinService _jellyfinService;
@@ -77,6 +86,7 @@ class NautuneAppState extends ChangeNotifier {
   final JellyfinPlaylistStore _playlistStore;
   final PlaylistSyncQueue _syncQueue;
   final DemoModeProvider? _demoModeProvider;
+  final SessionProvider? _sessionProvider; // New field for SessionProvider
   late final AudioPlayerService _audioPlayerService;
   late final DownloadService _downloadService;
   CarPlayService? _carPlayService;
@@ -185,6 +195,43 @@ class NautuneAppState extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  // Sync session from SessionProvider
+  void _onSessionChanged() {
+    if (_sessionProvider == null) return;
+    
+    final newSession = _sessionProvider!.session;
+    debugPrint('[NautuneAppState] _onSessionChanged called. Provider session: ${newSession?.selectedLibraryId}');
+    
+    if (_session != newSession) {
+      debugPrint('[NautuneAppState] Updating local session. New Lib ID: ${newSession?.selectedLibraryId}');
+      _session = newSession;
+      notifyListeners();
+      
+      // If we have a new session and it's not demo mode, load libraries
+      if (_session != null && !_isDemoMode) {
+        // Ensure AudioPlayerService has the correct JellyfinService instance
+        _audioPlayerService.setJellyfinService(_jellyfinService);
+        
+        // Initialize playback reporting if not already done
+        final reportingService = PlaybackReportingService(
+          serverUrl: _session!.serverUrl,
+          accessToken: _session!.credentials.accessToken,
+        );
+        _audioPlayerService.setReportingService(reportingService);
+
+        _loadLibraries();
+        if (_session!.selectedLibraryId != null) {
+          _loadLibraryDependentContent(forceRefresh: true);
+        }
+      } else if (_session == null) {
+        // Session cleared
+        _clearLibraryCaches();
+      }
+    }
+  }
+
+  // --- End of _onSessionChanged ---
 
   bool get isAuthenticating => _isAuthenticating;
   JellyfinSession? get session => _session;
@@ -1080,26 +1127,39 @@ class NautuneAppState extends ChangeNotifier {
   }
 
   Future<void> selectLibrary(JellyfinLibrary library) async {
-    final session = _session;
-    if (session == null) {
-      return;
+    debugPrint('Select library called: ${library.name} (${library.id})');
+    if (_sessionProvider == null) {
+      // Fallback for when SessionProvider is not available (shouldn't happen in new setup)
+      final session = _session;
+      if (session == null) {
+        return;
+      }
+      final updated = session.copyWith(
+        selectedLibraryId: library.id,
+        selectedLibraryName: library.name,
+      );
+      _session = updated;
+      if (!_isDemoMode) {
+        await _sessionStore.save(updated);
+      }
+      final snapshot = await _bootstrapService.loadCachedSnapshot(
+        session: updated,
+        libraryIdOverride: library.id,
+      );
+      await _applyBootstrapSnapshot(snapshot);
+      _startBootstrapSync(updated, libraryIdOverride: library.id);
+      unawaited(_loadFavorites(forceRefresh: true));
+      unawaited(_loadGenres(library.id, forceRefresh: true));
+    } else {
+      // Delegate to SessionProvider for state management
+      debugPrint('Calling sessionProvider.updateSelectedLibrary');
+      await _sessionProvider!.updateSelectedLibrary(
+        libraryId: library.id,
+        libraryName: library.name,
+      );
+      debugPrint('Session provider update complete');
+      // _onSessionChanged will handle the rest
     }
-    final updated = session.copyWith(
-      selectedLibraryId: library.id,
-      selectedLibraryName: library.name,
-    );
-    _session = updated;
-    if (!_isDemoMode) {
-      await _sessionStore.save(updated);
-    }
-    final snapshot = await _bootstrapService.loadCachedSnapshot(
-      session: updated,
-      libraryIdOverride: library.id,
-    );
-    await _applyBootstrapSnapshot(snapshot);
-    _startBootstrapSync(updated, libraryIdOverride: library.id);
-    unawaited(_loadFavorites(forceRefresh: true));
-    unawaited(_loadGenres(library.id, forceRefresh: true));
   }
 
   Future<void> refreshAlbums() async {
