@@ -143,6 +143,14 @@ class NautuneAppState extends ChangeNotifier {
   bool _isLoadingGenres = false;
   Object? _genresError;
   List<JellyfinGenre>? _genres;
+  bool _isLoadingRecentlyPlayed = false;
+  List<JellyfinTrack>? _recentlyPlayedTracks;
+  bool _isLoadingMostPlayedTracks = false;
+  List<JellyfinTrack>? _mostPlayedTracks;
+  bool _isLoadingMostPlayedAlbums = false;
+  List<JellyfinAlbum>? _mostPlayedAlbums;
+  bool _isLoadingLongestTracks = false;
+  List<JellyfinTrack>? _longestTracks;
   bool _isOfflineMode = false;  // Toggle between online and offline library
   bool _networkAvailable = true;  // Track network connectivity
   bool _handlingUnauthorizedSession = false;
@@ -305,6 +313,14 @@ class NautuneAppState extends ChangeNotifier {
   bool get isLoadingGenres => _isLoadingGenres;
   Object? get genresError => _genresError;
   List<JellyfinGenre>? get genres => _genres;
+  bool get isLoadingRecentlyPlayed => _isLoadingRecentlyPlayed;
+  List<JellyfinTrack>? get recentlyPlayedTracks => _recentlyPlayedTracks;
+  bool get isLoadingMostPlayedTracks => _isLoadingMostPlayedTracks;
+  List<JellyfinTrack>? get mostPlayedTracks => _mostPlayedTracks;
+  bool get isLoadingMostPlayedAlbums => _isLoadingMostPlayedAlbums;
+  List<JellyfinAlbum>? get mostPlayedAlbums => _mostPlayedAlbums;
+  bool get isLoadingLongestTracks => _isLoadingLongestTracks;
+  List<JellyfinTrack>? get longestTracks => _longestTracks;
   bool get isOfflineMode => _isOfflineMode;
   bool get showVolumeBar => _showVolumeBar;
   bool get crossfadeEnabled => _crossfadeEnabled;
@@ -1271,6 +1287,10 @@ class NautuneAppState extends ChangeNotifier {
       _isLoadingRecent = false;
       _isLoadingFavorites = false;
       _isLoadingGenres = false;
+      _isLoadingRecentlyPlayed = false;
+      _isLoadingMostPlayedTracks = false;
+      _isLoadingMostPlayedAlbums = false;
+      _isLoadingLongestTracks = false;
       notifyListeners();
       return;
     }
@@ -1283,6 +1303,10 @@ class NautuneAppState extends ChangeNotifier {
       _loadRecentlyAddedForLibrary(libraryId, forceRefresh: forceRefresh),
       _loadFavorites(forceRefresh: forceRefresh),
       _loadGenres(libraryId, forceRefresh: forceRefresh),
+      _loadRecentlyPlayed(libraryId, forceRefresh: forceRefresh),
+      _loadMostPlayedTracks(libraryId, forceRefresh: forceRefresh),
+      _loadMostPlayedAlbums(libraryId, forceRefresh: forceRefresh),
+      _loadLongestTracks(libraryId, forceRefresh: forceRefresh),
     ]);
   }
 
@@ -1722,12 +1746,141 @@ class NautuneAppState extends ChangeNotifier {
     }
   }
 
+  Future<void> _loadRecentlyPlayed(String libraryId, {bool forceRefresh = false}) async {
+    _isLoadingRecentlyPlayed = true;
+    notifyListeners();
+
+    if (_isDemoMode) {
+      _recentlyPlayedTracks = _demoTracksFromIds(_demoRecentTrackIds.take(10).toList());
+      _isLoadingRecentlyPlayed = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      _recentlyPlayedTracks = await _jellyfinService.getRecentlyPlayedTracks(
+        libraryId: libraryId,
+        limit: 20,
+      );
+    } catch (error) {
+      _recentlyPlayedTracks = null;
+    } finally {
+      _isLoadingRecentlyPlayed = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadMostPlayedTracks(String libraryId, {bool forceRefresh = false}) async {
+    _isLoadingMostPlayedTracks = true;
+    notifyListeners();
+
+    if (_isDemoMode) {
+      _mostPlayedTracks = _demoTracksFromIds(_demoRecentTrackIds.take(10).toList());
+      _isLoadingMostPlayedTracks = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      _mostPlayedTracks = await _jellyfinService.getMostPlayedTracks(
+        libraryId: libraryId,
+        limit: 20,
+      );
+    } catch (error) {
+      _mostPlayedTracks = null;
+    } finally {
+      _isLoadingMostPlayedTracks = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadMostPlayedAlbums(String libraryId, {bool forceRefresh = false}) async {
+    _isLoadingMostPlayedAlbums = true;
+    notifyListeners();
+
+    if (_isDemoMode) {
+      final demoAlbums = _demoContent?.albums ?? [];
+      _mostPlayedAlbums = demoAlbums.take(10).toList();
+      _isLoadingMostPlayedAlbums = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      _mostPlayedAlbums = await _jellyfinService.getMostPlayedAlbums(
+        libraryId: libraryId,
+        limit: 20,
+      );
+    } catch (error) {
+      _mostPlayedAlbums = null;
+    } finally {
+      _isLoadingMostPlayedAlbums = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadLongestTracks(String libraryId, {bool forceRefresh = false}) async {
+    _isLoadingLongestTracks = true;
+    notifyListeners();
+
+    if (_isDemoMode) {
+      _longestTracks = _demoTracksFromIds(_demoRecentTrackIds.take(10).toList());
+      _isLoadingLongestTracks = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      _longestTracks = await _jellyfinService.getLongestRuntimeTracks(
+        libraryId: libraryId,
+        limit: 20,
+      );
+    } catch (error) {
+      _longestTracks = null;
+    } finally {
+      _isLoadingLongestTracks = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshRecentlyPlayed() async {
+    final libraryId = selectedLibraryId;
+    if (libraryId != null) {
+      await _loadRecentlyPlayed(libraryId, forceRefresh: true);
+    }
+  }
+
+  Future<void> refreshMostPlayedTracks() async {
+    final libraryId = selectedLibraryId;
+    if (libraryId != null) {
+      await _loadMostPlayedTracks(libraryId, forceRefresh: true);
+    }
+  }
+
+  Future<void> refreshMostPlayedAlbums() async {
+    final libraryId = selectedLibraryId;
+    if (libraryId != null) {
+      await _loadMostPlayedAlbums(libraryId, forceRefresh: true);
+    }
+  }
+
+  Future<void> refreshLongestTracks() async {
+    final libraryId = selectedLibraryId;
+    if (libraryId != null) {
+      await _loadLongestTracks(libraryId, forceRefresh: true);
+    }
+  }
+
   void clearLibrarySelection() {
     _session = _session?.copyWith(selectedLibraryId: null, selectedLibraryName: null);
     _albums = null;
     _playlists = null;
     _recentTracks = null;
     _favoriteTracks = null;
+    _recentlyPlayedTracks = null;
+    _mostPlayedTracks = null;
+    _mostPlayedAlbums = null;
+    _longestTracks = null;
     notifyListeners();
     if (_session != null) {
       _sessionStore.save(_session!);

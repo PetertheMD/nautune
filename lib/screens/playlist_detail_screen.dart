@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../jellyfin/jellyfin_playlist.dart';
@@ -9,11 +10,9 @@ class PlaylistDetailScreen extends StatefulWidget {
   const PlaylistDetailScreen({
     super.key,
     required this.playlist,
-    required this.appState,
   });
 
   final JellyfinPlaylist playlist;
-  final NautuneAppState appState;
 
   @override
   State<PlaylistDetailScreen> createState() => _PlaylistDetailScreenState();
@@ -23,21 +22,54 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   bool _isLoading = false;
   Object? _error;
   List<JellyfinTrack>? _tracks;
+  NautuneAppState? _appState;
+  bool? _previousOfflineMode;
+  bool? _previousNetworkAvailable;
+  bool _hasInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _loadTracks();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Get appState with listening enabled
+    final currentAppState = Provider.of<NautuneAppState>(context, listen: true);
+
+    if (!_hasInitialized) {
+      _appState = currentAppState;
+      _previousOfflineMode = currentAppState.isOfflineMode;
+      _previousNetworkAvailable = currentAppState.networkAvailable;
+      _hasInitialized = true;
+      _loadTracks();
+    } else {
+      _appState = currentAppState;
+      final currentOfflineMode = currentAppState.isOfflineMode;
+      final currentNetworkAvailable = currentAppState.networkAvailable;
+
+      if (_previousOfflineMode != currentOfflineMode ||
+          _previousNetworkAvailable != currentNetworkAvailable) {
+        debugPrint('🔄 PlaylistDetail: Connectivity changed');
+        _previousOfflineMode = currentOfflineMode;
+        _previousNetworkAvailable = currentNetworkAvailable;
+        _loadTracks();
+      }
+    }
   }
 
   Future<void> _loadTracks() async {
+    if (_appState == null) return;
+
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
-      final tracks = await widget.appState.getPlaylistTracks(widget.playlist.id);
+      final tracks = await _appState!.getPlaylistTracks(widget.playlist.id);
       if (mounted) {
         setState(() {
           _tracks = tracks;
@@ -58,7 +90,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     try {
       // Note: We need the entryId, not trackId, but for now we'll use trackId
       // In a full implementation, tracks should include their playlist entry IDs
-      await widget.appState.jellyfinService.removeItemsFromPlaylist(
+      await _appState!.jellyfinService.removeItemsFromPlaylist(
         playlistId: widget.playlist.id,
         entryIds: [trackId],
       );
@@ -99,7 +131,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
             ),
             onPressed: () {
               if (_tracks != null && _tracks!.isNotEmpty) {
-                widget.appState.audioService.playShuffled(_tracks!);
+                _appState!.audioService.playShuffled(_tracks!);
               }
             },
           ),
@@ -190,7 +222,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                           ),
                           onTap: () async {
                             try {
-                              await widget.appState.audioPlayerService.playTrack(
+                              await _appState!.audioPlayerService.playTrack(
                                 track,
                                 queueContext: _tracks,
                                 albumId: track.albumId,
@@ -210,8 +242,8 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       },
                     ),
       bottomNavigationBar: NowPlayingBar(
-        audioService: widget.appState.audioPlayerService,
-        appState: widget.appState,
+        audioService: _appState!.audioPlayerService,
+        appState: _appState!,
       ),
     );
   }
@@ -246,7 +278,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
 
     if (result == true && nameController.text.isNotEmpty && mounted) {
       try {
-        await widget.appState.updatePlaylist(
+        await _appState!.updatePlaylist(
           playlistId: widget.playlist.id,
           newName: nameController.text,
         );
@@ -298,7 +330,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
 
     if (result == true && mounted) {
       try {
-        await widget.appState.deletePlaylist(widget.playlist.id);
+        await _appState!.deletePlaylist(widget.playlist.id);
         if (mounted) {
           Navigator.pop(context); // Go back to playlist list
           ScaffoldMessenger.of(context).showSnackBar(

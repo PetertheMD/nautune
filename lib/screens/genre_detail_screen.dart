@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../app_state.dart';
 import '../jellyfin/jellyfin_album.dart';
 import '../jellyfin/jellyfin_genre.dart';
@@ -8,11 +10,9 @@ class GenreDetailScreen extends StatefulWidget {
   const GenreDetailScreen({
     super.key,
     required this.genre,
-    required this.appState,
   });
 
   final JellyfinGenre genre;
-  final NautuneAppState appState;
 
   @override
   State<GenreDetailScreen> createState() => _GenreDetailScreenState();
@@ -22,31 +22,63 @@ class _GenreDetailScreenState extends State<GenreDetailScreen> {
   List<JellyfinAlbum>? _albums;
   bool _isLoading = true;
   Object? _error;
+  NautuneAppState? _appState;
+  bool? _previousOfflineMode;
+  bool? _previousNetworkAvailable;
+  bool _hasInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _loadAlbums();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final currentAppState = Provider.of<NautuneAppState>(context, listen: true);
+
+    if (!_hasInitialized) {
+      _appState = currentAppState;
+      _previousOfflineMode = currentAppState.isOfflineMode;
+      _previousNetworkAvailable = currentAppState.networkAvailable;
+      _hasInitialized = true;
+      _loadAlbums();
+    } else {
+      _appState = currentAppState;
+      final currentOfflineMode = currentAppState.isOfflineMode;
+      final currentNetworkAvailable = currentAppState.networkAvailable;
+
+      if (_previousOfflineMode != currentOfflineMode ||
+          _previousNetworkAvailable != currentNetworkAvailable) {
+        debugPrint('🔄 GenreDetail: Connectivity changed');
+        _previousOfflineMode = currentOfflineMode;
+        _previousNetworkAvailable = currentNetworkAvailable;
+        _loadAlbums();
+      }
+    }
   }
 
   Future<void> _loadAlbums() async {
+    if (_appState == null) return;
+
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
-      final libraryId = widget.appState.selectedLibraryId;
+      final libraryId = _appState!.selectedLibraryId;
       if (libraryId == null) {
         throw Exception('No library selected');
       }
 
-      final session = widget.appState.jellyfinService.session;
+      final session = _appState!.jellyfinService.session;
       if (session == null) {
         throw Exception('No session');
       }
 
-      final client = widget.appState.jellyfinService.jellyfinClient;
+      final client = _appState!.jellyfinService.jellyfinClient;
       if (client == null) {
         throw Exception('No client available');
       }
@@ -128,7 +160,7 @@ class _GenreDetailScreenState extends State<GenreDetailScreen> {
             final album = _albums![index];
             return _AlbumCard(
               album: album,
-              appState: widget.appState,
+              appState: _appState!,
             );
           },
         );

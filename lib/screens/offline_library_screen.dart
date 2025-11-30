@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../app_state.dart';
 import '../jellyfin/jellyfin_track.dart';
 
 class OfflineLibraryScreen extends StatefulWidget {
-  const OfflineLibraryScreen({
-    super.key, 
-    required this.appState,
-  });
-
-  final NautuneAppState appState;
+  const OfflineLibraryScreen({super.key});
 
   @override
   State<OfflineLibraryScreen> createState() => _OfflineLibraryScreenState();
@@ -21,6 +18,7 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final appState = Provider.of<NautuneAppState>(context, listen: false);
 
     return Scaffold(
       appBar: AppBar(
@@ -47,17 +45,17 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
           ),
         ],
       ),
-      body: _currentTab == 0 
-        ? _buildOfflineLibrary(context, theme)
-        : _buildDownloadsTab(context, theme),
+      body: _currentTab == 0
+        ? _buildOfflineLibrary(context, theme, appState)
+        : _buildDownloadsTab(context, theme, appState),
     );
   }
 
-  Widget _buildOfflineLibrary(BuildContext context, ThemeData theme) {
+  Widget _buildOfflineLibrary(BuildContext context, ThemeData theme, NautuneAppState appState) {
     return ListenableBuilder(
-      listenable: widget.appState.downloadService,
+      listenable: appState.downloadService,
       builder: (context, _) {
-        final downloads = widget.appState.downloadService.completedDownloads;
+        final downloads = appState.downloadService.completedDownloads;
 
         if (downloads.isEmpty) {
           return Center(
@@ -128,8 +126,8 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
             ),
             Expanded(
               child: _showByAlbum
-                  ? _buildByAlbum(theme, downloads)
-                  : _buildByArtist(theme, downloads),
+                  ? _buildByAlbum(theme, downloads, appState)
+                  : _buildByArtist(theme, downloads, appState),
             ),
           ],
         );
@@ -137,7 +135,7 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
     );
   }
 
-  Widget _buildByAlbum(ThemeData theme, List downloads) {
+  Widget _buildByAlbum(ThemeData theme, List downloads, NautuneAppState appState) {
     // Group by album
     final Map<String, List> albumGroups = {};
     for (final download in downloads) {
@@ -191,7 +189,7 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
                   final tracks = albumDownloads
                       .map((d) => d.track as JellyfinTrack)
                       .toList();
-                  widget.appState.audioPlayerService.playTrack(
+                  appState.audioPlayerService.playTrack(
                     track,
                     queueContext: tracks,
                   );
@@ -204,7 +202,7 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
     );
   }
 
-  Widget _buildByArtist(ThemeData theme, List downloads) {
+  Widget _buildByArtist(ThemeData theme, List downloads, NautuneAppState appState) {
     // Group by artist
     final Map<String, List> artistGroups = {};
     for (final download in downloads) {
@@ -275,7 +273,7 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
                       final allTracks = tracks
                           .map((d) => d.track as JellyfinTrack)
                           .toList();
-                      widget.appState.audioPlayerService.playTrack(
+                      appState.audioPlayerService.playTrack(
                         track,
                         queueContext: allTracks,
                       );
@@ -296,13 +294,13 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildDownloadsTab(BuildContext context, ThemeData theme) {
+  Widget _buildDownloadsTab(BuildContext context, ThemeData theme, NautuneAppState appState) {
     return ListenableBuilder(
-      listenable: widget.appState.downloadService,
+      listenable: appState.downloadService,
       builder: (context, _) {
-        final downloads = widget.appState.downloadService.downloads;
-        final completedCount = widget.appState.downloadService.completedCount;
-        final activeCount = widget.appState.downloadService.activeCount;
+        final downloads = appState.downloadService.downloads;
+        final completedCount = appState.downloadService.completedCount;
+        final activeCount = appState.downloadService.activeCount;
 
         if (downloads.isEmpty) {
           return Center(
@@ -370,7 +368,7 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
                             ),
                           );
                           if (confirm == true) {
-                            await widget.appState.downloadService
+                            await appState.downloadService
                                 .clearAllDownloads();
                           }
                         },
@@ -457,7 +455,7 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
                     trailing: IconButton(
                       icon: const Icon(Icons.close),
                       onPressed: () {
-                        widget.appState.downloadService.deleteDownload(track.id);
+                        appState.downloadService.deleteDownload(track.id);
                       },
                     ),
                   );
