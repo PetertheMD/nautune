@@ -153,6 +153,12 @@ class DownloadService extends ChangeNotifier {
             runTimeTicks: itemData['trackDuration'] != null
                 ? (itemData['trackDuration'] as int) * 10
                 : null,
+            container: itemData['trackContainer'] as String?,
+            codec: itemData['trackCodec'] as String?,
+            bitrate: (itemData['trackBitrate'] as num?)?.toInt(),
+            sampleRate: (itemData['trackSampleRate'] as num?)?.toInt(),
+            bitDepth: (itemData['trackBitDepth'] as num?)?.toInt(),
+            channels: (itemData['trackChannels'] as num?)?.toInt(),
           );
 
           final item = DownloadItem.fromJson(itemData, track);

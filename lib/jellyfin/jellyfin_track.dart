@@ -436,6 +436,12 @@ class JellyfinTrack {
       'streamUrlOverride': streamUrlOverride,
       'assetPathOverride': assetPathOverride,
       'normalizationGain': normalizationGain,
+      'container': container,
+      'codec': codec,
+      'bitrate': bitrate,
+      'sampleRate': sampleRate,
+      'bitDepth': bitDepth,
+      'channels': channels,
     };
   }
 
@@ -468,6 +474,12 @@ class JellyfinTrack {
       streamUrlOverride: json['streamUrlOverride'] is String ? json['streamUrlOverride'] as String : null,
       assetPathOverride: json['assetPathOverride'] is String ? json['assetPathOverride'] as String : null,
       normalizationGain: normalizationGain,
+      container: json['container'] is String ? json['container'] as String : null,
+      codec: json['codec'] is String ? json['codec'] as String : null,
+      bitrate: json['bitrate'] is int ? json['bitrate'] as int : (json['bitrate'] is num ? (json['bitrate'] as num).toInt() : null),
+      sampleRate: json['sampleRate'] is int ? json['sampleRate'] as int : (json['sampleRate'] is num ? (json['sampleRate'] as num).toInt() : null),
+      bitDepth: json['bitDepth'] is int ? json['bitDepth'] as int : (json['bitDepth'] is num ? (json['bitDepth'] as num).toInt() : null),
+      channels: json['channels'] is int ? json['channels'] as int : (json['channels'] is num ? (json['channels'] as num).toInt() : null),
     );
   }
 
