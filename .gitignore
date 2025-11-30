@@ -47,4 +47,8 @@ app.*.map.json
 # Downloaded music files
 downloads/
 
+# Build artifacts
 /dist/
+AppDir/
+appimage-builder
+appimagetool

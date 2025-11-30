@@ -2,7 +2,32 @@
 
 Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter and delivers a beautiful deep-sea themed experience with smooth native audio playback, animated waveform visualization, and seamless Jellyfin integration.
 
-## 🚀 Latest Updates (v1.8.3+)
+## 🚀 Latest Updates (v1.8.4+)
+- **🏗️ Phase 2 Architecture Migration - 90% Complete!**: Major Provider pattern adoption
+  - ✅ **9 screens migrated**: SettingsScreen, QueueScreen, FullPlayerScreen, AlbumDetailScreen, ArtistDetailScreen, PlaylistDetailScreen, GenreDetailScreen, OfflineLibraryScreen, and partial LibraryScreen
+  - ✅ **Auto-refresh on connectivity**: Detail screens automatically reload when switching online/offline modes
+  - ✅ **Smarter state management**: Screens use `Provider.of<NautuneAppState>` instead of parameter passing
+  - ✅ **Better separation**: UI components decoupled from god object
+  - ✅ **Remaining**: Final LibraryScreen migration (10% - most complex screen with 7 tabs)
+- **🎨 Home Screen Redesign**: Clean horizontal-only layout with 6 discovery shelves
+  - ✅ **Continue Listening**: Resume tracks from where you left off
+  - ✅ **Recently Played**: Tracks you've played recently
+  - ✅ **Recently Added**: Latest albums added to your library
+  - ✅ **Most Played Albums**: Your most-listened albums
+  - ✅ **Most Played Tracks**: Your favorite tracks
+  - ✅ **Longest Tracks**: Epic tracks for long listening sessions
+  - ✅ **Removed vertical clutter**: Eliminated "Explore Tracks" filter section
+  - ✅ **Consistent design**: All shelves follow same horizontal scroll pattern
+  - ✅ **Data loading**: Parallel loading of all shelf content on library selection
+  - ✅ **Demo mode support**: All shelves work in demo mode with sample data
+- **🔄 Smart Auto-Refresh**: Detail screens reactively update on connectivity changes
+  - ✅ **Album details**: Automatically reload tracks when going online/offline
+  - ✅ **Playlist details**: Refresh when connectivity state changes
+  - ✅ **Genre details**: Auto-reload albums when network status changes
+  - ✅ **No manual refresh needed**: Seamless experience when airplane mode toggles
+  - ✅ **Listen-based updates**: Uses Provider pattern for reactive state changes
+
+## 🚀 Previous Updates (v1.8.3+)
 - **⚡ Smart Track Pre-Loading**: Intelligent buffering for truly gapless playback
   - ✅ **70% pre-load trigger**: Automatically loads next track when current reaches 70%
   - ✅ **Platform buffering**: Audio data buffered by native decoders (not just URLs)
@@ -162,9 +187,34 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
 - Hardened startup logging (`Nautune initialization started/finished`) to make it easier to diagnose device issues from Xcode or `flutter logs`.
 - CarPlay integrations now match Jellyfin data more accurately by tracking album artist IDs and forwarding precise playback positions to the Jellyfin server.
 
-## 🏗️ Architecture Improvements (Phase 1 Complete!)
+## 🏗️ Architecture Improvements (Phase 1 Complete, Phase 2: 90% Complete!)
 
 Nautune has undergone a major architectural refactoring to improve performance, maintainability, and scalability:
+
+### ✅ Phase 2: Provider Pattern Migration (90% Complete!)
+
+**Goal**: Migrate all screens from parameter-passing to Provider pattern for better state management
+
+**Completed Screens (9/10)**:
+1. **SettingsScreen** - Uses SessionProvider + UIStateProvider
+2. **QueueScreen** - Uses Provider for audio service access
+3. **FullPlayerScreen** - Migrated with didChangeDependencies pattern
+4. **AlbumDetailScreen** - Auto-refreshes on connectivity changes
+5. **ArtistDetailScreen** - Uses Provider pattern
+6. **PlaylistDetailScreen** - Auto-refreshes on connectivity changes
+7. **GenreDetailScreen** - Auto-refreshes on connectivity changes
+8. **OfflineLibraryScreen** - Clean Provider-based implementation
+9. **LibraryScreen (Partial)** - Home tab fully refactored with 6 horizontal shelves
+
+**Remaining**:
+- **LibraryScreen (Complete)** - Most complex screen with 7 tabs, final migration pending
+
+**Key Improvements**:
+- ✅ **Auto-refresh capability**: Detail screens detect connectivity changes and reload automatically
+- ✅ **Cleaner constructors**: Screens no longer need appState as parameter
+- ✅ **Better testability**: Screens can be tested with mock providers
+- ✅ **Reactive updates**: UI automatically rebuilds when state changes
+- ✅ **Consistent pattern**: All screens follow same state access approach
 
 ### ✅ Download Service Migration to Hive
 - **Before**: Entire download database stored as a single JSON string in SharedPreferences
@@ -216,7 +266,7 @@ The monolithic `NautuneAppState` (1674 lines) has been split into focused, testa
 - 👨‍💻 **Developer Experience**: Clear separation of concerns, easy to extend
 - 🚀 **Future-Proof**: Ready for Phase 2 features (EQ, Lyrics, Scrobbling)
 
-**Next**: Phase 2 (Widget Refactoring) - actively migrating UI components to consume new providers (LoginScreen complete).
+**Status**: Phase 2 (Widget Refactoring) - **90% complete!** 9 out of 10 screens migrated to Provider pattern with auto-refresh capability.
 
 ---
 
@@ -321,17 +371,20 @@ Apple's Guideline 2.1 requires working reviewer access. Nautune includes an on-d
 - **✅ Albums Tab**: Grid view with paginated loading (50 albums per page), album artwork, year, and artist info - click to see tracks
 - **✅ Artists Tab**: Browse all artists with paginated loading (50 per page) and circular profile artwork - click to see their albums
 - **✅ Genres Tab**: Browse music by genre - click any genre to see all albums with that tag (server-filtered)
-- **✅ Most Tab**: Comprehensive music discovery with 4 view modes (icon-only controls)
-  - **Most Played Tracks**: Server-tracked most played songs
-  - **Recently Played Tracks**: Tracks you've listened to recently
-  - **Recently Added Tracks**: Newly added tracks to your library
-  - **Longest Runtime Tracks**: Tracks sorted by duration (longest first)
-  - All tracks are playable directly from the Most tab with tap-to-play functionality
+- **✅ Home Tab**: Beautiful discovery dashboard with 6 horizontal shelves
+  - **Continue Listening**: Resume tracks from where you left off with horizontal track chips
+  - **Recently Played**: Tracks you've played recently in horizontal scrollable list
+  - **Recently Added**: Latest albums added to your library with album artwork
+  - **Most Played Albums**: Your most-listened albums in horizontal grid
+  - **Most Played Tracks**: Your favorite tracks in horizontal scrollable list
+  - **Longest Tracks**: Epic tracks for long listening sessions
+  - All content is playable with tap-to-play functionality
+  - Horizontal-only layout for clean, consistent experience
   - **Smart Tab Switching**: Automatically becomes "Downloads" tab when in offline mode
 - **✅ Instant Mix**: Create dynamic playlists from any track, album, or artist
 - **✅ Offline Mode Toggle**: Wave icon (🌊) switches between online Jellyfin library and offline downloads
   - **Tap**: Toggle online/offline mode (violet = offline, light purple = online)
-  - **Most Tab**: Automatically becomes Downloads management when offline
+  - **Home Tab**: Automatically becomes Downloads management when offline
   - **Search Tab**: Searches downloaded content only when offline
   - **🛫 Offline-First Boot**: App automatically enters offline mode if network is unavailable during startup (10-second timeout)
   - **Network Banner**: Visual indicator when offline with retry button to restore connection
@@ -707,7 +760,7 @@ All iOS features are built and deployed via **Codemagic CI**:
 - [x] **Better playback error handling** - clear messages for unavailable files
 - [x] **Recent tab with toggle** between recently played and recently added
 - [x] **iOS CarPlay** powered by flutter_carplay plugin with full library browsing (albums, artists, playlists, favorites, downloads) and **offline support**
-- [x] **Most Tab with 4 view modes**: Most Played, Recently Played, Recently Added, and Longest Runtime tracks (all playable with tap-to-play)
+- [x] **Home Tab with 6 horizontal shelves**: Continue Listening, Recently Played, Recently Added, Most Played Albums, Most Played Tracks, and Longest Tracks (all playable with tap-to-play)
 - [x] **Waveform visualization** using Jellyfin's waveform API with per-track caching
 - [x] **Tabbed navigation (Albums/Artists/Search/Favorites/Recent/Playlists/Downloads)** - 7 tabs total
 - [x] **Settings screen** with transcoding options accessible from app title
