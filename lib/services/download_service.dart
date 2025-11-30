@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../jellyfin/jellyfin_album.dart';
 import '../jellyfin/jellyfin_service.dart';
@@ -83,7 +81,7 @@ class DownloadService extends ChangeNotifier {
     if (_demoDownloadIds.isEmpty) return;
     final ids = List<String>.from(_demoDownloadIds);
     for (final trackId in ids) {
-      await deleteDownload(trackId);
+      await deleteDownloadReference(trackId, 'demo'); // Use new method
     }
     _demoDownloadIds.clear();
   }
@@ -113,6 +111,7 @@ class DownloadService extends ChangeNotifier {
       queuedAt: DateTime.now(),
       completedAt: DateTime.now(),
       isDemoAsset: true,
+      owners: {'demo'}, // Add 'demo' as owner
     );
 
     _demoDownloadIds.add(track.id);
@@ -122,9 +121,6 @@ class DownloadService extends ChangeNotifier {
 
   Future<void> _loadDownloads() async {
     try {
-      // First, check for migration from SharedPreferences
-      await _migrateFromSharedPreferences();
-
       // Load from Hive
       final box = _box;
       if (box == null) {
@@ -179,42 +175,7 @@ class DownloadService extends ChangeNotifier {
     }
   }
 
-  /// Migrates download data from SharedPreferences to Hive (one-time operation)
-  Future<void> _migrateFromSharedPreferences() async {
-    try {
-      final box = _box;
-      if (box == null) return;
 
-      // Check if we've already migrated
-      final migrated = box.get('_migrated_from_prefs', defaultValue: false);
-      if (migrated == true) return;
-
-      debugPrint('Checking for SharedPreferences migration...');
-      final prefs = await SharedPreferences.getInstance();
-      final downloadsJson = prefs.getString('downloads');
-
-      if (downloadsJson != null && downloadsJson.isNotEmpty) {
-        debugPrint('Migrating downloads from SharedPreferences to Hive...');
-        final Map<String, dynamic> data = jsonDecode(downloadsJson);
-
-        // Store in Hive
-        await box.put(_downloadsKey, data);
-
-        // Mark migration as complete
-        await box.put('_migrated_from_prefs', true);
-
-        // Clean up old SharedPreferences data
-        await prefs.remove('downloads');
-
-        debugPrint('Migration complete: ${data.length} downloads migrated');
-      } else {
-        // No data to migrate, just mark as migrated
-        await box.put('_migrated_from_prefs', true);
-      }
-    } catch (e) {
-      debugPrint('Error during migration: $e');
-    }
-  }
 
   Future<void> _saveDownloads() async {
     try {
@@ -239,6 +200,7 @@ class DownloadService extends ChangeNotifier {
   Future<void> verifyAndCleanupDownloads() async {
     debugPrint('Verifying download files...');
     final toRemove = <String>{};  // Use Set to prevent duplicates
+    bool pathsUpdated = false;
 
     for (final entry in _downloads.entries) {
       final trackId = entry.key;
@@ -247,21 +209,49 @@ class DownloadService extends ChangeNotifier {
       if (item.isCompleted) {
         final file = File(item.localPath);
         if (!await file.exists()) {
-          debugPrint('Missing file for track: ${item.track.name} (${item.localPath})');
-          toRemove.add(trackId);
-
-          // Also clean up artwork
-          try {
-            final artworkPath = await _getArtworkPath(trackId);
-            final artworkFile = File(artworkPath);
-            if (await artworkFile.exists()) {
-              await artworkFile.delete();
+          // Attempt rescue for iOS path changes
+          bool rescued = false;
+          if (Platform.isIOS) {
+            try {
+              final filename = item.localPath.split(Platform.pathSeparator).last;
+              final dir = await getApplicationDocumentsDirectory();
+              // Reconstruct path: Documents/downloads/filename
+              final newPath = '${dir.path}/downloads/$filename';
+              final newFile = File(newPath);
+              
+              if (await newFile.exists()) {
+                debugPrint('Rescued download path for ${item.track.name}: $newPath');
+                _downloads[trackId] = item.copyWith(localPath: newPath);
+                rescued = true;
+                pathsUpdated = true;
+              }
+            } catch (e) {
+              debugPrint('Failed to rescue iOS path for $trackId: $e');
             }
-          } catch (e) {
-            debugPrint('Error cleaning artwork: $e');
+          }
+
+          if (!rescued) {
+            debugPrint('Missing file for track: ${item.track.name} (${item.localPath})');
+            toRemove.add(trackId);
+
+            // Also clean up artwork
+            try {
+              final artworkPath = await _getArtworkPath(trackId);
+              final artworkFile = File(artworkPath);
+              if (await artworkFile.exists()) {
+                await artworkFile.delete();
+              }
+            } catch (e) {
+              debugPrint('Error cleaning artwork: $e');
+            }
           }
         }
       }
+    }
+
+    if (pathsUpdated) {
+      await _saveDownloads();
+      notifyListeners();
     }
 
     // Remove orphaned entries (batch operation)
@@ -398,6 +388,7 @@ class DownloadService extends ChangeNotifier {
       progress: 0.0,
       queuedAt: startTime,
       isDemoAsset: true,
+      owners: {'demo'}, // Add 'demo' as owner for simulated downloads
     );
     notifyListeners();
 
@@ -414,19 +405,35 @@ class DownloadService extends ChangeNotifier {
       downloadedBytes: bytes.length,
       completedAt: DateTime.now(),
       isDemoAsset: true,
+      owners: {'demo'}, // Add 'demo' as owner for simulated downloads
     );
     _demoDownloadIds.add(track.id);
     notifyListeners();
     await _saveDownloads();
   }
 
-  Future<void> downloadTrack(JellyfinTrack track) async {
+  Future<void> downloadTrack(JellyfinTrack track, {String? ownerId}) async {
     if (_downloads.containsKey(track.id)) {
-      if (_downloads[track.id]!.isCompleted) {
+      final existingItem = _downloads[track.id]!;
+      if (existingItem.isCompleted) {
+        // If already completed, just add the new owner and return
+        if (ownerId != null && !existingItem.owners.contains(ownerId)) {
+          existingItem.owners.add(ownerId);
+          await _saveDownloads();
+          notifyListeners();
+          debugPrint('Added owner $ownerId to already downloaded track: ${track.name}');
+        }
         debugPrint('Track already downloaded: ${track.name}');
         return;
       }
-      if (_downloads[track.id]!.isDownloading || _downloads[track.id]!.isQueued) {
+      if (existingItem.isDownloading || existingItem.isQueued) {
+        // If in progress, just add the new owner and return
+        if (ownerId != null && !existingItem.owners.contains(ownerId)) {
+          existingItem.owners.add(ownerId);
+          await _saveDownloads();
+          notifyListeners();
+          debugPrint('Added owner $ownerId to in-progress track: ${track.name}');
+        }
         debugPrint('Track already in queue: ${track.name}');
         return;
       }
@@ -443,6 +450,7 @@ class DownloadService extends ChangeNotifier {
       localPath: localPath,
       status: DownloadStatus.queued,
       queuedAt: DateTime.now(),
+      owners: ownerId != null ? {ownerId} : {}, // Initialize with ownerId if provided
     );
 
     _downloads[track.id] = downloadItem;
@@ -457,7 +465,7 @@ class DownloadService extends ChangeNotifier {
     try {
       final tracks = await jellyfinService.loadAlbumTracks(albumId: album.id);
       for (final track in tracks) {
-        await downloadTrack(track);
+        await downloadTrack(track, ownerId: album.id); // Pass album ID as owner
       }
     } catch (e) {
       debugPrint('Error downloading album: $e');
@@ -581,11 +589,50 @@ class DownloadService extends ChangeNotifier {
     final item = _downloads[trackId];
     if (item == null) return;
 
+    // This method is for permanently deleting a download regardless of owners
+    // (e.g., from an "all downloads" list)
+    // If there are owners, this implies a forced deletion.
+    await _performDelete(trackId, item.localPath);
+    _downloads.remove(trackId);
+    _downloadQueue.remove(trackId);
+    _demoDownloadIds.remove(trackId);
+    
+    notifyListeners();
+    await _saveDownloads();
+    
+    debugPrint('Permanently deleted download: ${item.track.name}');
+  }
+
+  Future<void> deleteDownloadReference(String trackId, String ownerId) async {
+    final item = _downloads[trackId];
+    if (item == null) return;
+
+    // Remove the owner ID
+    item.owners.remove(ownerId);
+    debugPrint('Removed owner "$ownerId" from track "${item.track.name}". Remaining owners: ${item.owners.length}');
+
+    // If no more owners, proceed with physical deletion
+    if (item.owners.isEmpty) {
+      await _performDelete(trackId, item.localPath);
+      _downloads.remove(trackId);
+      _downloadQueue.remove(trackId);
+      _demoDownloadIds.remove(trackId); // Remove from demo set if it was there
+      debugPrint('No more owners for "${item.track.name}". Physically deleted.');
+    } else {
+      // If owners still exist, just save the updated item (with fewer owners)
+      await _saveDownloads();
+      debugPrint('Track "${item.track.name}" still has owners. Not physically deleted.');
+    }
+    
+    notifyListeners();
+  }
+
+  Future<void> _performDelete(String trackId, String localPath) async {
     try {
-      _demoDownloadIds.remove(trackId);
-      final file = File(item.localPath);
+      final file = File(localPath);
       if (await file.exists()) {
         await file.delete();
+        debugPrint('Deleted file: $localPath');
       }
       
       // Also delete cached artwork
@@ -593,22 +640,17 @@ class DownloadService extends ChangeNotifier {
       final artworkFile = File(artworkPath);
       if (await artworkFile.exists()) {
         await artworkFile.delete();
+        debugPrint('Deleted artwork: $artworkPath');
       }
-      
-      _downloads.remove(trackId);
-      _downloadQueue.remove(trackId);
-      
-      notifyListeners();
-      await _saveDownloads();
-      
-      debugPrint('Deleted download: ${item.track.name}');
     } catch (e) {
-      debugPrint('Error deleting download: $e');
+      debugPrint('Error during physical deletion of $trackId: $e');
     }
   }
 
   Future<void> clearAllDownloads() async {
     for (final item in completedDownloads) {
+      // Intentionally call deleteDownload to force removal of all files
+      // regardless of owner, as this is a "clear all" operation.
       await deleteDownload(item.track.id);
     }
     _demoDownloadIds.clear();

@@ -20,6 +20,12 @@ class JellyfinTrack {
     this.streamUrlOverride,
     this.assetPathOverride,
     this.normalizationGain,
+    this.container,
+    this.codec,
+    this.bitrate,
+    this.sampleRate,
+    this.bitDepth,
+    this.channels,
   });
 
   final String id;
@@ -41,13 +47,15 @@ class JellyfinTrack {
   final String? assetPathOverride;
   final double? normalizationGain; // dB adjustment for ReplayGain
 
-  factory JellyfinTrack.fromJson(Map<String, dynamic> json, {String? serverUrl, String? token, String? userId}) {
-    // Helper to safely read nested maps from dynamic JSON shapes (Hive may produce Map<dynamic, dynamic>)
-    dynamic readMapField(dynamic m, String key) {
-      if (m is Map) return m[key];
-      return null;
-    }
+  // Audio metadata from MediaStreams
+  final String? container; // File format (FLAC, MP3, M4A, etc.)
+  final String? codec; // Audio codec (flac, mp3, aac, opus, etc.)
+  final int? bitrate; // Bitrate in bps
+  final int? sampleRate; // Sample rate in Hz (44100, 48000, 96000, etc.)
+  final int? bitDepth; // Bit depth (16, 24, 32)
+  final int? channels; // Number of audio channels (1=mono, 2=stereo, 6=5.1, etc.)
 
+  factory JellyfinTrack.fromJson(Map<String, dynamic> json, {String? serverUrl, String? token, String? userId}) {
     final rawArtists = json['Artists'];
     final artistsList = (rawArtists is List) ? rawArtists.whereType<String>().toList() : <String>[];
 
@@ -58,8 +66,11 @@ class JellyfinTrack {
     bool isFavorite = false;
     if (userData is Map) {
       final fav = userData['IsFavorite'];
-      if (fav is bool) isFavorite = fav;
-      else if (fav is num) isFavorite = fav != 0;
+      if (fav is bool) {
+        isFavorite = fav;
+      } else if (fav is num) {
+        isFavorite = fav != 0;
+      }
     }
 
     final runTimeTicksVal = json['RunTimeTicks'];
@@ -67,6 +78,48 @@ class JellyfinTrack {
 
     final normVal = json['NormalizationGain'];
     final normalizationGain = normVal is num ? normVal.toDouble() : null;
+
+    // Parse audio metadata from MediaStreams (first audio stream)
+    String? container;
+    String? codec;
+    int? bitrate;
+    int? sampleRate;
+    int? bitDepth;
+    int? channels;
+
+    // Container/format from top level
+    final containerField = json['Container'];
+    if (containerField is String) {
+      container = containerField.toUpperCase(); // FLAC, MP3, M4A, etc.
+    }
+
+    // Audio stream metadata
+    final mediaStreams = json['MediaStreams'];
+    if (mediaStreams is List && mediaStreams.isNotEmpty) {
+      // Find first audio stream
+      final audioStream = mediaStreams.firstWhere(
+        (stream) => stream is Map && stream['Type'] == 'Audio',
+        orElse: () => null,
+      );
+
+      if (audioStream is Map) {
+        codec = audioStream['Codec'] is String
+            ? (audioStream['Codec'] as String).toUpperCase()
+            : null;
+        bitrate = audioStream['BitRate'] is num
+            ? (audioStream['BitRate'] as num).toInt()
+            : null;
+        sampleRate = audioStream['SampleRate'] is num
+            ? (audioStream['SampleRate'] as num).toInt()
+            : null;
+        bitDepth = audioStream['BitDepth'] is num
+            ? (audioStream['BitDepth'] as num).toInt()
+            : null;
+        channels = audioStream['Channels'] is num
+            ? (audioStream['Channels'] as num).toInt()
+            : null;
+      }
+    }
 
     return JellyfinTrack(
       id: json['Id'] is String ? json['Id'] as String : '',
@@ -87,6 +140,12 @@ class JellyfinTrack {
       streamUrlOverride: null,
       assetPathOverride: null,
       normalizationGain: normalizationGain,
+      container: container,
+      codec: codec,
+      bitrate: bitrate,
+      sampleRate: sampleRate,
+      bitDepth: bitDepth,
+      channels: channels,
     );
   }
 
@@ -109,6 +168,12 @@ class JellyfinTrack {
     String? streamUrlOverride,
     String? assetPathOverride,
     double? normalizationGain,
+    String? container,
+    String? codec,
+    int? bitrate,
+    int? sampleRate,
+    int? bitDepth,
+    int? channels,
   }) {
     return JellyfinTrack(
       id: id ?? this.id,
@@ -129,6 +194,12 @@ class JellyfinTrack {
       streamUrlOverride: streamUrlOverride ?? this.streamUrlOverride,
       assetPathOverride: assetPathOverride ?? this.assetPathOverride,
       normalizationGain: normalizationGain ?? this.normalizationGain,
+      container: container ?? this.container,
+      codec: codec ?? this.codec,
+      bitrate: bitrate ?? this.bitrate,
+      sampleRate: sampleRate ?? this.sampleRate,
+      bitDepth: bitDepth ?? this.bitDepth,
+      channels: channels ?? this.channels,
     );
   }
 
@@ -167,6 +238,58 @@ class JellyfinTrack {
     // Clamp to reasonable range (0.1 to 2.0) to prevent extreme adjustments
     final multiplier = math.pow(10, normalizationGain! / 20).toDouble();
     return multiplier.clamp(0.1, 2.0);
+  }
+
+  /// Returns formatted audio quality info for display
+  /// Example: "FLAC • 1411 kbps • 16-bit/44.1kHz • Stereo"
+  String? get audioQualityInfo {
+    final parts = <String>[];
+
+    // Format (FLAC, MP3, AAC, etc.)
+    if (container != null) {
+      parts.add(container!);
+    } else if (codec != null) {
+      parts.add(codec!);
+    }
+
+    // Bitrate (in kbps)
+    if (bitrate != null) {
+      final kbps = (bitrate! / 1000).round();
+      parts.add('$kbps kbps');
+    }
+
+    // Bit depth and sample rate
+    if (bitDepth != null && sampleRate != null) {
+      final khz = (sampleRate! / 1000).toStringAsFixed(1);
+      parts.add('$bitDepth-bit/$khz kHz');
+    } else if (sampleRate != null) {
+      final khz = (sampleRate! / 1000).toStringAsFixed(1);
+      parts.add('$khz kHz');
+    } else if (bitDepth != null) {
+      parts.add('$bitDepth-bit');
+    }
+
+    // Channel layout
+    if (channels != null) {
+      switch (channels!) {
+        case 1:
+          parts.add('Mono');
+          break;
+        case 2:
+          parts.add('Stereo');
+          break;
+        case 6:
+          parts.add('5.1');
+          break;
+        case 8:
+          parts.add('7.1');
+          break;
+        default:
+          parts.add('${channels}ch');
+      }
+    }
+
+    return parts.isEmpty ? null : parts.join(' • ');
   }
 
   /// Returns the most suitable image tag for artwork.

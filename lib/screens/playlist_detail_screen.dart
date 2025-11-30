@@ -125,10 +125,8 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
         actions: [
           // Shuffle button
           IconButton(
-            icon: const Text(
-              '🌊🌊',
-              style: TextStyle(fontSize: 20),
-            ),
+            icon: const Icon(Icons.shuffle),
+            tooltip: 'Shuffle',
             onPressed: () {
               if (_tracks != null && _tracks!.isNotEmpty) {
                 _appState!.audioService.playShuffled(_tracks!);

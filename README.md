@@ -2,7 +2,48 @@
 
 Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter and delivers a beautiful deep-sea themed experience with smooth native audio playback, animated waveform visualization, and seamless Jellyfin integration.
 
-## 🚀 Latest Updates (v1.8.4+)
+## 🚀 Latest Updates (v1.9.0+)
+- **🛡️ Download Dependency Tracking**: Intelligent file management
+  - ✅ **Reference counting**: Tracks ownership of downloaded files (albums vs playlists)
+  - ✅ **Prevents data loss**: Deleting an album won't delete tracks that are also in your playlists
+  - ✅ **Smart cleanup**: Only deletes physical files when *all* references are removed
+  - ✅ **Context-aware deletion**: "Remove from Download Manager" keeps files if they belong to an album
+- **🖼️ Tiered Image Loading**: High-performance artwork caching
+  - ✅ **Smart resolution**: Automatically fetches thumbnails for lists and high-res for detail views
+  - ✅ **Memory & Disk Caching**: Powered by `cached_network_image` for instant re-loads
+  - ✅ **Offline support**: Cached images work perfectly in airplane mode
+  - ✅ **Bandwidth saver**: Drastically reduces server load and data usage
+- **⚡ Storage Engine Migration**: Complete move to Hive
+  - ✅ **Unified storage**: Migrated SharedPreferences to Hive boxes (session, playlists, playback state)
+  - ✅ **Better performance**: Faster read/write operations for large datasets
+  - ✅ **Structured data**: Type-safe storage for complex objects
+  - ✅ **Zero-migration**: Seamlessly transitions data for existing users
+- **🍏 iOS Path Verification**: robust offline support for iPhone updates
+  - ✅ **Automatic recovery**: Detects when iOS changes app container UUIDs (common on app updates)
+  - ✅ **Path rescue**: Automatically finds and relinks downloaded files in the new location
+  - ✅ **Self-healing**: Runs on every app startup to ensure your offline library never disappears
+- **🎧 Audio Quality Display**: Audiophile-grade metadata in fullscreen player
+  - ✅ **Rich audio info**: Shows format, bitrate, sample rate, bit depth, and channel layout
+  - ✅ **Example output**: "FLAC • 1411 kbps • 16-bit/44.1 kHz • Stereo"
+  - ✅ **Automatic parsing**: Reads MediaStreams data from Jellyfin API
+  - ✅ **Beautiful design**: Rounded container with ocean theme styling
+  - ✅ **Always visible**: Displayed below album name when metadata is available
+- **▶️ Play Next & Queue Management**: Advanced queue control for power users
+  - ✅ **Play Next**: Add tracks to play immediately after current song (without disrupting queue)
+  - ✅ **Add to Queue**: Append tracks to end of queue
+  - ✅ **Available everywhere**: Album tracks, favorites, search results, fullscreen player
+  - ✅ **Smart queue handling**: Automatically manages queue indices and pre-loading
+  - ✅ **User feedback**: Toast notifications confirm queue operations
+- **✨ Instant Mix Integration**: AI-powered music discovery via Jellyfin
+  - ✅ **One-tap mixes**: Create 50-track radio-style playlists from any track, album, or artist
+  - ✅ **Server-side intelligence**: Jellyfin analyzes music similarity (genre, era, style)
+  - ✅ **Multiple entry points**: Sparkle icon (✨) in album/artist detail screens
+  - ✅ **Track context menus**: Instant Mix option in all three-dot menus
+  - ✅ **Auto-play**: Mix starts playing immediately after generation
+  - ✅ **Smart feedback**: Loading states and error handling for empty results
+- **🔀 UI Polish**: Better iconography across the app
+  - ✅ **Shuffle icon**: Replaced emoji (🌊🌊) with proper Material Icons.shuffle
+  - ✅ **Consistent design**: Professional icons in album and playlist screens
 - **🏗️ Phase 2 Architecture Migration - 90% Complete!**: Major Provider pattern adoption
   - ✅ **9 screens migrated**: SettingsScreen, QueueScreen, FullPlayerScreen, AlbumDetailScreen, ArtistDetailScreen, PlaylistDetailScreen, GenreDetailScreen, OfflineLibraryScreen, and partial LibraryScreen
   - ✅ **Auto-refresh on connectivity**: Detail screens automatically reload when switching online/offline modes
@@ -316,6 +357,16 @@ Apple's Guideline 2.1 requires working reviewer access. Nautune includes an on-d
   - ✅ Automatic file verification on startup
   - ✅ Cleanup of orphaned download references
 - **Album Queueing**: One tap queues the whole album in disc/track-number order with seamless previous/next navigation
+- **Play Next & Queue Control**: Advanced queue management for power users
+  - ✅ **Play Next**: Insert tracks immediately after current song
+  - ✅ **Add to Queue**: Append tracks to end of queue
+  - ✅ **Available everywhere**: Three-dot menus on tracks in albums, favorites, search, fullscreen player
+  - ✅ **Smart handling**: Manages queue indices and pre-loading automatically
+- **Instant Mix**: AI-powered music discovery via Jellyfin
+  - ✅ **One-tap radio**: Create 50-track mixes from any track, album, or artist
+  - ✅ **Server intelligence**: Jellyfin analyzes musical similarity
+  - ✅ **Multiple triggers**: Sparkle icon (✨) in detail screens + track menus
+  - ✅ **Auto-play**: Starts playing immediately
 - **Advanced Playback State Persistence**: Complete session restoration
   - ✅ Saves current track, position, queue, repeat mode, shuffle state
   - ✅ Preserves volume level and UI preferences (library tab, scroll positions)
@@ -381,7 +432,17 @@ Apple's Guideline 2.1 requires working reviewer access. Nautune includes an on-d
   - All content is playable with tap-to-play functionality
   - Horizontal-only layout for clean, consistent experience
   - **Smart Tab Switching**: Automatically becomes "Downloads" tab when in offline mode
-- **✅ Instant Mix**: Create dynamic playlists from any track, album, or artist
+- **✅ Instant Mix**: Server-powered music discovery creates 50-track radio-style playlists
+  - ✅ **From any source**: Generate mixes from tracks, albums, or artists
+  - ✅ **Sparkle icon (✨)**: Quick access in album/artist detail screens
+  - ✅ **Track menus**: Instant Mix option in all three-dot menus
+  - ✅ **Auto-play**: Mix starts playing immediately after generation
+  - ✅ **Jellyfin intelligence**: Server analyzes music similarity (genre, era, style)
+- **✅ Play Next & Add to Queue**: Full queue control from any track menu
+  - ✅ **Play Next**: Insert track(s) immediately after current song
+  - ✅ **Add to Queue**: Append track(s) to end of queue
+  - ✅ **Smart feedback**: Toast notifications confirm actions
+  - ✅ **Queue management**: Automatic index handling and pre-load clearing
 - **✅ Offline Mode Toggle**: Wave icon (🌊) switches between online Jellyfin library and offline downloads
   - **Tap**: Toggle online/offline mode (violet = offline, light purple = online)
   - **Home Tab**: Automatically becomes Downloads management when offline
@@ -639,7 +700,7 @@ See **Architecture Improvements** section above for details!
 - **Smart Restoration**: Automatically resumes from last position on app launch
 - **Stop Clears State**: Pressing stop resets persistence to default (clean slate on next launch)
 - **Real-time Saving**: Position saved every second for accurate resume
-- **Stored in SharedPreferences**: Persists across app restarts and force-closes
+- **Stored in Hive**: Persists across app restarts and force-closes via fast, local storage
 
 ## 🔧 Development
 

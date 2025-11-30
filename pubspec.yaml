@@ -2,7 +2,7 @@ name: nautune
 description: "Nautune - Poseidon Music Player for Jellyfin"
 publish_to: 'none'
 
-version: 1.8.5+1
+version: 1.9.0+1
 
 environment:
   sdk: ^3.9.2
@@ -13,7 +13,6 @@ dependencies:
 
   cupertino_icons: ^1.0.8
   http: ^1.2.2
-  shared_preferences: ^2.3.2
   path_provider: ^2.1.5
   google_fonts: ^6.2.1
   package_info_plus: ^9.0.0

@@ -108,7 +108,7 @@ class NautuneAppState extends ChangeNotifier {
 
   bool _initialized = false;
   JellyfinSession? _session;
-  bool _isAuthenticating = false;
+  final bool _isAuthenticating = false;
   Object? _lastError;
   bool _isLoadingLibraries = false;
   Object? _librariesError;
@@ -208,7 +208,7 @@ class NautuneAppState extends ChangeNotifier {
   void _onSessionChanged() {
     if (_sessionProvider == null) return;
 
-    final newSession = _sessionProvider!.session;
+    final newSession = _sessionProvider.session;
     debugPrint('[NautuneAppState] _onSessionChanged called. Provider session: ${newSession?.selectedLibraryId}');
 
     if (_session != newSession) {
@@ -238,9 +238,10 @@ class NautuneAppState extends ChangeNotifier {
               isDemo: true,
             );
 
+            final session = _session!;
             final reportingService = PlaybackReportingService(
-              serverUrl: _session!.serverUrl,
-              accessToken: _session!.credentials.accessToken,
+              serverUrl: session.serverUrl,
+              accessToken: session.credentials.accessToken,
             );
             _audioPlayerService.setReportingService(reportingService);
           }
@@ -259,18 +260,19 @@ class NautuneAppState extends ChangeNotifier {
 
       // Normal (non-demo) session handling
       if (_session != null && !(_session?.isDemo ?? false)) {
+        final session = _session!;
         // Ensure AudioPlayerService has the correct JellyfinService instance
         _audioPlayerService.setJellyfinService(_jellyfinService);
 
         // Initialize playback reporting if not already done
         final reportingService = PlaybackReportingService(
-          serverUrl: _session!.serverUrl,
-          accessToken: _session!.credentials.accessToken,
+          serverUrl: session.serverUrl,
+          accessToken: session.credentials.accessToken,
         );
         _audioPlayerService.setReportingService(reportingService);
 
         _loadLibraries();
-        if (_session!.selectedLibraryId != null) {
+        if (session.selectedLibraryId != null) {
           _loadLibraryDependentContent(forceRefresh: true);
         }
       } else if (_session == null) {
@@ -359,7 +361,7 @@ class NautuneAppState extends ChangeNotifier {
       _demoContent?.artists ?? const <JellyfinArtist>[];
   List<JellyfinTrack> get demoTracks {
     if (_demoModeProvider != null) {
-      return _demoModeProvider!.allTracks;
+      return _demoModeProvider.allTracks;
     }
     return _demoTracks.values.toList(growable: false);
   }
@@ -422,7 +424,7 @@ class NautuneAppState extends ChangeNotifier {
 
   Future<void> _teardownDemoMode() async {
     if (_demoModeProvider != null) {
-      await _demoModeProvider!.stopDemoMode();
+      await _demoModeProvider.stopDemoMode();
       // The provider listener will handle state updates
       return;
     }
@@ -649,7 +651,7 @@ class NautuneAppState extends ChangeNotifier {
       if (storedSession != null) {
         if (storedSession.isDemo) {
           if (_demoModeProvider != null) {
-            await _demoModeProvider!.startDemoMode();
+            await _demoModeProvider.startDemoMode();
           } else {
             // Fallback for legacy demo
             final data = await rootBundle.load('assets/demo/demo_offline_track.mp3');
@@ -898,7 +900,7 @@ class NautuneAppState extends ChangeNotifier {
     // Also clear the SessionProvider so UI reacts and shows the login screen
     if (_sessionProvider != null) {
       try {
-        await _sessionProvider!.logout();
+        await _sessionProvider.logout();
       } catch (error) {
         debugPrint('SessionProvider.logout failed: $error');
       }
@@ -926,7 +928,7 @@ class NautuneAppState extends ChangeNotifier {
   }) async {
     if (_isDemoMode) {
       if (_demoModeProvider != null) {
-        return _demoModeProvider!.createPlaylist(name: name, itemIds: itemIds);
+        return _demoModeProvider.createPlaylist(name: name, itemIds: itemIds);
       }
       _demoPlaylistCounter++;
       final playlistId = 'demo-playlist-$_demoPlaylistCounter';
@@ -968,7 +970,7 @@ class NautuneAppState extends ChangeNotifier {
   }) async {
     if (_isDemoMode) {
       if (_demoModeProvider != null) {
-        _demoModeProvider!.updatePlaylist(playlistId: playlistId, newName: newName);
+        _demoModeProvider.updatePlaylist(playlistId: playlistId, newName: newName);
         return;
       }
       final existing = _findPlaylist(playlistId);
@@ -1005,7 +1007,7 @@ class NautuneAppState extends ChangeNotifier {
   Future<void> deletePlaylist(String playlistId) async {
     if (_isDemoMode) {
       if (_demoModeProvider != null) {
-        _demoModeProvider!.deletePlaylist(playlistId);
+        _demoModeProvider.deletePlaylist(playlistId);
         return;
       }
       _demoPlaylistTrackMap.remove(playlistId);
@@ -1035,7 +1037,7 @@ class NautuneAppState extends ChangeNotifier {
   }) async {
     if (_isDemoMode) {
       if (_demoModeProvider != null) {
-        _demoModeProvider!.addToPlaylist(playlistId: playlistId, itemIds: itemIds);
+        _demoModeProvider.addToPlaylist(playlistId: playlistId, itemIds: itemIds);
         return;
       }
       final existing = _demoPlaylistTrackMap[playlistId] ?? <String>[];
@@ -1075,7 +1077,7 @@ class NautuneAppState extends ChangeNotifier {
   Future<List<JellyfinTrack>> getPlaylistTracks(String playlistId) async {
     if (_isDemoMode) {
       if (_demoModeProvider != null) {
-        return _demoModeProvider!.getPlaylistTracks(playlistId);
+        return _demoModeProvider.getPlaylistTracks(playlistId);
       }
       final ids = _demoPlaylistTrackMap[playlistId] ?? const <String>[];
       return _demoTracksFromIds(ids);
@@ -1086,7 +1088,7 @@ class NautuneAppState extends ChangeNotifier {
   Future<List<JellyfinTrack>> getAlbumTracks(String albumId) async {
     if (_isDemoMode) {
       if (_demoModeProvider != null) {
-        return _demoModeProvider!.getAlbumTracks(albumId);
+        return _demoModeProvider.getAlbumTracks(albumId);
       }
       final ids = _demoAlbumTrackMap[albumId] ?? const <String>[];
       return _demoTracksFromIds(ids);
@@ -1097,7 +1099,7 @@ class NautuneAppState extends ChangeNotifier {
   Future<void> markFavorite(String itemId, bool shouldBeFavorite) async {
     if (_isDemoMode) {
       if (_demoModeProvider != null) {
-        _demoModeProvider!.markFavorite(itemId, shouldBeFavorite);
+        _demoModeProvider.markFavorite(itemId, shouldBeFavorite);
         return;
       }
       final existing = _demoTracks[itemId];
@@ -1225,7 +1227,7 @@ class NautuneAppState extends ChangeNotifier {
     } else {
       // Delegate to SessionProvider for state management
       debugPrint('Calling sessionProvider.updateSelectedLibrary');
-      await _sessionProvider!.updateSelectedLibrary(
+      await _sessionProvider.updateSelectedLibrary(
         libraryId: library.id,
         libraryName: library.name,
       );

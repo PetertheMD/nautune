@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +7,8 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../jellyfin/jellyfin_track.dart';
 import '../services/audio_player_service.dart';
+import '../widgets/add_to_playlist_dialog.dart';
+import '../widgets/jellyfin_image.dart';
 
 class FullPlayerScreen extends StatefulWidget {
   const FullPlayerScreen({super.key});
@@ -312,7 +313,162 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> with SingleTickerPr
                                     ],
                                   ),
                                   const Spacer(),
-                                  const SizedBox(width: 48),
+                                  IconButton(
+                                    icon: const Icon(Icons.more_vert),
+                                    onPressed: () {
+                                      final parentContext = context;
+                                      showModalBottomSheet(
+                                        context: parentContext,
+                                        builder: (sheetContext) => SafeArea(
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              ListTile(
+                                                leading: const Icon(Icons.play_arrow),
+                                                title: const Text('Play Next'),
+                                                onTap: () {
+                                                  Navigator.pop(sheetContext);
+                                                  _appState.audioPlayerService.playNext([track]);
+                                                  ScaffoldMessenger.of(parentContext).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text('${track.name} will play next'),
+                                                      duration: const Duration(seconds: 2),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(Icons.queue_music),
+                                                title: const Text('Add to Queue'),
+                                                onTap: () {
+                                                  Navigator.pop(sheetContext);
+                                                  _appState.audioPlayerService.addToQueue([track]);
+                                                  ScaffoldMessenger.of(parentContext).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text('${track.name} added to queue'),
+                                                      duration: const Duration(seconds: 2),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(Icons.playlist_add),
+                                                title: const Text('Add to Playlist'),
+                                                onTap: () async {
+                                                  Navigator.pop(sheetContext);
+                                                  await showAddToPlaylistDialog(
+                                                    context: parentContext,
+                                                    appState: _appState,
+                                                    tracks: [track],
+                                                  );
+                                                },
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(Icons.auto_awesome),
+                                                title: const Text('Instant Mix'),
+                                                onTap: () async {
+                                                  Navigator.pop(sheetContext);
+                                                  try {
+                                                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text('Creating instant mix...'),
+                                                        duration: Duration(seconds: 1),
+                                                      ),
+                                                    );
+                                                    final mixTracks = await _appState.jellyfinService.getInstantMix(
+                                                      itemId: track.id,
+                                                      limit: 50,
+                                                    );
+                                                    if (mixTracks.isEmpty) {
+                                                      ScaffoldMessenger.of(parentContext).showSnackBar(
+                                                        const SnackBar(
+                                                          content: Text('No similar tracks found'),
+                                                          duration: Duration(seconds: 2),
+                                                        ),
+                                                      );
+                                                      return;
+                                                    }
+                                                    await _appState.audioPlayerService.playTrack(
+                                                      mixTracks.first,
+                                                      queueContext: mixTracks,
+                                                    );
+                                                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text('Playing instant mix (${mixTracks.length} tracks)'),
+                                                        duration: const Duration(seconds: 2),
+                                                      ),
+                                                    );
+                                                  } catch (e) {
+                                                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text('Failed to create mix: $e'),
+                                                        backgroundColor: Theme.of(parentContext).colorScheme.error,
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(Icons.download),
+                                                title: const Text('Download Track'),
+                                                onTap: () async {
+                                                  Navigator.pop(sheetContext);
+                                                  final messenger = ScaffoldMessenger.of(parentContext);
+                                                  final theme = Theme.of(parentContext);
+                                                  final downloadService = _appState.downloadService;
+                                                  try {
+                                                    final existing = downloadService.getDownload(track.id);
+                                                    if (existing != null) {
+                                                      if (existing.isCompleted) {
+                                                        messenger.showSnackBar(
+                                                          SnackBar(
+                                                            content: Text('"${track.name}" is already downloaded'),
+                                                            duration: const Duration(seconds: 2),
+                                                          ),
+                                                        );
+                                                        return;
+                                                      }
+                                                      if (existing.isFailed) {
+                                                        await downloadService.retryDownload(track.id);
+                                                        messenger.showSnackBar(
+                                                          SnackBar(
+                                                            content: Text('Retrying download for ${track.name}'),
+                                                            duration: const Duration(seconds: 2),
+                                                          ),
+                                                        );
+                                                        return;
+                                                      }
+                                                      messenger.showSnackBar(
+                                                        SnackBar(
+                                                          content: Text('"${track.name}" is already in the download queue'),
+                                                          duration: const Duration(seconds: 2),
+                                                        ),
+                                                      );
+                                                      return;
+                                                    }
+                                                    await downloadService.downloadTrack(track);
+                                                    messenger.showSnackBar(
+                                                      SnackBar(
+                                                        content: Text('Downloading ${track.name}'),
+                                                        duration: const Duration(seconds: 2),
+                                                      ),
+                                                    );
+                                                  } catch (e) {
+                                                    messenger.showSnackBar(
+                                                      SnackBar(
+                                                        content: Text('Failed to download ${track.name}: $e'),
+                                                        backgroundColor: theme.colorScheme.error,
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 ],
                               ),
                             ),
@@ -434,6 +590,31 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> with SingleTickerPr
                         textAlign: TextAlign.center,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+
+                    // Audio quality info
+                    if (track.audioQualityInfo != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          track.audioQualityInfo!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.tertiary,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.5,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                     ],
                   ],
@@ -829,7 +1010,6 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> with SingleTickerPr
   }) {
     final borderRadius = BorderRadius.circular(isDesktop ? 24 : 16);
     final maxWidth = isDesktop ? 800 : 500;
-    final imageUrl = track.artworkUrl(maxWidth: maxWidth);
     final placeholder = Icon(
       Icons.album,
       size: isDesktop ? 120 : 80,
@@ -852,17 +1032,17 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> with SingleTickerPr
         borderRadius: borderRadius,
         child: AspectRatio(
           aspectRatio: 1,
-          child: imageUrl != null
-              ? CachedNetworkImage(
-                  imageUrl: imageUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
+          child: track.primaryImageTag != null
+              ? JellyfinImage(
+                  itemId: track.id,
+                  imageTag: track.primaryImageTag,
+                  maxWidth: maxWidth,
+                  boxFit: BoxFit.cover,
+                  placeholderBuilder: (context, url) => Container(
                     color: theme.colorScheme.primaryContainer,
-                    child: Center(child: const CircularProgressIndicator()),
+                    child: const Center(child: CircularProgressIndicator()),
                   ),
-                  errorWidget: (context, url, error) => placeholder,
-                  memCacheWidth: maxWidth,
-                  maxWidthDiskCache: maxWidth,
+                  errorBuilder: (context, url, error) => placeholder,
                 )
               : placeholder,
         ),

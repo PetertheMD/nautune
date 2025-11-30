@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 class PendingPlaylistAction {
   PendingPlaylistAction({
@@ -31,40 +31,53 @@ class PendingPlaylistAction {
 }
 
 class PlaylistSyncQueue {
-  PlaylistSyncQueue({SharedPreferences? preferences})
-      : _preferences = preferences;
+  static const _boxName = 'nautune_sync_queue';
+  static const _queueKey = 'queue';
 
-  static const _queueKey = 'nautune_playlist_sync_queue';
-
-  SharedPreferences? _preferences;
-
-  Future<SharedPreferences> _prefs() async {
-    return _preferences ??= await SharedPreferences.getInstance();
+  Future<Box> _box() async {
+    if (!Hive.isBoxOpen(_boxName)) {
+      return await Hive.openBox(_boxName);
+    }
+    return Hive.box(_boxName);
   }
 
   Future<List<PendingPlaylistAction>> load() async {
-    final prefs = await _prefs();
-    final raw = prefs.getString(_queueKey);
+    final box = await _box();
+    final raw = box.get(_queueKey);
     if (raw == null) {
       return [];
     }
 
     try {
-      final json = jsonDecode(raw) as List<dynamic>;
-      return json
-          .map((item) => PendingPlaylistAction.fromJson(item as Map<String, dynamic>))
+      final List<dynamic> list;
+      if (raw is String) {
+        list = jsonDecode(raw) as List<dynamic>;
+      } else if (raw is List) {
+        list = raw;
+      } else {
+        return [];
+      }
+
+      return list
+          .map((item) {
+            if (item is Map) {
+              return PendingPlaylistAction.fromJson(Map<String, dynamic>.from(item));
+            }
+            return null;
+          })
+          .whereType<PendingPlaylistAction>()
           .toList();
     } catch (_) {
-      await prefs.remove(_queueKey);
+      await box.delete(_queueKey);
       return [];
     }
   }
 
   Future<void> save(List<PendingPlaylistAction> actions) async {
-    final prefs = await _prefs();
-    await prefs.setString(
+    final box = await _box();
+    await box.put(
       _queueKey,
-      jsonEncode(actions.map((a) => a.toJson()).toList()),
+      actions.map((a) => a.toJson()).toList(),
     );
   }
 
@@ -84,7 +97,7 @@ class PlaylistSyncQueue {
   }
 
   Future<void> clear() async {
-    final prefs = await _prefs();
-    await prefs.remove(_queueKey);
+    final box = await _box();
+    await box.delete(_queueKey);
   }
 }

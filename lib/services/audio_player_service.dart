@@ -314,7 +314,6 @@ class AudioPlayerService {
         debugPrint('⚡ Using pre-loaded track for instant playback: ${nextTrack.name}');
 
         // Swap players for instant transition
-        final tempPlayer = _player;
         // Note: We can't actually swap AudioPlayer instances in audioplayers
         // So we'll just play the pre-loaded track normally
         // The pre-loading still helps because the platform has buffered it
@@ -794,7 +793,7 @@ class AudioPlayerService {
     }
   }
 
-  Future<void> playNext() => skipToNext();
+
   Future<void> playPrevious() => skipToPrevious();
   Future<void> next() => skipToNext();
   Future<void> previous() => skipToPrevious();
@@ -849,8 +848,67 @@ class AudioPlayerService {
         ));
       }
     }
-    
+
     _queueController.add(_queue);
+    unawaited(_stateStore.savePlaybackSnapshot(
+      queue: _queue,
+      currentQueueIndex: _currentIndex,
+      currentTrack: _currentTrack,
+    ));
+  }
+
+  /// Add track(s) to play immediately after the current track
+  /// This is the "Play Next" feature - inserts at currentIndex + 1
+  void playNext(List<JellyfinTrack> tracks) {
+    if (tracks.isEmpty) return;
+
+    // If nothing is playing, just start playing the first track
+    if (_currentTrack == null || _queue.isEmpty) {
+      unawaited(playTrack(tracks.first, queueContext: tracks));
+      return;
+    }
+
+    // Insert tracks right after the current track
+    final insertIndex = _currentIndex + 1;
+    _queue.insertAll(insertIndex, tracks);
+
+    // Clear pre-loaded track since queue changed
+    _clearPreload();
+
+    _queueController.add(_queue);
+    _audioHandler?.updateNautuneQueue(_queue);
+
+    debugPrint('▶️ Play Next: Added ${tracks.length} track(s) at position $insertIndex');
+
+    unawaited(_stateStore.savePlaybackSnapshot(
+      queue: _queue,
+      currentQueueIndex: _currentIndex,
+      currentTrack: _currentTrack,
+    ));
+  }
+
+  /// Add track(s) to the end of the queue
+  /// This is the "Add to Queue" feature - appends to the end
+  void addToQueue(List<JellyfinTrack> tracks) {
+    if (tracks.isEmpty) return;
+
+    // If nothing is playing, just start playing the first track
+    if (_currentTrack == null || _queue.isEmpty) {
+      unawaited(playTrack(tracks.first, queueContext: tracks));
+      return;
+    }
+
+    // Add tracks to the end of the queue
+    _queue.addAll(tracks);
+
+    // Clear pre-loaded track since queue changed
+    _clearPreload();
+
+    _queueController.add(_queue);
+    _audioHandler?.updateNautuneQueue(_queue);
+
+    debugPrint('➕ Add to Queue: Added ${tracks.length} track(s) to end of queue');
+
     unawaited(_stateStore.savePlaybackSnapshot(
       queue: _queue,
       currentQueueIndex: _currentIndex,

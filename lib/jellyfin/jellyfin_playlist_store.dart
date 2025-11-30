@@ -1,49 +1,68 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import 'jellyfin_playlist.dart';
 
 class JellyfinPlaylistStore {
-  JellyfinPlaylistStore({SharedPreferences? preferences})
-      : _preferences = preferences;
+  static const _boxName = 'nautune_playlists';
+  static const _playlistsKey = 'playlists';
 
-  static const _playlistsKey = 'nautune_jellyfin_playlists';
-
-  SharedPreferences? _preferences;
-
-  Future<SharedPreferences> _prefs() async {
-    return _preferences ??= await SharedPreferences.getInstance();
+  Future<Box> _box() async {
+    if (!Hive.isBoxOpen(_boxName)) {
+      return await Hive.openBox(_boxName);
+    }
+    return Hive.box(_boxName);
   }
 
   Future<List<JellyfinPlaylist>?> load() async {
-    final prefs = await _prefs();
-    final raw = prefs.getString(_playlistsKey);
+    final box = await _box();
+    final raw = box.get(_playlistsKey);
     if (raw == null) {
       return null;
     }
 
     try {
-      final json = jsonDecode(raw) as List<dynamic>;
-      return json
-          .map((item) => JellyfinPlaylist.fromJson(item as Map<String, dynamic>))
+      // Hive might store as List<dynamic> if saved as List
+      // If we save as json encoded string (legacy), we decode.
+      // We'll support both for migration robustness, but prefer structured if possible.
+      // Let's stick to the pattern of checking type.
+      
+      final List<dynamic> list;
+      if (raw is String) {
+        list = jsonDecode(raw) as List<dynamic>;
+      } else if (raw is List) {
+        list = raw;
+      } else {
+        return null;
+      }
+
+      return list
+          .map((item) {
+            if (item is Map) {
+              return JellyfinPlaylist.fromJson(Map<String, dynamic>.from(item));
+            }
+            return null;
+          })
+          .whereType<JellyfinPlaylist>()
           .toList();
     } catch (_) {
-      await prefs.remove(_playlistsKey);
+      await box.delete(_playlistsKey);
       return null;
     }
   }
 
   Future<void> save(List<JellyfinPlaylist> playlists) async {
-    final prefs = await _prefs();
-    await prefs.setString(
+    final box = await _box();
+    // Store as List of Maps for better Hive usage
+    await box.put(
       _playlistsKey,
-      jsonEncode(playlists.map((p) => p.toJson()).toList()),
+      playlists.map((p) => p.toJson()).toList(),
     );
   }
 
   Future<void> clear() async {
-    final prefs = await _prefs();
-    await prefs.remove(_playlistsKey);
+    final box = await _box();
+    await box.delete(_playlistsKey);
   }
 }

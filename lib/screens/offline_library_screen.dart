@@ -455,7 +455,7 @@ class _OfflineLibraryScreenState extends State<OfflineLibraryScreen> {
                     trailing: IconButton(
                       icon: const Icon(Icons.close),
                       onPressed: () {
-                        appState.downloadService.deleteDownload(track.id);
+                        appState.downloadService.deleteDownloadReference(track.id, 'user_initiated_from_downloads_list');
                       },
                     ),
                   );

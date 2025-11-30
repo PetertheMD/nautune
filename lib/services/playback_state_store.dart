@@ -1,20 +1,35 @@
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import '../jellyfin/jellyfin_track.dart';
 import '../models/playback_state.dart';
 
 class PlaybackStateStore {
-  static const String _key = 'nautune_playback_state';
+  static const _boxName = 'nautune_playback';
+  static const _key = 'state';
+
+  Future<Box> _box() async {
+    if (!Hive.isBoxOpen(_boxName)) {
+      return await Hive.openBox(_boxName);
+    }
+    return Hive.box(_boxName);
+  }
 
   Future<PlaybackState?> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final json = prefs.getString(_key);
-    if (json == null) {
+    final box = await _box();
+    final raw = box.get(_key);
+    if (raw == null) {
       return null;
     }
     try {
-      final data = jsonDecode(json) as Map<String, dynamic>;
+      final Map<String, dynamic> data;
+      if (raw is Map) {
+        data = Map<String, dynamic>.from(raw);
+      } else if (raw is String) {
+        data = jsonDecode(raw) as Map<String, dynamic>;
+      } else {
+        return null;
+      }
       return PlaybackState.fromJson(data);
     } catch (_) {
       return null;
@@ -26,9 +41,8 @@ class PlaybackStateStore {
   }
 
   Future<void> _persist(PlaybackState state) async {
-    final prefs = await SharedPreferences.getInstance();
-    final json = jsonEncode(state.toJson());
-    await prefs.setString(_key, json);
+    final box = await _box();
+    await box.put(_key, state.toJson());
   }
 
   Future<void> save(PlaybackState state) => _persist(state);

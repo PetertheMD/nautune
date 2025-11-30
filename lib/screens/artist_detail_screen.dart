@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../jellyfin/jellyfin_artist.dart';
 import '../jellyfin/jellyfin_album.dart';
+import '../widgets/jellyfin_image.dart';
 import '../widgets/now_playing_bar.dart';
 import 'album_detail_screen.dart';
 
@@ -24,17 +25,23 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
   Object? _error;
   List<JellyfinAlbum>? _albums;
   late NautuneAppState _appState;
+  bool _hasInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _loadAlbums();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _appState = Provider.of<NautuneAppState>(context, listen: false);
+
+    // Only load albums once after _appState is initialized
+    if (!_hasInitialized) {
+      _hasInitialized = true;
+      _loadAlbums();
+    }
   }
 
   Future<void> _loadAlbums() async {
@@ -74,17 +81,13 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
     Widget artwork;
     final tag = artist.primaryImageTag;
     if (tag != null && tag.isNotEmpty) {
-      final imageUrl = _appState.jellyfinService.buildImageUrl(
-        itemId: artist.id,
-        tag: tag,
-        maxWidth: 800,
-      );
       artwork = ClipOval(
-        child: Image.network(
-          imageUrl,
-          fit: BoxFit.cover,
-          headers: _appState.jellyfinService.imageHeaders(),
-          errorBuilder: (context, error, stackTrace) => _DefaultArtistArtwork(),
+        child: JellyfinImage(
+          itemId: artist.id,
+          imageTag: tag,
+          maxWidth: 800,
+          boxFit: BoxFit.cover,
+          errorBuilder: (context, url, error) => _DefaultArtistArtwork(),
         ),
       );
     } else {
@@ -101,6 +104,61 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
               icon: const Icon(Icons.arrow_back),
               onPressed: () => Navigator.of(context).pop(),
             ),
+            actions: [
+              // Instant Mix button
+              IconButton(
+                icon: const Icon(Icons.auto_awesome),
+                tooltip: 'Instant Mix',
+                onPressed: () async {
+                  try {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Creating instant mix...'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+
+                    final mixTracks = await _appState.jellyfinService.getInstantMix(
+                      itemId: widget.artist.id,
+                      limit: 50,
+                    );
+
+                    if (mixTracks.isEmpty) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('No similar tracks found'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                      return;
+                    }
+
+                    await _appState.audioPlayerService.playTrack(
+                      mixTracks.first,
+                      queueContext: mixTracks,
+                    );
+
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Playing instant mix (${mixTracks.length} tracks)'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to create mix: $e'),
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    );
+                  }
+                },
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
@@ -304,17 +362,12 @@ class _AlbumCard extends StatelessWidget {
     Widget artwork;
     final tag = album.primaryImageTag;
     if (tag != null && tag.isNotEmpty) {
-      final imageUrl = appState.jellyfinService.buildImageUrl(
+      artwork = JellyfinImage(
         itemId: album.id,
-        tag: tag,
+        imageTag: tag,
         maxWidth: 300,
-      );
-      artwork = Image.network(
-        imageUrl,
-        fit: BoxFit.cover,
-        headers: appState.jellyfinService.imageHeaders(),
-        cacheWidth: 300,
-        errorBuilder: (context, error, stackTrace) => Container(
+        boxFit: BoxFit.cover,
+        errorBuilder: (context, url, error) => Container(
           color: theme.colorScheme.primaryContainer,
           child: Icon(
             Icons.album,

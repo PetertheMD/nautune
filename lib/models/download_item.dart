@@ -1,3 +1,4 @@
+import 'dart:collection';
 import '../jellyfin/jellyfin_track.dart';
 
 enum DownloadStatus {
@@ -19,6 +20,7 @@ class DownloadItem {
   final DateTime? completedAt;
   final String? errorMessage;
   final bool isDemoAsset;
+  final Set<String> owners;
 
   DownloadItem({
     required this.track,
@@ -31,6 +33,7 @@ class DownloadItem {
     this.completedAt,
     this.errorMessage,
     this.isDemoAsset = false,
+    required this.owners,
   });
 
   DownloadItem copyWith({
@@ -44,6 +47,7 @@ class DownloadItem {
     DateTime? completedAt,
     String? errorMessage,
     bool? isDemoAsset,
+    Set<String>? owners,
   }) {
     return DownloadItem(
       track: track ?? this.track,
@@ -56,6 +60,7 @@ class DownloadItem {
       completedAt: completedAt ?? this.completedAt,
       errorMessage: errorMessage ?? this.errorMessage,
       isDemoAsset: isDemoAsset ?? this.isDemoAsset,
+      owners: owners ?? this.owners,
     );
   }
 
@@ -75,6 +80,7 @@ class DownloadItem {
       'completedAt': completedAt?.toIso8601String(),
       'errorMessage': errorMessage,
       'isDemoAsset': isDemoAsset,
+      'owners': owners.toList(),
     };
   }
 
@@ -96,6 +102,7 @@ class DownloadItem {
             : null,
         errorMessage: json['errorMessage'] as String?,
         isDemoAsset: json['isDemoAsset'] as bool? ?? false,
+        owners: HashSet<String>.from(json['owners'] as List? ?? []),
       );
     } catch (e) {
       return null;

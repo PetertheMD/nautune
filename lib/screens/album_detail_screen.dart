@@ -9,6 +9,7 @@ import '../app_state.dart';
 import '../jellyfin/jellyfin_album.dart';
 import '../jellyfin/jellyfin_track.dart';
 import '../widgets/add_to_playlist_dialog.dart';
+import '../widgets/jellyfin_image.dart';
 import '../widgets/now_playing_bar.dart';
 
 class AlbumDetailScreen extends StatefulWidget {
@@ -214,16 +215,12 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
     Widget artwork;
     final tag = album.primaryImageTag;
     if (tag != null && tag.isNotEmpty) {
-      final imageUrl = _appState!.jellyfinService.buildImageUrl(
+      artwork = JellyfinImage(
         itemId: album.id,
-        tag: tag,
+        imageTag: tag,
         maxWidth: 800,
-      );
-      artwork = Image.network(
-        imageUrl,
-        fit: BoxFit.cover,
-        headers: _appState!.jellyfinService.imageHeaders(),
-        errorBuilder: (context, error, stackTrace) => const _TritonArtwork(),
+        boxFit: BoxFit.cover,
+        errorBuilder: (context, url, error) => const _TritonArtwork(),
       );
     } else {
       artwork = const _TritonArtwork();
@@ -255,12 +252,66 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
               onPressed: () => Navigator.of(context).pop(),
             ),
             actions: [
+              // Instant Mix button
+              IconButton(
+                icon: const Icon(Icons.auto_awesome),
+                tooltip: 'Instant Mix',
+                onPressed: () async {
+                  try {
+                    // Show loading indicator
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Creating instant mix...'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+
+                    // Get instant mix from Jellyfin
+                    final mixTracks = await _appState!.jellyfinService.getInstantMix(
+                      itemId: widget.album.id,
+                      limit: 50,
+                    );
+
+                    if (mixTracks.isEmpty) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('No similar tracks found'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                      return;
+                    }
+
+                    // Start playing the mix
+                    await _appState!.audioPlayerService.playTrack(
+                      mixTracks.first,
+                      queueContext: mixTracks,
+                    );
+
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Playing instant mix (${mixTracks.length} tracks)'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to create mix: $e'),
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    );
+                  }
+                },
+              ),
               // Shuffle button
               IconButton(
-                icon: const Text(
-                  '🌊🌊',
-                  style: TextStyle(fontSize: 20),
-                ),
+                icon: const Icon(Icons.shuffle),
+                tooltip: 'Shuffle',
                 onPressed: () {
                   if (_tracks != null && _tracks!.isNotEmpty) {
                     _appState!.audioService.playShuffled(_tracks!);
@@ -269,6 +320,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
               ),
               IconButton(
                 icon: const Icon(Icons.playlist_add),
+                tooltip: 'Add to Playlist',
                 onPressed: () async {
                   await showAddToPlaylistDialog(
                     context: context,
@@ -396,7 +448,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                                   if (confirm == true) {
                                     for (final track in _tracks!) {
                                       await _appState!.downloadService
-                                          .deleteDownload(track.id);
+                                          .deleteDownloadReference(track.id, album.id); // Use new method
                                     }
                                     if (!context.mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -642,6 +694,34 @@ class _TrackTile extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           ListTile(
+                            leading: const Icon(Icons.play_arrow),
+                            title: const Text('Play Next'),
+                            onTap: () {
+                              Navigator.pop(sheetContext);
+                              appState.audioPlayerService.playNext([track]);
+                              ScaffoldMessenger.of(parentContext).showSnackBar(
+                                SnackBar(
+                                  content: Text('${track.name} will play next'),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.queue_music),
+                            title: const Text('Add to Queue'),
+                            onTap: () {
+                              Navigator.pop(sheetContext);
+                              appState.audioPlayerService.addToQueue([track]);
+                              ScaffoldMessenger.of(parentContext).showSnackBar(
+                                SnackBar(
+                                  content: Text('${track.name} added to queue'),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                          ListTile(
                             leading: const Icon(Icons.playlist_add),
                             title: const Text('Add to Playlist'),
                             onTap: () async {
@@ -651,6 +731,55 @@ class _TrackTile extends StatelessWidget {
                                 appState: appState,
                                 tracks: [track],
                               );
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.auto_awesome),
+                            title: const Text('Instant Mix'),
+                            onTap: () async {
+                              Navigator.pop(sheetContext);
+                              try {
+                                ScaffoldMessenger.of(parentContext).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Creating instant mix...'),
+                                    duration: Duration(seconds: 1),
+                                  ),
+                                );
+
+                                final mixTracks = await appState.jellyfinService.getInstantMix(
+                                  itemId: track.id,
+                                  limit: 50,
+                                );
+
+                                if (mixTracks.isEmpty) {
+                                  ScaffoldMessenger.of(parentContext).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('No similar tracks found'),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                await appState.audioPlayerService.playTrack(
+                                  mixTracks.first,
+                                  queueContext: mixTracks,
+                                );
+
+                                ScaffoldMessenger.of(parentContext).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Playing instant mix (${mixTracks.length} tracks)'),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              } catch (e) {
+                                ScaffoldMessenger.of(parentContext).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to create mix: $e'),
+                                    backgroundColor: Theme.of(parentContext).colorScheme.error,
+                                  ),
+                                );
+                              }
                             },
                           ),
                           ListTile(
