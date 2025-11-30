@@ -9,6 +9,7 @@ import '../jellyfin/jellyfin_track.dart';
 import '../services/audio_player_service.dart';
 import '../widgets/add_to_playlist_dialog.dart';
 import '../widgets/jellyfin_image.dart';
+import 'fullscreen_visualizer_screen.dart';
 
 class FullPlayerScreen extends StatefulWidget {
   const FullPlayerScreen({super.key});
@@ -1016,9 +1017,20 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> with SingleTickerPr
       color: theme.colorScheme.onPrimaryContainer,
     );
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: borderRadius,
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => FullscreenVisualizerScreen(
+              track: track,
+              audioService: _audioService,
+            ),
+          ),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
         color: theme.colorScheme.primaryContainer,
         boxShadow: [
           BoxShadow(
@@ -1047,6 +1059,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> with SingleTickerPr
               : placeholder,
         ),
       ),
+    ),
     );
   }
 }
