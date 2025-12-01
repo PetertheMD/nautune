@@ -1813,6 +1813,7 @@ class _FavoritesTab extends StatelessWidget {
                     ? JellyfinImage(
                         itemId: track.albumId!,
                         imageTag: track.albumPrimaryImageTag,
+                        trackId: track.id, // Enable offline artwork support
                         maxWidth: 200,
                         boxFit: BoxFit.cover,
                         errorBuilder: (context, url, error) => Image.asset(

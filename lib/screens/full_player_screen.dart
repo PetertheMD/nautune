@@ -6,10 +6,14 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../app_state.dart';
+import '../jellyfin/jellyfin_album.dart';
+import '../jellyfin/jellyfin_artist.dart';
 import '../jellyfin/jellyfin_track.dart';
 import '../services/audio_player_service.dart';
 import '../widgets/add_to_playlist_dialog.dart';
 import '../widgets/jellyfin_image.dart';
+import 'album_detail_screen.dart';
+import 'artist_detail_screen.dart';
 
 class FullPlayerScreen extends StatefulWidget {
   const FullPlayerScreen({super.key});
@@ -675,29 +679,191 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> with SingleTickerPr
 
                     const SizedBox(height: 8),
 
-                    Text(
-                      track.displayArtist,
-                      style: (isDesktop
-                              ? theme.textTheme.titleMedium
-                              : theme.textTheme.bodyLarge)
-                          ?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                    // Artist - clickable to navigate to artist detail
+                    GestureDetector(
+                      onTap: () async {
+                        // Get the artist name from the track
+                        final artistName = track.artists.isNotEmpty ? track.artists.first : track.displayArtist;
+
+                        // Show loading indicator
+                        if (!mounted) return;
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
+
+                        JellyfinArtist? artist;
+
+                        try {
+                          // First, search in already loaded artists
+                          var artists = _appState.artists ?? [];
+                          artist = artists.where((a) =>
+                            a.name.toLowerCase() == artistName.toLowerCase()
+                          ).firstOrNull;
+
+                          // If not found, keep loading more pages until we find it or run out
+                          if (artist == null && _appState.hasMoreArtists) {
+                            for (int i = 0; i < 10; i++) { // Max 10 pages = 500 artists
+                              await _appState.loadMoreArtists();
+                              artists = _appState.artists ?? [];
+
+                              artist = artists.where((a) =>
+                                a.name.toLowerCase() == artistName.toLowerCase()
+                              ).firstOrNull;
+
+                              if (artist != null || !_appState.hasMoreArtists) {
+                                break;
+                              }
+                            }
+                          }
+
+                          // If still not found, try downloads for offline mode
+                          if (artist == null) {
+                            final downloads = _appState.downloadService.completedDownloads;
+                            final artistTracks = downloads
+                                .where((d) => d.track.artists.any((a) =>
+                                  a.toLowerCase() == artistName.toLowerCase()
+                                ))
+                                .map((d) => d.track)
+                                .toList();
+
+                            if (artistTracks.isNotEmpty) {
+                              // Create synthetic artist for offline mode
+                              artist = JellyfinArtist(
+                                id: 'offline_$artistName',
+                                name: artistName,
+                              );
+                            }
+                          }
+                        } finally {
+                          // Close loading dialog
+                          if (mounted) Navigator.of(context).pop();
+                        }
+
+                        if (artist != null) {
+                          if (!mounted) return;
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => ArtistDetailScreen(
+                                artist: artist!,
+                              ),
+                            ),
+                          );
+                        } else {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Could not find artist "$artistName"'),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.person,
+                            size: 16,
+                            color: theme.colorScheme.tertiary.withValues(alpha: 0.7),
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              track.displayArtist,
+                              style: (isDesktop
+                                      ? theme.textTheme.titleMedium
+                                      : theme.textTheme.bodyLarge)
+                                  ?.copyWith(
+                                color: theme.colorScheme.tertiary,
+                                decoration: TextDecoration.underline,
+                                decorationColor: theme.colorScheme.tertiary.withValues(alpha: 0.5),
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
 
-                    if (track.album != null) ...[
+                    // Album - clickable to navigate to album detail
+                    if (track.album != null && track.albumId != null) ...[
                       const SizedBox(height: 4),
-                      Text(
-                        track.album!,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                      GestureDetector(
+                        onTap: () async {
+                          // First try to find in online cache
+                          final albums = _appState.albums ?? [];
+                          var album = albums.where((a) => a.id == track.albumId).firstOrNull;
+
+                          // If not found and we have downloads, create a synthetic album from downloads
+                          if (album == null) {
+                            final downloads = _appState.downloadService.completedDownloads;
+                            final albumTracks = downloads
+                                .where((d) => d.track.albumId == track.albumId)
+                                .map((d) => d.track)
+                                .toList();
+
+                            if (albumTracks.isNotEmpty) {
+                              // Create a synthetic JellyfinAlbum for offline mode
+                              album = JellyfinAlbum(
+                                id: track.albumId!,
+                                name: track.album!,
+                                artists: track.artists,
+                                primaryImageTag: track.albumPrimaryImageTag,
+                                genres: const [],
+                              );
+                            }
+                          }
+
+                          if (album != null) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => AlbumDetailScreen(
+                                  album: album!,
+                                ),
+                              ),
+                            );
+                          } else {
+                            // Album not available
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Album "${track.album}" not available offline'),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.album,
+                              size: 16,
+                              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                track.album!,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
 
@@ -1118,11 +1284,30 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> with SingleTickerPr
   }) {
     final borderRadius = BorderRadius.circular(isDesktop ? 24 : 16);
     final maxWidth = isDesktop ? 800 : 500;
-    final placeholder = Icon(
-      Icons.album,
-      size: isDesktop ? 120 : 80,
-      color: theme.colorScheme.onPrimaryContainer,
+    final placeholder = Container(
+      color: theme.colorScheme.primaryContainer,
+      child: Icon(
+        Icons.album,
+        size: isDesktop ? 120 : 80,
+        color: theme.colorScheme.onPrimaryContainer,
+      ),
     );
+
+    // Determine the best image tag and item ID to use
+    String? imageTag = track.primaryImageTag;
+    String? itemId = track.id;
+
+    // Fallback to album art if track doesn't have its own image
+    if (imageTag == null || imageTag.isEmpty) {
+      imageTag = track.albumPrimaryImageTag;
+      itemId = track.albumId ?? track.id;
+    }
+
+    // Further fallback to parent thumb
+    if (imageTag == null || imageTag.isEmpty) {
+      imageTag = track.parentThumbImageTag;
+      itemId = track.albumId ?? track.id;
+    }
 
     return Container(
         decoration: BoxDecoration(
@@ -1140,11 +1325,12 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> with SingleTickerPr
         borderRadius: borderRadius,
         child: AspectRatio(
           aspectRatio: 1,
-          child: track.primaryImageTag != null
+          child: (imageTag != null && imageTag.isNotEmpty && itemId != null)
               ? JellyfinImage(
-                  key: ValueKey('${track.id}-${track.primaryImageTag}'),
-                  itemId: track.id,
-                  imageTag: track.primaryImageTag,
+                  key: ValueKey('$itemId-$imageTag'),
+                  itemId: itemId,
+                  imageTag: imageTag,
+                  trackId: track.id, // Enable offline artwork support
                   maxWidth: maxWidth,
                   boxFit: BoxFit.cover,
                   placeholderBuilder: (context, url) => Container(

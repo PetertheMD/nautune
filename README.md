@@ -2,7 +2,26 @@
 
 Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter and delivers a beautiful deep-sea themed experience with smooth native audio playback and seamless Jellyfin integration.
 
-## 🚀 Latest Updates (v1.9.1+)
+## 🚀 Latest Updates (v1.9.2+)
+- **🎵 Fullscreen Player Navigation**: Click artist/album to explore while listening
+  - ✅ **Clickable artist**: Tap artist name to open artist detail screen with all their albums
+  - ✅ **Clickable album**: Tap album name to see full album tracklist
+  - ✅ **Visual indicators**: Underlined text + icons show items are interactive
+  - ✅ **Offline support**: Works in airplane mode with downloaded content
+  - ✅ **Smart fallback**: Searches online cache first, then creates synthetic objects from downloads
+- **🖼️ Offline Album Artwork**: Album art now works perfectly in offline mode
+  - ✅ **Auto-download**: Album art automatically downloaded when you download tracks/albums
+  - ✅ **Airplane mode ready**: Fullscreen player, favorites, and all tabs show artwork without internet
+  - ✅ **Smart fallback**: Checks local storage first, then falls back to network/cache
+  - ✅ **Auto-cleanup**: Album art deleted automatically when tracks/albums are removed
+  - ✅ **Storage efficient**: Artwork stored as optimized JPEGs in `downloads/artwork/`
+- **🎨 UI/UX Refinements**: Better browsing experience
+  - ✅ **Alphabet scroll bar**: Quick jump to any letter in Albums, Artists, and Genres tabs
+  - ✅ **Artist pagination**: Browse ALL artists (no more stopping at "C")
+  - ✅ **Favorites tab album art**: Beautiful artwork thumbnails replace generic music notes
+- **🔧 Metadata Consistency**: Fixed audio quality display across all sources
+  - ✅ **Consistent fields**: Favorites, playlists, and instant mix now use correct `MediaStreams` field
+  - ✅ **Full audio info everywhere**: FLAC • 1411 kbps • 16-bit/44.1kHz displayed in all playback contexts
 - **💾 Save Instant Mix as Playlist**: Save your favorite mixes for future listening
   - ✅ **One-tap save**: "Save as Playlist" button appears in snackbar after creating mix
   - ✅ **Smart naming**: Auto-suggests names like "Artist Mix", "Album Mix", "Track Mix"
@@ -878,7 +897,7 @@ All iOS features are built and deployed via **Codemagic CI**:
 - [x] **Back buttons on all detail screens**
 - [x] **Responsive layout** (adapts between mobile and desktop)
 - [x] **iOS lock screen controls** with album artwork and full playback control
-- [x] **Offline album artwork caching** - artwork downloaded and cached with tracks
+- [x] **Offline album artwork** - artwork automatically downloaded with tracks and displayed in airplane mode
 - [x] **Offline search** - search downloaded content without internet connection
 - [x] **Fixed offline mode toggle** - wave icon tap now works correctly
 - [x] **Offline album detail navigation** - tapping albums in offline mode opens detail instead of immediate playback

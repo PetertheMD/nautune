@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +18,7 @@ class JellyfinImage extends StatelessWidget {
     this.boxFit = BoxFit.cover,
     this.errorBuilder,
     this.placeholderBuilder,
+    this.trackId, // Optional: for offline artwork lookup
   });
 
   final String itemId;
@@ -27,6 +30,7 @@ class JellyfinImage extends StatelessWidget {
   final BoxFit boxFit;
   final Widget Function(BuildContext context, String url, dynamic error)? errorBuilder;
   final Widget Function(BuildContext context, String url)? placeholderBuilder;
+  final String? trackId; // If provided, will check for downloaded artwork first
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +39,33 @@ class JellyfinImage extends StatelessWidget {
     }
 
     final appState = Provider.of<NautuneAppState>(context, listen: false);
-    
+
+    // If trackId is provided, try to load downloaded artwork first
+    if (trackId != null) {
+      return FutureBuilder<File?>(
+        future: appState.downloadService.getArtworkFile(trackId!),
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null) {
+            // Offline artwork found - use it!
+            return Image.file(
+              snapshot.data!,
+              width: width,
+              height: height,
+              fit: boxFit,
+              errorBuilder: (context, error, stackTrace) => _buildNetworkImage(context, appState),
+            );
+          }
+          // No offline artwork - fall back to network image
+          return _buildNetworkImage(context, appState);
+        },
+      );
+    }
+
+    // No trackId provided - use network image directly
+    return _buildNetworkImage(context, appState);
+  }
+
+  Widget _buildNetworkImage(BuildContext context, NautuneAppState appState) {
     // Determine optimal dimensions for request
     final requestWidth = maxWidth ?? (width != null ? (width! * 2).toInt() : 400);
     final requestHeight = maxHeight ?? (height != null ? (height! * 2).toInt() : null);
@@ -53,7 +83,7 @@ class JellyfinImage extends StatelessWidget {
       width: width,
       height: height,
       fit: boxFit,
-      placeholder: placeholderBuilder != null 
+      placeholder: placeholderBuilder != null
           ? (context, url) => placeholderBuilder!(context, url)
           : (context, url) => Container(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
