@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'jellyfin_session.dart';
@@ -9,51 +10,89 @@ class JellyfinSessionStore {
   static const _sessionKey = 'session';
 
   Future<Box> _box() async {
-    if (!Hive.isBoxOpen(_boxName)) {
-      return await Hive.openBox(_boxName);
+    try {
+      if (!Hive.isBoxOpen(_boxName)) {
+        debugPrint('📦 JellyfinSessionStore: Opening Hive box: $_boxName');
+        final box = await Hive.openBox(_boxName);
+        debugPrint('✅ JellyfinSessionStore: Box opened successfully');
+        return box;
+      }
+      return Hive.box(_boxName);
+    } catch (e) {
+      debugPrint('❌ JellyfinSessionStore: Failed to open box: $e');
+      rethrow;
     }
-    return Hive.box(_boxName);
   }
 
   Future<JellyfinSession?> load() async {
-    final box = await _box();
-    final raw = box.get(_sessionKey);
-    if (raw == null) {
-      return null;
-    }
-
     try {
-      // Hive might store it as a Map directly if we put it as Map, 
-      // but keeping JSON string encoding for compatibility with existing logic structure 
-      // or simple migration is fine. 
-      // However, `save` below will store Map. Let's support both for robustness or just Map.
-      // Ideally, we should migrate data if it was in SharedPreferences? 
-      // For now, let's stick to the requested format. 
-      // If raw is Map, use it. If String, decode it.
+      final box = await _box();
+      final raw = box.get(_sessionKey);
+      
+      if (raw == null) {
+        debugPrint('📭 JellyfinSessionStore: No session found in storage');
+        return null;
+      }
+
+      debugPrint('📥 JellyfinSessionStore: Loading session from storage');
+
+      // Hive stores data as Map<dynamic, dynamic> which needs to be converted
+      // Support both Map (from Hive) and String (legacy from SharedPreferences)
       final Map<String, dynamic> json;
       if (raw is Map) {
-        json = Map<String, dynamic>.from(raw);
+        // Convert Map<dynamic, dynamic> to Map<String, dynamic>
+        json = raw.map((key, value) {
+          // Recursively convert nested maps
+          if (value is Map) {
+            return MapEntry(
+              key.toString(),
+              value.map((k, v) => MapEntry(k.toString(), v)),
+            );
+          }
+          return MapEntry(key.toString(), value);
+        });
       } else if (raw is String) {
         json = jsonDecode(raw) as Map<String, dynamic>;
       } else {
+        debugPrint('⚠️ JellyfinSessionStore: Invalid session data type: ${raw.runtimeType}');
         return null;
       }
       
-      return JellyfinSession.fromJson(json);
-    } catch (_) {
-      await box.delete(_sessionKey);
+      final session = JellyfinSession.fromJson(json);
+      debugPrint('✅ JellyfinSessionStore: Session loaded for ${session.username}');
+      return session;
+    } catch (e) {
+      debugPrint('❌ JellyfinSessionStore: Failed to load session: $e');
+      try {
+        final box = await _box();
+        await box.delete(_sessionKey);
+      } catch (_) {}
       return null;
     }
   }
 
   Future<void> save(JellyfinSession session) async {
-    final box = await _box();
-    // Store as Map for better Hive performance/usage
-    await box.put(_sessionKey, session.toJson());
+    try {
+      debugPrint('💾 JellyfinSessionStore: Saving session for ${session.username}');
+      final box = await _box();
+      // Store as Map for better Hive performance/usage
+      await box.put(_sessionKey, session.toJson());
+      debugPrint('✅ JellyfinSessionStore: Session saved successfully');
+    } catch (e) {
+      debugPrint('❌ JellyfinSessionStore: Failed to save session: $e');
+      rethrow;
+    }
   }
 
   Future<void> clear() async {
-    final box = await _box();
-    await box.delete(_sessionKey);
+    try {
+      debugPrint('🗑️ JellyfinSessionStore: Clearing session');
+      final box = await _box();
+      await box.delete(_sessionKey);
+      debugPrint('✅ JellyfinSessionStore: Session cleared');
+    } catch (e) {
+      debugPrint('❌ JellyfinSessionStore: Failed to clear session: $e');
+      rethrow;
+    }
   }
 }
