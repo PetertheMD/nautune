@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -745,35 +746,46 @@ class _AlbumsTab extends StatelessWidget {
         builder: (context, constraints) {
           // 4 columns on desktop (>800px), 2 columns on mobile
           final crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
-          
-          return CustomScrollView(
-            controller: scrollController,
-            slivers: [
-              // Albums grid
-              SliverPadding(
-                padding: const EdgeInsets.all(16),
-                sliver: SliverGrid(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    childAspectRatio: 0.75,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
+
+          return Stack(
+            children: [
+              CustomScrollView(
+                controller: scrollController,
+                slivers: [
+                  // Albums grid
+                  SliverPadding(
+                    padding: const EdgeInsets.all(16),
+                    sliver: SliverGrid(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        childAspectRatio: 0.75,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          if (index >= albums!.length) {
+                            return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()));
+                          }
+                          final album = albums![index];
+                          return _AlbumCard(
+                            album: album,
+                            onTap: () => onAlbumTap(album),
+                            appState: appState,
+                          );
+                        },
+                        childCount: albums!.length + (isLoadingMore ? 2 : 0),
+                      ),
+                    ),
                   ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      if (index >= albums!.length) {
-                        return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()));
-                      }
-                      final album = albums![index];
-              return _AlbumCard(
-                album: album,
-                onTap: () => onAlbumTap(album),
-                appState: appState,
-              );
-                    },
-                    childCount: albums!.length + (isLoadingMore ? 2 : 0),
-                  ),
-                ),
+                ],
+              ),
+              AlphabetScrollbar(
+                items: albums!,
+                getItemName: (album) => (album as JellyfinAlbum).name,
+                scrollController: scrollController,
+                itemHeight: (constraints.maxWidth / crossAxisCount) * (1 / 0.75) + 16,
+                crossAxisCount: crossAxisCount,
               ),
             ],
           );
@@ -1795,7 +1807,28 @@ class _FavoritesTab extends StatelessWidget {
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
-              leading: Icon(Icons.music_note, color: theme.colorScheme.secondary),
+              leading: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: (track.albumId != null && track.albumPrimaryImageTag != null)
+                    ? JellyfinImage(
+                        itemId: track.albumId!,
+                        imageTag: track.albumPrimaryImageTag,
+                        maxWidth: 200,
+                        boxFit: BoxFit.cover,
+                        errorBuilder: (context, url, error) => Image.asset(
+                          'assets/no_album_art.png',
+                          fit: BoxFit.cover,
+                          width: 56,
+                          height: 56,
+                        ),
+                      )
+                    : Image.asset(
+                        'assets/no_album_art.png',
+                        fit: BoxFit.cover,
+                        width: 56,
+                        height: 56,
+                      ),
+              ),
               title: Text(
                 track.name,
                 style: TextStyle(color: theme.colorScheme.tertiary),  // Ocean blue
@@ -2448,18 +2481,46 @@ class _RecentTabState extends State<_RecentTab> {
   }
 }
 
-class _ArtistsTab extends StatelessWidget {
+class _ArtistsTab extends StatefulWidget {
   const _ArtistsTab({required this.appState});
-  
+
   final NautuneAppState appState;
+
+  @override
+  State<_ArtistsTab> createState() => _ArtistsTabState();
+}
+
+class _ArtistsTabState extends State<_ArtistsTab> {
+  late ScrollController _artistsScrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _artistsScrollController = ScrollController();
+    _artistsScrollController.addListener(_onArtistsScroll);
+  }
+
+  @override
+  void dispose() {
+    _artistsScrollController.dispose();
+    super.dispose();
+  }
+
+  void _onArtistsScroll() {
+    if (_artistsScrollController.position.pixels >=
+        _artistsScrollController.position.maxScrollExtent - 200) {
+      widget.appState.loadMoreArtists();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final artists = appState.artists;
-    final isLoading = appState.isLoadingArtists;
-    final error = appState.artistsError;
-    
+    final artists = widget.appState.artists;
+    final isLoading = widget.appState.isLoadingArtists;
+    final isLoadingMore = widget.appState.isLoadingMoreArtists;
+    final error = widget.appState.artistsError;
+
     if (isLoading && artists == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -2506,32 +2567,52 @@ class _ArtistsTab extends StatelessWidget {
     }
 
     return RefreshIndicator(
-      onRefresh: () => appState.refreshLibraryData(),
+      onRefresh: () => widget.appState.refreshLibraryData(),
       child: LayoutBuilder(
         builder: (context, constraints) {
           // 4 columns on desktop (>800px), 3 columns on mobile
           final crossAxisCount = constraints.maxWidth > 800 ? 4 : 3;
-          
-          return CustomScrollView(
-            slivers: [
-              // Artists grid
-              SliverPadding(
-                padding: const EdgeInsets.all(16),
-                sliver: SliverGrid(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    childAspectRatio: 0.75,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final artist = artists[index];
-                      return _ArtistCard(artist: artist, appState: appState);
-                    },
-                    childCount: artists.length,
+
+          return Stack(
+            children: [
+              CustomScrollView(
+                controller: _artistsScrollController,
+                slivers: [
+                  // Artists grid
+                  SliverPadding(
+                    padding: const EdgeInsets.all(16),
+                    sliver: SliverGrid(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        childAspectRatio: 0.75,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          if (index >= artists.length) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: CircularProgressIndicator(),
+                              ),
+                            );
+                          }
+                          final artist = artists[index];
+                          return _ArtistCard(artist: artist, appState: widget.appState);
+                        },
+                        childCount: artists.length + (isLoadingMore ? 2 : 0),
+                      ),
+                    ),
                   ),
-                ),
+                ],
+              ),
+              AlphabetScrollbar(
+                items: artists,
+                getItemName: (artist) => (artist as JellyfinArtist).name,
+                scrollController: _artistsScrollController,
+                itemHeight: (constraints.maxWidth / crossAxisCount) * (1 / 0.75) + 12,
+                crossAxisCount: crossAxisCount,
               ),
             ],
           );
@@ -2788,18 +2869,37 @@ class _OfflineArtistsView extends StatelessWidget {
 }
 
 // Genres Tab
-class _GenresTab extends StatelessWidget {
+class _GenresTab extends StatefulWidget {
   const _GenresTab({required this.appState});
-  
+
   final NautuneAppState appState;
+
+  @override
+  State<_GenresTab> createState() => _GenresTabState();
+}
+
+class _GenresTabState extends State<_GenresTab> {
+  late ScrollController _genresScrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _genresScrollController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _genresScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final genres = appState.genres;
-    final isLoading = appState.isLoadingGenres;
-    final error = appState.genresError;
-    
+    final genres = widget.appState.genres;
+    final isLoading = widget.appState.isLoadingGenres;
+    final error = widget.appState.genresError;
+
     if (isLoading && genres == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -2836,24 +2936,36 @@ class _GenresTab extends StatelessWidget {
     }
 
     return RefreshIndicator(
-      onRefresh: () => appState.refreshGenres(),
+      onRefresh: () => widget.appState.refreshGenres(),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
-          
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              childAspectRatio: 1.5,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            itemCount: genres.length,
-            itemBuilder: (context, index) {
-              final genre = genres[index];
-              return _GenreCard(genre: genre, appState: appState);
-            },
+
+          return Stack(
+            children: [
+              GridView.builder(
+                controller: _genresScrollController,
+                padding: const EdgeInsets.all(16),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  childAspectRatio: 1.5,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: genres.length,
+                itemBuilder: (context, index) {
+                  final genre = genres[index];
+                  return _GenreCard(genre: genre, appState: widget.appState);
+                },
+              ),
+              AlphabetScrollbar(
+                items: genres,
+                getItemName: (genre) => (genre as JellyfinGenre).name,
+                scrollController: _genresScrollController,
+                itemHeight: (constraints.maxWidth / crossAxisCount) * (1 / 1.5) + 12,
+                crossAxisCount: crossAxisCount,
+              ),
+            ],
           );
         },
       ),
@@ -4130,6 +4242,97 @@ class _DownloadsTab extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// Alphabet scrollbar for quick navigation
+class AlphabetScrollbar extends StatelessWidget {
+  const AlphabetScrollbar({
+    super.key,
+    required this.items,
+    required this.getItemName,
+    required this.scrollController,
+    required this.itemHeight,
+    required this.crossAxisCount,
+  });
+
+  final List items;
+  final String Function(dynamic) getItemName;
+  final ScrollController scrollController;
+  final double itemHeight;
+  final int crossAxisCount;
+
+  static const _alphabet = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I',
+                             'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
+                             'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
+
+  void _scrollToLetter(String letter) {
+    if (items.isEmpty) return;
+
+    // Find the first item starting with this letter
+    int targetIndex = -1;
+    for (int i = 0; i < items.length; i++) {
+      final itemName = getItemName(items[i]).toUpperCase();
+      final firstChar = itemName.isNotEmpty ? itemName[0] : '';
+
+      if (letter == '#') {
+        // # represents numbers
+        if (RegExp(r'[0-9]').hasMatch(firstChar)) {
+          targetIndex = i;
+          break;
+        }
+      } else if (firstChar == letter) {
+        targetIndex = i;
+        break;
+      }
+    }
+
+    if (targetIndex >= 0) {
+      // Calculate row index for grid layout
+      final row = targetIndex ~/ crossAxisCount;
+      // Calculate pixel position (accounting for padding and spacing)
+      final targetPosition = (row * itemHeight) - 100.0; // 100px offset for better positioning
+
+      scrollController.animateTo(
+        math.max(0, targetPosition),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Positioned(
+      right: 0,
+      top: 0,
+      bottom: 0,
+      child: Container(
+        width: 20,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: _alphabet.map((letter) {
+            return GestureDetector(
+              onTap: () => _scrollToLetter(letter),
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                child: Text(
+                  letter,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
     );
   }
 }

@@ -561,8 +561,9 @@ class JellyfinService {
       queryParams: {
         'userId': session.credentials.userId,
         'fields':
-            'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,AudioInfo,ParentId',
+            'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,MediaStreams',
         'enableImageTypes': 'Primary,Thumb',
+        'enableUserData': 'true',
       },
     );
 
@@ -594,8 +595,9 @@ class JellyfinService {
         'parentId': albumId,
         'sortBy': 'SortName',
         'fields':
-            'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,AudioInfo,ParentId',
+            'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,MediaStreams',
         'enableImageTypes': 'Primary,Thumb',
+        'enableUserData': 'true',
       },
     );
 
@@ -726,8 +728,9 @@ class JellyfinService {
         'filters': 'IsFavorite',
         'sortBy': 'SortName',
         'fields':
-            'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,AudioInfo,ParentId',
+            'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,MediaStreams',
         'enableImageTypes': 'Primary,Thumb',
+        'enableUserData': 'true',
       },
     );
 

@@ -713,7 +713,7 @@ class JellyfinClient {
     final queryParams = <String, String>{
       'UserId': credentials.userId,
       'Limit': limit.toString(),
-      'Fields': 'AudioInfo,ParentId,Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,MediaStreams',
+      'Fields': 'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,MediaStreams',
     };
 
     final uri = _buildUri('/Items/$itemId/InstantMix', queryParams);
