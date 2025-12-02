@@ -30,6 +30,10 @@ import 'services/playlist_sync_queue.dart';
 // Import SessionProvider - this is new
 import 'providers/session_provider.dart';
 
+// Import repository layer for offline UI parity
+import 'repositories/music_repository.dart';
+import 'repositories/repository_factory.dart';
+
 class NautuneAppState extends ChangeNotifier {
   NautuneAppState({
     required JellyfinService jellyfinService,
@@ -324,6 +328,15 @@ class NautuneAppState extends ChangeNotifier {
   bool get isLoadingLongestTracks => _isLoadingLongestTracks;
   List<JellyfinTrack>? get longestTracks => _longestTracks;
   bool get isOfflineMode => _isOfflineMode;
+
+  /// Get the appropriate repository based on offline mode.
+  /// Returns OfflineRepository when offline, OnlineRepository when online.
+  MusicRepository get repository => RepositoryFactory.create(
+        isOfflineMode: _isOfflineMode,
+        jellyfinService: _jellyfinService,
+        downloadService: _downloadService,
+      );
+
   bool get showVolumeBar => _showVolumeBar;
   bool get crossfadeEnabled => _crossfadeEnabled;
   int get crossfadeDurationSeconds => _crossfadeDurationSeconds;
@@ -1366,9 +1379,9 @@ class NautuneAppState extends ChangeNotifier {
     }
 
     try {
-      final albums = await _jellyfinService.loadAlbums(
+      // Use repository for offline UI parity
+      final albums = await repository.getAlbums(
         libraryId: libraryId,
-        forceRefresh: forceRefresh,
         startIndex: 0,
         limit: _albumsPageSize,
       );
@@ -1420,7 +1433,7 @@ class NautuneAppState extends ChangeNotifier {
 
     try {
       _albumsPage++;
-      final newAlbums = await _jellyfinService.loadAlbums(
+      final newAlbums = await repository.getAlbums(
         libraryId: libraryId,
         startIndex: _albumsPage * _albumsPageSize,
         limit: _albumsPageSize,
@@ -1457,9 +1470,9 @@ class NautuneAppState extends ChangeNotifier {
     }
 
     try {
-      final artists = await _jellyfinService.loadArtists(
+      // Use repository for offline UI parity
+      final artists = await repository.getArtists(
         libraryId: libraryId,
-        forceRefresh: forceRefresh,
         startIndex: 0,
         limit: _artistsPageSize,
       );
@@ -1511,7 +1524,7 @@ class NautuneAppState extends ChangeNotifier {
 
     try {
       _artistsPage++;
-      final newArtists = await _jellyfinService.loadArtists(
+      final newArtists = await repository.getArtists(
         libraryId: libraryId,
         startIndex: _artistsPage * _artistsPageSize,
         limit: _artistsPageSize,
