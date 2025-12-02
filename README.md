@@ -2,20 +2,30 @@
 
 Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter and delivers a beautiful deep-sea themed experience with smooth native audio playback and seamless Jellyfin integration.
 
-## 🚀 Latest Updates (v1.9.6+)
+## 🚀 Latest Updates (v1.9.8+)
 - **🔧 UI/UX Improvements**: Critical bug fixes for better user experience
   - ✅ **Alphabet scrollbar fix**: Letters in Albums/Artists/Genres tabs are now fully tappable
     - Fixed hit test behavior with `HitTestBehavior.opaque` for reliable touch detection
     - Expanded touch targets from 20px to 28px width for better accessibility
     - Each letter gets equal vertical space for easier navigation
-  - ✅ **Downloaded track duration accuracy**: Durations now match actual audio files
+  - ✅ **Downloaded track duration accuracy**: Durations now match actual audio files everywhere
     - Extracts real duration from downloaded audio files using `audioplayers` API
     - Updates track metadata automatically after download completes
+    - Favorites tab merges accurate durations from downloaded tracks
     - Fixes issue where server-reported duration didn't match local files
   - ✅ **Fullscreen player artwork reliability**: Album art and gradients always load correctly
     - Fixed gradient extraction to use same fallback logic as artwork display
     - Now properly falls back to album art when track-specific art is missing
     - Gradient background updates immediately when tracks change
+  - ✅ **Favorites tab loading performance**: Smoother list rendering without layout shifts
+    - Album art wrapped in fixed 56x56 SizedBox to prevent reflow
+    - Added placeholder icons that display during image loading
+    - List items maintain stable layout as images load asynchronously
+  - ✅ **Download queue management fix**: Can now remove items from download queue
+    - Fixed bug where queued/downloading items couldn't be removed
+    - Cancelling queued downloads now properly removes them from queue
+    - Only completed downloads trigger physical file deletion
+    - Prevents errors when attempting to delete non-existent files
 - **🎵 Fullscreen Player Navigation**: Click artist/album to explore while listening
   - ✅ **Clickable artist**: Tap artist name to open artist detail screen with all their albums
   - ✅ **Clickable album**: Tap album name to see full album tracklist
