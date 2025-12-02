@@ -1807,28 +1807,36 @@ class _FavoritesTab extends StatelessWidget {
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: (track.albumId != null && track.albumPrimaryImageTag != null)
-                    ? JellyfinImage(
-                        itemId: track.albumId!,
-                        imageTag: track.albumPrimaryImageTag,
-                        trackId: track.id, // Enable offline artwork support
-                        maxWidth: 200,
-                        boxFit: BoxFit.cover,
-                        errorBuilder: (context, url, error) => Image.asset(
+              leading: SizedBox(
+                width: 56,
+                height: 56,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: (track.albumId != null && track.albumPrimaryImageTag != null)
+                      ? JellyfinImage(
+                          itemId: track.albumId!,
+                          imageTag: track.albumPrimaryImageTag,
+                          trackId: track.id, // Enable offline artwork support
+                          maxWidth: 200,
+                          boxFit: BoxFit.cover,
+                          placeholderBuilder: (context, url) => Container(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            child: Icon(
+                              Icons.album,
+                              size: 24,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          errorBuilder: (context, url, error) => Image.asset(
+                            'assets/no_album_art.png',
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                      : Image.asset(
                           'assets/no_album_art.png',
                           fit: BoxFit.cover,
-                          width: 56,
-                          height: 56,
                         ),
-                      )
-                    : Image.asset(
-                        'assets/no_album_art.png',
-                        fit: BoxFit.cover,
-                        width: 56,
-                        height: 56,
-                      ),
+                ),
               ),
               title: Text(
                 track.name,

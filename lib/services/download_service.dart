@@ -652,19 +652,29 @@ class DownloadService extends ChangeNotifier {
     item.owners.remove(ownerId);
     debugPrint('Removed owner "$ownerId" from track "${item.track.name}". Remaining owners: ${item.owners.length}');
 
-    // If no more owners, proceed with physical deletion
+    // If no more owners, proceed with removal
     if (item.owners.isEmpty) {
-      await _performDelete(trackId, item.localPath);
-      _downloads.remove(trackId);
-      _downloadQueue.remove(trackId);
-      _demoDownloadIds.remove(trackId); // Remove from demo set if it was there
-      debugPrint('No more owners for "${item.track.name}". Physically deleted.');
+      // If download is queued or in progress, just remove from queue/map
+      if (item.isQueued || item.isDownloading) {
+        _downloadQueue.remove(trackId);
+        _downloads.remove(trackId);
+        _demoDownloadIds.remove(trackId);
+        debugPrint('Cancelled ${item.isQueued ? "queued" : "in-progress"} download: ${item.track.name}');
+      } else {
+        // Only delete file if download was completed
+        await _performDelete(trackId, item.localPath);
+        _downloads.remove(trackId);
+        _downloadQueue.remove(trackId);
+        _demoDownloadIds.remove(trackId);
+        debugPrint('No more owners for "${item.track.name}". Physically deleted.');
+      }
+      await _saveDownloads();
     } else {
       // If owners still exist, just save the updated item (with fewer owners)
       await _saveDownloads();
       debugPrint('Track "${item.track.name}" still has owners. Not physically deleted.');
     }
-    
+
     notifyListeners();
   }
 

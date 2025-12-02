@@ -1702,6 +1702,18 @@ class NautuneAppState extends ChangeNotifier {
 
     try {
       _favoriteTracks = await _jellyfinService.getFavoriteTracks();
+
+      // Merge durations from downloaded tracks (fixes duration accuracy)
+      if (_favoriteTracks != null) {
+        _favoriteTracks = _favoriteTracks!.map((track) {
+          final downloadedTrack = _downloadService.trackFor(track.id);
+          if (downloadedTrack != null && downloadedTrack.duration != null) {
+            // Use downloaded track's accurate duration
+            return track.copyWith(runTimeTicks: downloadedTrack.runTimeTicks);
+          }
+          return track;
+        }).toList();
+      }
     } catch (error) {
       _favoritesError = error;
       _favoriteTracks = null;
