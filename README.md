@@ -935,15 +935,16 @@ All iOS features are built and deployed via **Codemagic CI**:
   - [x] Persistent preference
 
 ### 🚧 In Progress / Planned
-- [x] **Keyboard shortcuts for desktop** (Space, arrows, N/P/R/L)
-- [x] **ReplayGain normalization** for consistent volume
-- [x] **Lyrics API integration** (backend complete)
-- [x] **Lyrics UI tab** - synced scrolling display in Full Player (in progress)
-- [x] Enhanced search across all content types
-- [ ] Equalizer and audio settings
-- [ ] **Sorting options** (by name, date added, year for albums/artists)
-- [ ] Cross-platform stability improvements (Windows, macOS, Android)
-- [x] "Smart Resume" that restores current song, queue, shuffle, repeat, and scroll state on app return
+- [ ] **AirPlay Support** (iOS/macOS) - Stream to HomePod, Apple TV, and AirPlay speakers
+  - AVRoutePickerView integration for native AirPlay picker
+  - System audio routing for external playback
+  - Control surface in player UI
+  - Platform fallback for non-Apple devices
+- [ ] **Equalizer and audio settings** - Fine-tune audio output with presets and custom EQ
+- [ ] **Sorting options** - Sort albums/artists by name, date added, year, or play count
+- [ ] **Cross-platform stability** - Enhanced Windows, macOS, and Android support
+- [ ] **Smart Downloads** - Auto-download favorites and keep last 50 played songs offline
+- [ ] **Infinite Radio Mode** - Endless playback that auto-generates next track when queue is low
 
 ## 🌊 The "Poseidon Dashboard" Roadmap
 
@@ -965,8 +966,8 @@ Nautune is evolving into a best-in-class music player with a focus on native des
 **Mobile (iOS/Android)**:
 - [ ] **Translucent Bottom Bar** - Glassmorphism blur effect
 - [ ] **Haptic Feedback** - Vibrations on Play/Next/Seek for tactile response
-- [ ] **CarPlay Consistency** - Ensure dashboard translates well to car display
-- [ ] **AirPlay / Casting** - HomePod and Apple TV integration
+- [x] **CarPlay** - Full library browsing and offline playback (completed!)
+- [ ] **AirPlay** - HomePod and Apple TV integration for iOS/macOS
 
 ### Phase 2: The Dashboard (The Face)
 **Goal**: Transform the Home screen into a discovery engine
