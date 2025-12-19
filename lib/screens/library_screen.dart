@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -2533,7 +2534,13 @@ class _ArtistsTab extends StatelessWidget {
     }
 
     return RefreshIndicator(
-      onRefresh: () async => onRefresh?.call() ?? appState.refreshArtists(),
+      onRefresh: () async {
+        if (onRefresh != null) {
+          onRefresh!();
+        } else {
+          await appState.refreshArtists();
+        }
+      },
       child: LayoutBuilder(
         builder: (context, constraints) {
           // 4 columns on desktop (>800px), 3 columns on mobile
