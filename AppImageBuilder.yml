@@ -8,7 +8,7 @@ AppDir:
     id: com.elysiumdisc.nautune
     name: Nautune
     icon: nautune
-    version: 1.8.5
+    version: 2.0.0
     exec: nautune
     exec_args: $@
 
