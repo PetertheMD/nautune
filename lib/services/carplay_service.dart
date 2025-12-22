@@ -1,14 +1,20 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_carplay/flutter_carplay.dart';
 import '../app_state.dart';
+import '../jellyfin/jellyfin_track.dart';
 
 class CarPlayService {
   final NautuneAppState appState;
   final FlutterCarplay _carplay = FlutterCarplay();
   bool _isInitialized = false;
+  bool _isConnected = false;
+  StreamSubscription? _playbackSubscription;
   
   CarPlayService({required this.appState});
+  
+  bool get isConnected => _isConnected;
   
   /// Call this after the app is fully loaded
   Future<void> initialize() async {
@@ -18,9 +24,82 @@ class CarPlayService {
     // Safely setup CarPlay with error handling
     try {
       await _setupCarPlay();
+      _setupListeners();
     } catch (e) {
       debugPrint('⚠️ CarPlay initialization failed (non-critical): $e');
       // Don't crash the app if CarPlay fails
+    }
+  }
+  
+  void _setupListeners() {
+    // Listen to playback state changes for Now Playing updates
+    _playbackSubscription = appState.audioPlayerService.currentTrackStream.listen(
+      _onPlaybackChanged,
+    );
+    
+    // Listen for CarPlay connection events using the correct API
+    _carplay.addListenerOnConnectionChange((ConnectionStatusTypes status) {
+      switch (status) {
+        case ConnectionStatusTypes.connected:
+          _onCarPlayConnect();
+          break;
+        case ConnectionStatusTypes.disconnected:
+          _onCarPlayDisconnect();
+          break;
+        case ConnectionStatusTypes.background:
+          debugPrint('🚗 CarPlay in background');
+          break;
+        case ConnectionStatusTypes.unknown:
+          debugPrint('🚗 CarPlay status unknown');
+          break;
+      }
+    });
+    
+    // Also listen to app state changes for library updates
+    appState.addListener(_onAppStateChanged);
+  }
+  
+  void _onCarPlayConnect() {
+    _isConnected = true;
+    debugPrint('🚗 CarPlay connected');
+    // Refresh content when CarPlay connects
+    _refreshRootTemplate();
+  }
+  
+  void _onCarPlayDisconnect() {
+    _isConnected = false;
+    debugPrint('🚗 CarPlay disconnected');
+  }
+  
+  void _onAppStateChanged() {
+    if (_isConnected) {
+      // Refresh content when library data changes
+      _refreshRootTemplate();
+    }
+  }
+  
+  void _onPlaybackChanged(JellyfinTrack? track) {
+    if (track != null && _isConnected) {
+      updateNowPlaying(
+        trackId: track.id,
+        title: track.name,
+        artist: track.displayArtist,
+        album: track.album,
+      );
+    }
+  }
+  
+  Future<void> _refreshRootTemplate() async {
+    if (!_isInitialized || !_isConnected) return;
+    try {
+      final rootTemplate = _buildRootTemplate();
+      await FlutterCarplay.setRootTemplate(
+        rootTemplate: rootTemplate,
+        animated: false,
+      );
+      debugPrint('🔄 CarPlay content refreshed');
+    } catch (e) {
+      debugPrint('⚠️ CarPlay refresh error: $e');
     }
   }
   
@@ -125,6 +204,12 @@ class CarPlayService {
 
   void _showAlbums() async {
     final albumsList = appState.albums ?? [];
+    
+    if (albumsList.isEmpty) {
+      _showEmptyState('Albums', 'No albums available');
+      return;
+    }
+    
     final items = albumsList.map((album) => CPListItem(
       text: album.name,
       detailText: album.artists.join(', '),
@@ -145,6 +230,12 @@ class CarPlayService {
 
   void _showArtists() async {
     final artistsList = appState.artists ?? [];
+    
+    if (artistsList.isEmpty) {
+      _showEmptyState('Artists', 'No artists available');
+      return;
+    }
+    
     final items = artistsList.map((artist) => CPListItem(
       text: artist.name,
       onPress: (complete, self) {
@@ -164,6 +255,12 @@ class CarPlayService {
 
   void _showPlaylists() async {
     final playlistsList = appState.playlists ?? [];
+    
+    if (playlistsList.isEmpty) {
+      _showEmptyState('Playlists', 'No playlists available');
+      return;
+    }
+    
     final items = playlistsList.map((playlist) => CPListItem(
       text: playlist.name,
       detailText: '${playlist.trackCount} tracks',
@@ -184,14 +281,27 @@ class CarPlayService {
 
   void _showAlbumTracks(String albumId, String albumName) async {
     final tracks = await appState.getAlbumTracks(albumId);
-    final items = tracks.map((track) => CPListItem(
-      text: track.name,
-      detailText: track.artists.join(', '),
-      onPress: (complete, self) {
-        appState.audioPlayerService.playTrack(track);
-        complete();
-      },
-    )).toList();
+    
+    if (tracks.isEmpty) {
+      _showEmptyState(albumName, 'No tracks in this album');
+      return;
+    }
+    
+    final items = tracks.map((track) {
+      return CPListItem(
+        text: track.name,
+        detailText: track.artists.join(', '),
+        onPress: (complete, self) {
+          // Play track with album as queue context
+          appState.audioPlayerService.playTrack(
+            track,
+            queueContext: tracks,
+            reorderQueue: false,
+          );
+          complete();
+        },
+      );
+    }).toList();
 
     FlutterCarplay.push(
       template: CPListTemplate(
@@ -210,6 +320,11 @@ class CarPlayService {
       }
       return album.artists.contains(artistName);
     }).toList();
+    
+    if (albums.isEmpty) {
+      _showEmptyState(artistName, 'No albums from this artist');
+      return;
+    }
     
     final items = albums.map((album) => CPListItem(
       text: album.name,
@@ -231,14 +346,27 @@ class CarPlayService {
 
   void _showPlaylistTracks(String playlistId, String playlistName) async {
     final tracks = await appState.getPlaylistTracks(playlistId);
-    final items = tracks.map((track) => CPListItem(
-      text: track.name,
-      detailText: track.artists.join(', '),
-      onPress: (complete, self) {
-        appState.audioPlayerService.playTrack(track);
-        complete();
-      },
-    )).toList();
+    
+    if (tracks.isEmpty) {
+      _showEmptyState(playlistName, 'No tracks in this playlist');
+      return;
+    }
+    
+    final items = tracks.map((track) {
+      return CPListItem(
+        text: track.name,
+        detailText: track.artists.join(', '),
+        onPress: (complete, self) {
+          // Play track with playlist as queue context
+          appState.audioPlayerService.playTrack(
+            track,
+            queueContext: tracks,
+            reorderQueue: false,
+          );
+          complete();
+        },
+      );
+    }).toList();
 
     FlutterCarplay.push(
       template: CPListTemplate(
@@ -250,26 +378,32 @@ class CarPlayService {
   }
 
   void _showFavorites() async {
-    final albumsList = appState.albums ?? [];
-    final favorites = albumsList.where((album) => album.isFavorite).toList();
+    // Use favorite tracks directly instead of fetching from albums
+    final favoriteTracks = appState.favoriteTracks ?? [];
     
-    final List<CPListItem> favoriteTracks = [];
-    for (final album in favorites) {
-      final tracks = await appState.getAlbumTracks(album.id);
-      favoriteTracks.addAll(tracks.map((track) => CPListItem(
-        text: track.name,
-        detailText: '${track.artists.join(', ')} • ${track.album}',
-        onPress: (complete, self) {
-          appState.audioPlayerService.playTrack(track);
-          complete();
-        },
-      )));
+    if (favoriteTracks.isEmpty) {
+      _showEmptyState('Favorites', 'No favorite tracks yet');
+      return;
     }
+    
+    final items = favoriteTracks.map((track) => CPListItem(
+      text: track.name,
+      detailText: '${track.artists.join(', ')} • ${track.album}',
+      onPress: (complete, self) {
+        // Play track with favorites as queue context
+        appState.audioPlayerService.playTrack(
+          track,
+          queueContext: favoriteTracks,
+          reorderQueue: false,
+        );
+        complete();
+      },
+    )).toList();
 
     FlutterCarplay.push(
       template: CPListTemplate(
         title: 'Favorites',
-        sections: [CPListSection(items: favoriteTracks)],
+        sections: [CPListSection(items: items)],
         systemIcon: 'heart.fill',
       ),
     );
@@ -277,11 +411,23 @@ class CarPlayService {
 
   void _showDownloads() async {
     final downloads = appState.downloadService.completedDownloads;
+    
+    if (downloads.isEmpty) {
+      _showEmptyState('Downloads', 'No downloaded music');
+      return;
+    }
+    
+    final downloadedTracks = downloads.map((d) => d.track).toList();
     final items = downloads.map((download) => CPListItem(
       text: download.track.name,
       detailText: '${download.track.artists.join(', ')} • ${download.track.album}',
       onPress: (complete, self) {
-        appState.audioPlayerService.playTrack(download.track);
+        // Play track with downloads as queue context
+        appState.audioPlayerService.playTrack(
+          download.track,
+          queueContext: downloadedTracks,
+          reorderQueue: false,
+        );
         complete();
       },
     )).toList();
@@ -294,6 +440,30 @@ class CarPlayService {
       ),
     );
   }
+  
+  void _showEmptyState(String title, String message) {
+    FlutterCarplay.push(
+      template: CPListTemplate(
+        title: title,
+        sections: [
+          CPListSection(
+            items: [
+              CPListItem(
+                text: message,
+                detailText: appState.isOfflineMode 
+                    ? 'You are offline. Downloaded music is available.'
+                    : 'Try refreshing your library',
+                onPress: (complete, self) {
+                  complete();
+                },
+              ),
+            ],
+          ),
+        ],
+        systemIcon: 'exclamationmark.circle',
+      ),
+    );
+  }
 
   void updateNowPlaying({
     required String trackId,
@@ -302,5 +472,12 @@ class CarPlayService {
     String? album,
   }) {
     // Now Playing info is handled by audio_service plugin automatically
+    // This method is kept for API compatibility and potential future extensions
+  }
+  
+  void dispose() {
+    _playbackSubscription?.cancel();
+    _carplay.removeListenerOnConnectionChange();
+    appState.removeListener(_onAppStateChanged);
   }
 }

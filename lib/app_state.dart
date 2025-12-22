@@ -616,30 +616,52 @@ class NautuneAppState extends ChangeNotifier {
     _networkAvailable = isOnline;
 
     // Update offline mode based on connectivity
+    // Going offline is immediate - user needs to know right away
     if (!isOnline && !_isOfflineMode && !_isDemoMode) {
       _isOfflineMode = true;
       debugPrint('📴 Going offline: Network lost');
-    } else if (isOnline && _isOfflineMode && !_isDemoMode) {
-      _isOfflineMode = false;
-      debugPrint('📶 Going online: Network restored');
-    }
-
-    if (wasOnline != isOnline) {
       notifyListeners();
+      return;
     }
-
+    
+    // Going online - apply immediately but don't auto-switch offline mode
+    // Let the user manually switch back or let bootstrap sync handle it
     if (isOnline && !wasOnline) {
+      debugPrint('📶 Network restored - starting background sync');
+      notifyListeners();
+      
       final session = _session;
       if (session != null && !_isDemoMode) {
+        // Start background sync without forcing offline mode change
         _startBootstrapSync(session);
-        unawaited(() async {
-          try {
-            await refreshLibraries();
-          } catch (error) {
-            debugPrint('Refresh after reconnect failed: $error');
-          }
-        }());
+        // Refresh data in background - don't await, don't block UI
+        unawaited(_refreshAfterReconnect());
       }
+    } else if (wasOnline != isOnline) {
+      notifyListeners();
+    }
+  }
+  
+  Future<void> _refreshAfterReconnect() async {
+    // Small delay to let connection stabilize
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    // Check if still online before refreshing
+    if (!_networkAvailable) return;
+    
+    try {
+      await refreshLibraries();
+      debugPrint('✅ Background refresh after reconnect complete');
+      
+      // If refresh succeeded, we can safely switch back to online mode
+      if (_isOfflineMode && _networkAvailable && !_isDemoMode) {
+        _isOfflineMode = false;
+        debugPrint('📶 Switching back to online mode');
+        notifyListeners();
+      }
+    } catch (error) {
+      debugPrint('⚠️ Refresh after reconnect failed: $error');
+      // Keep in offline mode if refresh fails
     }
   }
 

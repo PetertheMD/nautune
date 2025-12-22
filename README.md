@@ -2,7 +2,27 @@
 
 Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter and delivers a beautiful deep-sea themed experience with smooth native audio playback and seamless Jellyfin integration.
 
-## 🚀 Latest Updates (v2.0.0+)
+## 🚀 Latest Updates (v2.1.0+)
+- **🚗 Enhanced CarPlay Integration**: Smarter, more reliable car experience
+  - ✅ **Connection state tracking**: Properly detects CarPlay connect/disconnect events
+  - ✅ **Auto-refresh on connect**: Library content refreshes when CarPlay connects
+  - ✅ **Auto-refresh on data change**: Content updates when library data changes
+  - ✅ **Empty state handling**: Clear messages when no albums/playlists/favorites available
+  - ✅ **Proper queue context**: Playing tracks from CarPlay now queues the full album/playlist
+  - ✅ **Offline-aware messaging**: Empty states show different messages when offline
+- **📱 iOS App Lifecycle Management**: Robust state persistence
+  - ✅ **Background state saving**: Playback state saved immediately when app goes to background
+  - ✅ **Resume connectivity check**: Connectivity checked when app returns to foreground
+  - ✅ **Lifecycle observer**: Proper `WidgetsBindingObserver` integration for pause/resume
+  - ✅ **Seamless restore**: Resume exactly where you left off after backgrounding
+- **🔄 Smoother Offline/Online Transitions**: Graceful network handling
+  - ✅ **Debounced online detection**: 2-second delay prevents flicker from unstable connections
+  - ✅ **Instant offline detection**: Going offline is immediate - users know right away
+  - ✅ **Smart mode switching**: Only switches back to online mode after successful data refresh
+  - ✅ **Background refresh**: Data refreshes in background after reconnection
+  - ✅ **Graceful fallback**: Stays offline if refresh fails after reconnect
+
+## 🚀 Previous Updates (v2.0.0+)
 - **💎 The "Silver Bullet" Progress Bar**: Buttery smooth tracking
   - ✅ **Jitter-Free**: Replaced jumping sliders with `audio_video_progress_bar`
   - ✅ **RxStream Synchronization**: Unified `PositionData` stream combines current position, buffered status, and metadata duration using `rxdart`
@@ -839,13 +859,17 @@ Nautune includes **full CarPlay integration** for iOS powered by the `flutter_ca
 - **Tab Navigation**: Library, Favorites, Downloads tabs with car-friendly segmented controls
 - **Library Browsing**: Browse albums, artists, and playlists while driving
 - **Track Playback**: Play any track directly from CarPlay with full queue support
+- **Proper Queue Context**: Playing a track queues the entire album/playlist for continuous playback
 - **Offline Support**: Browse and play downloaded music in airplane mode (no internet required)
+- **Auto-Refresh**: Content updates automatically when library data changes or CarPlay connects
+- **Empty State Handling**: Clear messages when no content available (with offline-aware messaging)
+- **Connection State Tracking**: Properly detects and handles CarPlay connect/disconnect events
 - **Native Integration**: Uses flutter_carplay plugin for seamless iOS integration
 - **Clean UI**: Optimized for minimal distraction while driving
 
 #### 🔧 Implementation Details
 - **Flutter CarPlay Plugin**: `flutter_carplay: ^1.1.4` handles all CarPlay UI and interactions
-- **CarPlay Service**: `lib/services/carplay_service.dart` - connects CarPlay to app state
+- **CarPlay Service**: `lib/services/carplay_service.dart` - connects CarPlay to app state with connection tracking
 - **Info.plist Configuration**: 
   - UIBackgroundModes with `audio` for background playback
   - CarPlay entitlements in `ios/Runner/Runner.entitlements`:

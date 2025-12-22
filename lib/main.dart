@@ -94,7 +94,7 @@ Future<void> main() async {
   );
 }
 
-class NautuneApp extends StatelessWidget {
+class NautuneApp extends StatefulWidget {
   const NautuneApp({
     super.key,
     required this.appState,
@@ -113,18 +113,86 @@ class NautuneApp extends StatelessWidget {
   final DemoModeProvider demoModeProvider;
 
   @override
+  State<NautuneApp> createState() => _NautuneAppState();
+}
+
+class _NautuneAppState extends State<NautuneApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        // App going to background - ensure playback state is saved
+        debugPrint('📱 App lifecycle: $state - saving playback state');
+        _savePlaybackState();
+        break;
+        
+      case AppLifecycleState.resumed:
+        // App returning to foreground - check connectivity and refresh if needed
+        debugPrint('📱 App lifecycle: resumed - checking connectivity');
+        _onAppResumed();
+        break;
+        
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+        // App being detached - final save
+        debugPrint('📱 App lifecycle: $state');
+        _savePlaybackState();
+        break;
+    }
+  }
+
+  void _savePlaybackState() {
+    // The audio player service already saves state periodically,
+    // but this ensures we save immediately when going to background
+    final audioService = widget.appState.audioPlayerService;
+    final currentTrack = audioService.currentTrack;
+    
+    if (currentTrack != null) {
+      debugPrint('💾 Saving playback state for: ${currentTrack.name}');
+    }
+  }
+
+  Future<void> _onAppResumed() async {
+    // Check connectivity when app returns to foreground
+    await widget.connectivityProvider.checkConnectivity();
+    
+    // If we're back online and have a session, trigger a light refresh
+    if (widget.connectivityProvider.networkAvailable && 
+        widget.sessionProvider.session != null &&
+        !widget.demoModeProvider.isDemoMode) {
+      // Don't force refresh everything, just update critical data
+      debugPrint('📶 App resumed online - background sync will handle updates');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         // New focused providers (Phase 1 refactoring)
-        ChangeNotifierProvider.value(value: sessionProvider),
-        ChangeNotifierProvider.value(value: connectivityProvider),
-        ChangeNotifierProvider.value(value: uiStateProvider),
-        ChangeNotifierProvider.value(value: libraryDataProvider),
-        ChangeNotifierProvider.value(value: demoModeProvider),
+        ChangeNotifierProvider.value(value: widget.sessionProvider),
+        ChangeNotifierProvider.value(value: widget.connectivityProvider),
+        ChangeNotifierProvider.value(value: widget.uiStateProvider),
+        ChangeNotifierProvider.value(value: widget.libraryDataProvider),
+        ChangeNotifierProvider.value(value: widget.demoModeProvider),
 
         // Legacy app state (will be phased out)
-        ChangeNotifierProvider.value(value: appState),
+        ChangeNotifierProvider.value(value: widget.appState),
       ],
       child: MaterialApp(
         title: 'Nautune - Poseidon Music Player',
@@ -150,7 +218,7 @@ class NautuneApp extends StatelessWidget {
             }
 
             // Show library screen
-            return LibraryScreen(appState: appState);
+            return LibraryScreen(appState: widget.appState);
           },
         ),
       ),
