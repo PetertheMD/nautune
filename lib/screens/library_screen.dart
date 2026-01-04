@@ -558,17 +558,21 @@ class _LibraryTab extends StatefulWidget {
 class _LibraryTabState extends State<_LibraryTab> {
   String _selectedView = 'albums'; // 'albums', 'artists', or 'genres'
   late ScrollController _albumsScrollController;
+  late ScrollController _artistsScrollController;
 
   @override
   void initState() {
     super.initState();
     _albumsScrollController = ScrollController();
     _albumsScrollController.addListener(_onAlbumsScroll);
+    _artistsScrollController = ScrollController();
+    _artistsScrollController.addListener(_onArtistsScroll);
   }
 
   @override
   void dispose() {
     _albumsScrollController.dispose();
+    _artistsScrollController.dispose();
     super.dispose();
   }
 
@@ -576,6 +580,13 @@ class _LibraryTabState extends State<_LibraryTab> {
     if (_albumsScrollController.position.pixels >=
         _albumsScrollController.position.maxScrollExtent - 200) {
       widget.appState.loadMoreAlbums();
+    }
+  }
+
+  void _onArtistsScroll() {
+    if (_artistsScrollController.position.pixels >=
+        _artistsScrollController.position.maxScrollExtent - 200) {
+      widget.appState.loadMoreArtists();
     }
   }
 
@@ -690,6 +701,7 @@ class _LibraryTabState extends State<_LibraryTab> {
         isLoading: false,
         isLoadingMore: false,
         error: null,
+        scrollController: _artistsScrollController,
         onRefresh: () async {},
       );
     }
@@ -708,7 +720,10 @@ class _LibraryTabState extends State<_LibraryTab> {
         appState: widget.appState,
       );
     } else if (_selectedView == 'artists') {
-      return _ArtistsTab(appState: widget.appState);
+      return _ArtistsTab(
+        appState: widget.appState,
+        scrollController: _artistsScrollController,
+      );
     } else {
       return _GenresTab(appState: widget.appState);
     }
@@ -931,6 +946,7 @@ class _AlbumsTab extends StatelessWidget {
                 scrollController: scrollController,
                 itemHeight: (constraints.maxWidth / crossAxisCount) * (1 / 0.75) + 16,
                 crossAxisCount: crossAxisCount,
+                sortOrder: appState.albumSortOrder,
               ),
             ],
           );
@@ -2768,6 +2784,7 @@ class _ArtistsTab extends StatelessWidget {
                 scrollController: controller,
                 itemHeight: (constraints.maxWidth / crossAxisCount) * (1 / 0.75) + 12,
                 crossAxisCount: crossAxisCount,
+                sortOrder: artists != null ? SortOrder.ascending : appState.artistSortOrder,
               ),
             ],
           );
@@ -4410,6 +4427,7 @@ class AlphabetScrollbar extends StatefulWidget {
     required this.scrollController,
     required this.itemHeight,
     required this.crossAxisCount,
+    this.sortOrder = SortOrder.ascending,
   });
 
   final List items;
@@ -4417,6 +4435,7 @@ class AlphabetScrollbar extends StatefulWidget {
   final ScrollController scrollController;
   final double itemHeight;
   final int crossAxisCount;
+  final SortOrder sortOrder;
 
   @override
   State<AlphabetScrollbar> createState() => _AlphabetScrollbarState();
@@ -4450,12 +4469,18 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
         // Exact match found
         targetIndex = i;
         break;
-      } else if (fallbackIndex < 0 && 
-                 firstChar.compareTo(letter) > 0 && 
-                 !RegExp(r'[0-9]').hasMatch(firstChar)) {
-        // No exact match yet, but this item comes alphabetically after the letter
-        // Store as fallback but continue searching for exact match
-        fallbackIndex = i;
+      } else if (fallbackIndex < 0 && !RegExp(r'[0-9]').hasMatch(firstChar)) {
+        // Check for fallback based on sort order
+        if (widget.sortOrder == SortOrder.ascending) {
+           if (firstChar.compareTo(letter) > 0) {
+             fallbackIndex = i;
+           }
+        } else {
+           // Descending (Z->A): Find first item that is <= letter (e.g. searching C in Z,Y,B,A -> B)
+           if (firstChar.compareTo(letter) < 0) {
+             fallbackIndex = i;
+           }
+        }
       }
     }
 
@@ -4464,9 +4489,15 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
       targetIndex = fallbackIndex;
     }
 
-    // If still no match and not looking for '#', scroll to end for letters near Z
+    // If still no match:
     if (targetIndex < 0 && letter != '#') {
-      targetIndex = widget.items.length - 1;
+      // Ascending: If we scrolled for 'Z' and found nothing (e.g. only A-M exist), go to end.
+      if (widget.sortOrder == SortOrder.ascending) {
+        targetIndex = widget.items.length - 1;
+      } else {
+        // Descending: If we scrolled for 'A' and found nothing (e.g. only Z-M exist), go to end.
+        targetIndex = widget.items.length - 1;
+      }
     }
 
     if (targetIndex >= 0) {
