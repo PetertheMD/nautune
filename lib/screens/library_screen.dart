@@ -4434,6 +4434,8 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
     if (widget.items.isEmpty) return;
 
     int targetIndex = -1;
+    int fallbackIndex = -1;
+    
     for (int i = 0; i < widget.items.length; i++) {
       final itemName = widget.getItemName(widget.items[i]).toUpperCase();
       final firstChar = itemName.isNotEmpty ? itemName[0] : '';
@@ -4448,12 +4450,18 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
         // Exact match found
         targetIndex = i;
         break;
-      } else if (firstChar.compareTo(letter) > 0 && !RegExp(r'[0-9]').hasMatch(firstChar)) {
-        // No exact match, but this item comes alphabetically after the letter
-        // Use this as fallback (first item past the selected letter)
-        targetIndex = i;
-        break;
+      } else if (fallbackIndex < 0 && 
+                 firstChar.compareTo(letter) > 0 && 
+                 !RegExp(r'[0-9]').hasMatch(firstChar)) {
+        // No exact match yet, but this item comes alphabetically after the letter
+        // Store as fallback but continue searching for exact match
+        fallbackIndex = i;
       }
+    }
+
+    // Use fallback if no exact match was found
+    if (targetIndex < 0 && fallbackIndex >= 0) {
+      targetIndex = fallbackIndex;
     }
 
     // If still no match and not looking for '#', scroll to end for letters near Z
