@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/session_provider.dart';
 import '../providers/ui_state_provider.dart';
+import '../services/audio_cache_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -179,6 +180,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: theme.colorScheme.onSurfaceVariant,
                 fontStyle: FontStyle.italic,
               ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: Icon(Icons.cleaning_services, color: theme.colorScheme.primary),
+            title: const Text('Clear Audio Cache'),
+            subtitle: const Text('Clear pre-cached streaming audio'),
+            trailing: FilledButton.tonal(
+              onPressed: () async {
+                await AudioCacheService.instance.clearCache();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Audio cache cleared')),
+                  );
+                }
+              },
+              child: const Text('Clear'),
             ),
           ),
           const Divider(),

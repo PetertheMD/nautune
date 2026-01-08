@@ -10,6 +10,7 @@ import 'package:rxdart/rxdart.dart';
 
 import '../jellyfin/jellyfin_service.dart';
 import '../jellyfin/jellyfin_track.dart';
+import 'audio_cache_service.dart';
 import 'audio_handler.dart';
 import 'download_service.dart';
 import 'haptic_service.dart';
@@ -48,6 +49,9 @@ class AudioPlayerService {
   // Pre-loading support for gapless playback
   JellyfinTrack? _preloadedTrack;
   bool _isPreloading = false;
+  
+  // Audio cache service for pre-caching album tracks
+  final AudioCacheService _audioCacheService = AudioCacheService.instance;
 
   // Crossfade support
   AudioPlayer? _crossfadePlayer;
@@ -386,6 +390,11 @@ class AudioPlayerService {
         _currentTrack = nextTrack;
         _currentTrackController.add(_currentTrack);
         
+        // 7. Explicitly emit playing state since the listener may not fire
+        //    if player was already playing when attached
+        _playingController.add(true);
+        _lastPlayingState = true;
+        
         // Immediately update duration from metadata
         if (nextTrack.duration != null) {
           _durationController.add(nextTrack.duration);
@@ -670,7 +679,18 @@ class AudioPlayerService {
         }
     }
     
-    // Try streaming if no local file or local file failed
+    // Check for cached file (pre-cached during album playback)
+    if (activeUrl == null) {
+      final cachedFile = await _audioCacheService.getCachedFile(track.id);
+      if (cachedFile != null && await cachedFile.exists()) {
+        if (await trySetSource(cachedFile.path, isFile: true)) {
+          activeUrl = cachedFile.path;
+          debugPrint('✅ Playing from cache: ${cachedFile.path}');
+        }
+      }
+    }
+    
+    // Try streaming if no local/cached file
     if (activeUrl == null) {
       if (await trySetSource(downloadUrl)) {
         activeUrl = downloadUrl;
@@ -760,6 +780,11 @@ class AudioPlayerService {
       albumName: albumName,
       reorderQueue: false,
     );
+    
+    // Pre-cache remaining album tracks in background (skip first since it's playing)
+    if (ordered.length > 1) {
+      unawaited(_audioCacheService.cacheAlbumTracks(ordered, startIndex: 1));
+    }
   }
   
   Future<void> pause() async {
@@ -779,6 +804,7 @@ class AudioPlayerService {
       isPlaying: false,
       repeatMode: _repeatMode.name,
       shuffleEnabled: _isShuffleEnabled,
+      volume: _volume,
     );
   }
   
@@ -1439,7 +1465,7 @@ class AudioPlayerService {
 
       bool loaded = false;
 
-      // Try local file first
+      // Try local file first (downloaded)
       final localPath = _downloadService?.getLocalPath(track.id);
       if (localPath != null) {
         final file = File(localPath);
@@ -1450,8 +1476,19 @@ class AudioPlayerService {
           }
         }
       }
+      
+      // Try cached file (pre-cached during album playback)
+      if (!loaded) {
+        final cachedFile = await _audioCacheService.getCachedFile(track.id);
+        if (cachedFile != null && await cachedFile.exists()) {
+          if (await trySetSource(cachedFile.path, isFile: true)) {
+            loaded = true;
+            debugPrint('✅ Pre-loaded from cache: ${track.name}');
+          }
+        }
+      }
 
-      // Try streaming if no local file
+      // Try streaming if no local/cached file
       if (!loaded) {
         final downloadUrl = track.directDownloadUrl();
         final universalUrl = track.universalStreamUrl(
@@ -1517,6 +1554,23 @@ class AudioPlayerService {
   void _clearPreload() {
     _preloadedTrack = null;
     _nextPlayer.stop();
+  }
+  
+  // ========== AUDIO CACHE METHODS ==========
+  
+  /// Clear the audio cache (streaming cache, not downloads)
+  Future<void> clearAudioCache() async {
+    await _audioCacheService.clearCache();
+  }
+  
+  /// Get audio cache statistics
+  Future<Map<String, dynamic>> getAudioCacheStats() async {
+    return _audioCacheService.getCacheStats();
+  }
+  
+  /// Pre-cache tracks for an album (can be called manually)
+  Future<void> preCacheAlbumTracks(List<JellyfinTrack> tracks) async {
+    await _audioCacheService.cacheAlbumTracks(tracks);
   }
 
   void dispose() {

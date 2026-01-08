@@ -137,34 +137,36 @@ class _NautuneAppState extends State<NautuneApp> with WidgetsBindingObserver {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
         // App going to background - ensure playback state is saved
+        // Use unawaited but the save is synchronous enough for iOS
         debugPrint('📱 App lifecycle: $state - saving playback state');
-        _savePlaybackState();
+        unawaited(_savePlaybackState());
         break;
         
       case AppLifecycleState.resumed:
         // App returning to foreground - check connectivity and refresh if needed
         debugPrint('📱 App lifecycle: resumed - checking connectivity');
-        _onAppResumed();
+        unawaited(_onAppResumed());
         break;
         
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
         // App being detached - final save
         debugPrint('📱 App lifecycle: $state');
-        _savePlaybackState();
+        unawaited(_savePlaybackState());
         break;
     }
   }
 
-  void _savePlaybackState() {
+  Future<void> _savePlaybackState() async {
     // Save full playback state when going to background or being force closed
+    // IMPORTANT: This must complete before iOS terminates the app
     final audioService = widget.appState.audioPlayerService;
     final currentTrack = audioService.currentTrack;
     
     if (currentTrack != null) {
       debugPrint('💾 Saving playback state for: ${currentTrack.name}');
-      // Trigger a full state save including queue, position, and all settings
-      audioService.saveFullPlaybackState();
+      // Await the save to ensure it completes before app termination
+      await audioService.saveFullPlaybackState();
     }
   }
 

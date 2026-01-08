@@ -43,6 +43,9 @@ class PlaybackStateStore {
   Future<void> _persist(PlaybackState state) async {
     final box = await _box();
     await box.put(_key, state.toJson());
+    // Flush to ensure data is written to disk immediately
+    // Critical for iOS where app may be terminated shortly after going to background
+    await box.flush();
   }
 
   Future<void> save(PlaybackState state) => _persist(state);

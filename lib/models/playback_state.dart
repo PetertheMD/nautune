@@ -146,8 +146,11 @@ class PlaybackState {
     );
   }
 
+  /// Clears playback-related data while preserving UI settings.
+  /// Returns a new PlaybackState with playback fields reset to defaults.
   PlaybackState clearPlayback() {
-    return copyWith(
+    // Cannot use copyWith because it uses ?? which won't set nullable fields to null
+    return PlaybackState(
       currentTrackId: null,
       currentTrackName: null,
       currentAlbumId: null,
@@ -159,6 +162,14 @@ class PlaybackState {
       currentQueueIndex: 0,
       repeatMode: 'off',
       shuffleEnabled: false,
+      volume: volume, // Preserve volume setting
+      scrollOffsets: scrollOffsets, // Preserve UI settings
+      libraryTabIndex: libraryTabIndex,
+      showVolumeBar: showVolumeBar,
+      crossfadeEnabled: crossfadeEnabled,
+      crossfadeDurationSeconds: crossfadeDurationSeconds,
+      infiniteRadioEnabled: infiniteRadioEnabled,
+      cacheTtlMinutes: cacheTtlMinutes,
     );
   }
 

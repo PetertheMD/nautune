@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -4448,70 +4447,105 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
   
   String? _activeLetter;
   double _bubbleY = 0.0;
+  
+  // Build a map from first letter to item index for fast lookup
+  Map<String, int> _buildLetterIndex() {
+    final Map<String, int> letterToIndex = {};
+    
+    for (int i = 0; i < widget.items.length; i++) {
+      final name = widget.getItemName(widget.items[i]).toUpperCase();
+      if (name.isEmpty) continue;
+      
+      final firstChar = name[0];
+      final letter = RegExp(r'[0-9]').hasMatch(firstChar) ? '#' : firstChar;
+      
+      // Only store first occurrence of each letter
+      if (!letterToIndex.containsKey(letter)) {
+        letterToIndex[letter] = i;
+      }
+    }
+    
+    return letterToIndex;
+  }
 
   void _scrollToLetter(String letter) {
     if (widget.items.isEmpty) return;
 
+    final letterIndex = _buildLetterIndex();
     int targetIndex = -1;
-    int fallbackIndex = -1;
     
-    for (int i = 0; i < widget.items.length; i++) {
-      final itemName = widget.getItemName(widget.items[i]).toUpperCase();
-      final firstChar = itemName.isNotEmpty ? itemName[0] : '';
-
-      if (letter == '#') {
-        // Looking for numbers
-        if (RegExp(r'[0-9]').hasMatch(firstChar)) {
-          targetIndex = i;
-          break;
-        }
-      } else if (firstChar == letter) {
-        // Exact match found
-        targetIndex = i;
-        break;
-      } else if (fallbackIndex < 0 && !RegExp(r'[0-9]').hasMatch(firstChar)) {
-        // Check for fallback based on sort order
-        if (widget.sortOrder == SortOrder.ascending) {
-           if (firstChar.compareTo(letter) > 0) {
-             fallbackIndex = i;
-           }
-        } else {
-           // Descending (Z->A): Find first item that is <= letter (e.g. searching C in Z,Y,B,A -> B)
-           if (firstChar.compareTo(letter) < 0) {
-             fallbackIndex = i;
-           }
-        }
-      }
-    }
-
-    // Use fallback if no exact match was found
-    if (targetIndex < 0 && fallbackIndex >= 0) {
-      targetIndex = fallbackIndex;
-    }
-
-    // If still no match:
-    if (targetIndex < 0 && letter != '#') {
-      // Ascending: If we scrolled for 'Z' and found nothing (e.g. only A-M exist), go to end.
-      if (widget.sortOrder == SortOrder.ascending) {
-        targetIndex = widget.items.length - 1;
-      } else {
-        // Descending: If we scrolled for 'A' and found nothing (e.g. only Z-M exist), go to end.
-        targetIndex = widget.items.length - 1;
-      }
-    }
-
-    if (targetIndex >= 0) {
-      final row = targetIndex ~/ widget.crossAxisCount;
-      final targetPosition = (row * widget.itemHeight) - 100.0;
+    // Direct match
+    if (letterIndex.containsKey(letter)) {
+      targetIndex = letterIndex[letter]!;
+    } else {
+      // No exact match - find nearest letter
+      final isAscending = widget.sortOrder == SortOrder.ascending;
       
-      // Use jumpTo for immediate response during drag, or animateTo for tap
+      if (letter == '#') {
+        // Looking for numbers but none found
+        // In ascending, numbers would be at start; in descending, at end
+        targetIndex = isAscending ? 0 : widget.items.length - 1;
+      } else {
+        // Find the closest available letter
+        final letterCode = letter.codeUnitAt(0);
+        
+        if (isAscending) {
+          // Find first letter that comes after the requested letter
+          int? nearestIndex;
+          int nearestDiff = 100;
+          
+          for (final entry in letterIndex.entries) {
+            if (entry.key == '#') continue;
+            final entryCode = entry.key.codeUnitAt(0);
+            final diff = entryCode - letterCode;
+            
+            // Find closest letter that is >= requested letter
+            if (diff >= 0 && diff < nearestDiff) {
+              nearestDiff = diff;
+              nearestIndex = entry.value;
+            }
+          }
+          
+          // If no letter after, scroll to end
+          targetIndex = nearestIndex ?? widget.items.length - 1;
+        } else {
+          // Descending: Find first letter that comes before or equal the requested letter
+          int? nearestIndex;
+          int nearestDiff = -100;
+          
+          for (final entry in letterIndex.entries) {
+            if (entry.key == '#') continue;
+            final entryCode = entry.key.codeUnitAt(0);
+            final diff = entryCode - letterCode;
+            
+            // Find closest letter that is <= requested letter
+            if (diff <= 0 && diff > nearestDiff) {
+              nearestDiff = diff;
+              nearestIndex = entry.value;
+            }
+          }
+          
+          // If no letter before, scroll to end
+          targetIndex = nearestIndex ?? widget.items.length - 1;
+        }
+      }
+    }
+
+    if (targetIndex >= 0 && targetIndex < widget.items.length) {
+      final row = targetIndex ~/ widget.crossAxisCount;
+      // Account for grid padding (16px on each side)
+      final targetPosition = (row * widget.itemHeight) + 16.0;
+      final maxScroll = widget.scrollController.position.maxScrollExtent;
+      final clampedPosition = targetPosition.clamp(0.0, maxScroll);
+      
+      // Use jumpTo during drag for immediate response
       if (_activeLetter != null) {
-        widget.scrollController.jumpTo(math.max(0, targetPosition));
+        widget.scrollController.jumpTo(clampedPosition);
       } else {
         widget.scrollController.animateTo(
-          math.max(0, targetPosition),
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
+          clampedPosition,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
         );
       }
     }
@@ -4527,7 +4561,7 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
     if (_activeLetter != letter) {
       setState(() {
         _activeLetter = letter;
-        _bubbleY = localPosition.dy.clamp(0, height - 60);
+        _bubbleY = localPosition.dy.clamp(20, height - 80);
       });
       _scrollToLetter(letter);
       HapticFeedback.selectionClick();
@@ -4549,15 +4583,13 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
           width: 30,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              // Calculate if we need to reduce letters based on available height
               final availableHeight = constraints.maxHeight;
-              final letterHeight = 16.0; // Approximate height per letter
+              final letterHeight = 16.0;
               final maxLetters = (availableHeight / letterHeight).floor();
               
               // If not enough space for all letters, show subset
               List<String> displayLetters = _alphabet;
               if (maxLetters < _alphabet.length && maxLetters > 0) {
-                // Show every Nth letter to fit
                 final step = (_alphabet.length / maxLetters).ceil();
                 displayLetters = [];
                 for (int i = 0; i < _alphabet.length; i += step) {
@@ -4568,6 +4600,7 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
               return GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTapDown: (details) => _handleInput(details.localPosition, constraints.maxHeight),
+                onVerticalDragStart: (details) => _handleInput(details.localPosition, constraints.maxHeight),
                 onVerticalDragUpdate: (details) => _handleInput(details.localPosition, constraints.maxHeight),
                 onVerticalDragEnd: (_) => setState(() => _activeLetter = null),
                 onTapUp: (_) => setState(() => _activeLetter = null),
@@ -4604,7 +4637,7 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
         if (_activeLetter != null)
            Positioned(
              right: 50,
-             top: _bubbleY + 10, // Adjust based on layout
+             top: _bubbleY + 40, // Offset to match touch strip positioning
              child: Container(
                width: 60, height: 60,
                alignment: Alignment.center,

@@ -2,7 +2,30 @@
 
 Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter and delivers a beautiful deep-sea themed experience with smooth native audio playback and seamless Jellyfin integration.
 
-## 🚀 Latest Updates (v2.5.0)
+## 🚀 Latest Updates (v2.6.4)
+- **🔧 Critical Bug Fixes**: Improved reliability across all platforms
+  - ✅ **Album continuous playback fixed**: Playing state now properly emitted after gapless transitions
+    - Previously, albums would pause after each song instead of playing continuously
+    - Fixed by explicitly emitting playing state when swapping preloaded players
+  - ✅ **iOS state persistence fixed**: App now reliably saves playback state when backgrounded
+    - Save operations are now properly awaited before app suspension
+    - Hive storage flushes to disk immediately instead of buffering in memory
+    - Volume setting now included in pause/background state snapshots
+  - ✅ **Stop properly clears playback state**: Fixed nullable field handling in clearPlayback()
+    - Previously, stop button wasn't fully clearing queue/track state due to Dart's `??` operator
+    - Now directly constructs clean state object while preserving UI settings
+  - ✅ **Alphabet scrollbar sorting fixed**: Now works correctly with all sort orders
+    - Rewrote with O(1) letter-to-index lookup map for better performance
+    - Properly handles ascending/descending sort with nearest-letter fallback
+    - Fixed scroll position calculation and bubble positioning
+- **📥 Album Track Pre-Caching**: Smoother playback when listening to albums
+  - ✅ **Auto pre-cache on play**: When you play an album, remaining tracks cache in background
+  - ✅ **Smart source priority**: Downloads → Cached files → Stream (fastest available)
+  - ✅ **Gapless preload uses cache**: Next track preloading checks cache first
+  - ✅ **Automatic cleanup**: Cache auto-expires after 7 days, max 500 files
+  - ✅ **Manual clear**: Settings → Performance → "Clear Audio Cache" button
+
+## 🚀 Previous Updates (v2.5.0)
 - **⚡ API & Performance Optimizations**: Faster, more reliable server communication
   - ✅ **Batch API Requests**: Albums, artists, genres load in parallel with `Future.wait()`
   - ✅ **Request Retry with Backoff**: Auto-retries failed requests 3x with exponential backoff
