@@ -128,6 +128,7 @@ class NautuneAppState extends ChangeNotifier {
   bool _crossfadeEnabled = false;
   int _crossfadeDurationSeconds = 3;
   bool _infiniteRadioEnabled = false;
+  bool _gaplessPlaybackEnabled = true;
   int _cacheTtlMinutes = 2; // User-configurable cache TTL
   SortOption _albumSortBy = SortOption.name;
   SortOrder _albumSortOrder = SortOrder.ascending;
@@ -373,6 +374,7 @@ class NautuneAppState extends ChangeNotifier {
   bool get crossfadeEnabled => _crossfadeEnabled;
   int get crossfadeDurationSeconds => _crossfadeDurationSeconds;
   bool get infiniteRadioEnabled => _infiniteRadioEnabled;
+  bool get gaplessPlaybackEnabled => _gaplessPlaybackEnabled;
   int get cacheTtlMinutes => _cacheTtlMinutes;
   Duration get cacheTtl => Duration(minutes: _cacheTtlMinutes);
   SortOption get albumSortBy => _albumSortBy;
@@ -407,6 +409,7 @@ class NautuneAppState extends ChangeNotifier {
   JellyfinService get jellyfinService => _jellyfinService;
   AudioPlayerService get audioPlayerService => _audioPlayerService;
   DownloadService get downloadService => _downloadService;
+  TrayService? get trayService => _trayService;
   List<JellyfinAlbum> get demoAlbums =>
       _demoContent?.albums ?? const <JellyfinAlbum>[];
   List<JellyfinArtist> get demoArtists =>
@@ -623,6 +626,15 @@ class NautuneAppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleGaplessPlayback(bool enabled) {
+    _gaplessPlaybackEnabled = enabled;
+    _audioPlayerService.setGaplessPlaybackEnabled(enabled);
+    unawaited(_playbackStateStore.saveUiState(
+      gaplessPlaybackEnabled: enabled,
+    ));
+    notifyListeners();
+  }
+
   /// Set cache TTL in minutes (1-60)
   void setCacheTtl(int minutes) {
     _cacheTtlMinutes = minutes.clamp(1, 60);
@@ -750,12 +762,14 @@ class NautuneAppState extends ChangeNotifier {
       _infiniteRadioEnabled = storedPlaybackState.infiniteRadioEnabled;
       _cacheTtlMinutes = storedPlaybackState.cacheTtlMinutes;
       _restoredLibraryTabIndex = storedPlaybackState.libraryTabIndex;
+      _gaplessPlaybackEnabled = storedPlaybackState.gaplessPlaybackEnabled;
       _libraryScrollOffsets =
           Map<String, double>.from(storedPlaybackState.scrollOffsets);
       await _audioPlayerService.hydrateFromPersistence(storedPlaybackState);
       _audioPlayerService.setCrossfadeEnabled(_crossfadeEnabled);
       _audioPlayerService.setCrossfadeDuration(_crossfadeDurationSeconds);
       _audioPlayerService.setInfiniteRadioEnabled(_infiniteRadioEnabled);
+      _audioPlayerService.setGaplessPlaybackEnabled(_gaplessPlaybackEnabled);
       _jellyfinService.setCacheTtl(Duration(minutes: _cacheTtlMinutes));
     }
 

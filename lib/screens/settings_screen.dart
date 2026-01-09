@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../app_state.dart';
 import '../providers/session_provider.dart';
 import '../providers/ui_state_provider.dart';
 import '../services/audio_cache_service.dart';
@@ -27,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final theme = Theme.of(context);
     final sessionProvider = Provider.of<SessionProvider>(context);
     final uiStateProvider = Provider.of<UIStateProvider>(context);
+    final appState = Provider.of<NautuneAppState>(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -75,35 +77,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: Icon(Icons.tune, color: theme.colorScheme.primary),
             title: const Text('Crossfade'),
             subtitle: Text(
-              uiStateProvider.crossfadeEnabled
-                ? 'Enabled (${uiStateProvider.crossfadeDurationSeconds}s)'
+              appState.crossfadeEnabled
+                ? 'Enabled (${appState.crossfadeDurationSeconds}s)'
                 : 'Smooth transitions between tracks'
             ),
             trailing: Switch(
-              value: uiStateProvider.crossfadeEnabled,
+              value: appState.crossfadeEnabled,
               onChanged: (value) {
-                uiStateProvider.toggleCrossfade(value);
+                appState.toggleCrossfade(value);
               },
             ),
           ),
-          if (uiStateProvider.crossfadeEnabled)
+          if (appState.crossfadeEnabled)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Duration: ${uiStateProvider.crossfadeDurationSeconds} seconds',
+                    'Duration: ${appState.crossfadeDurationSeconds} seconds',
                     style: theme.textTheme.bodyMedium,
                   ),
                   Slider(
-                    value: uiStateProvider.crossfadeDurationSeconds.toDouble(),
+                    value: appState.crossfadeDurationSeconds.toDouble(),
                     min: 0,
                     max: 10,
                     divisions: 10,
-                    label: '${uiStateProvider.crossfadeDurationSeconds}s',
+                    label: '${appState.crossfadeDurationSeconds}s',
                     onChanged: (value) {
-                      uiStateProvider.setCrossfadeDuration(value.round());
+                      appState.setCrossfadeDuration(value.round());
                     },
                   ),
                   Text(
@@ -117,6 +119,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
+          ListTile(
+            leading: Icon(Icons.music_note, color: theme.colorScheme.primary),
+            title: const Text('Gapless Playback'),
+            subtitle: Text(
+              appState.gaplessPlaybackEnabled
+                ? 'Seamless transitions enabled'
+                : 'Standard playback'
+            ),
+            trailing: Switch(
+              value: appState.gaplessPlaybackEnabled,
+              onChanged: (value) {
+                appState.toggleGaplessPlayback(value);
+              },
+            ),
+          ),
           ListTile(
             leading: Icon(Icons.all_inclusive, color: theme.colorScheme.primary),
             title: const Text('Infinite Radio'),

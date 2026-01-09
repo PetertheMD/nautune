@@ -2,7 +2,24 @@
 
 Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter and delivers a beautiful deep-sea themed experience with smooth native audio playback and seamless Jellyfin integration.
 
-## 🚀 Latest Updates (v2.6.4)
+## 🚀 Latest Updates (v2.7.0)
+- **🎧 Audio Engine Hardening**: Major reliability improvements for playback
+  - ✅ **Gapless Toggle**: New setting to enable/disable seamless transitions (Settings → Audio Options)
+  - ✅ **Lock Screen Fix**: Fixed bug where lock screen controls would disappear between tracks
+    - Solved by updating AudioHandler state *before* stopping the previous player
+    - Ensures continuous "Playing" state report to OS, preventing session kill
+  - ✅ **Consecutive Playback Fix**: Eliminated pausing between tracks on iOS/Android
+    - Optimized transition logic to be non-blocking
+    - Removed "dead air" gaps that triggered background suspension
+  - ✅ **Smart Queue Preservation**: Stop button now clears UI but saves state
+    - "Stop" clears the active queue (no more ghost notifications)
+    - But fully saves state to DB so you can "Resume" later from a fresh app launch
+- **⚡ Feature Polish**:
+  - ✅ **Live Settings Update**: Toggling Crossfade or Gapless now applies immediately without restart
+  - ✅ **Active Track Highlight**: Currently playing track now clearly highlighted in Album view with icon + color
+  - ✅ **Transition Safety**: Added crash protection to gapless transition logic to prevent queue freezing
+
+## 🚀 Previous Updates (v2.6.4)
 - **🔧 Critical Bug Fixes**: Improved reliability across all platforms
   - ✅ **Album continuous playback fixed**: Playing state now properly emitted after gapless transitions
     - Previously, albums would pause after each song instead of playing continuously

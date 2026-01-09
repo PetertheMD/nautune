@@ -21,6 +21,7 @@ class PlaybackState {
     this.crossfadeDurationSeconds = 3,
     this.infiniteRadioEnabled = false,
     this.cacheTtlMinutes = 2,
+    this.gaplessPlaybackEnabled = true,
   });
 
   final String? currentTrackId;
@@ -42,6 +43,7 @@ class PlaybackState {
   final int crossfadeDurationSeconds;
   final bool infiniteRadioEnabled;
   final int cacheTtlMinutes;
+  final bool gaplessPlaybackEnabled;
 
   bool get hasTrack => currentTrackId != null;
 
@@ -65,6 +67,7 @@ class PlaybackState {
     int? crossfadeDurationSeconds,
     bool? infiniteRadioEnabled,
     int? cacheTtlMinutes,
+    bool? gaplessPlaybackEnabled,
   }) {
     return PlaybackState(
       currentTrackId: currentTrackId ?? this.currentTrackId,
@@ -86,6 +89,7 @@ class PlaybackState {
       crossfadeDurationSeconds: crossfadeDurationSeconds ?? this.crossfadeDurationSeconds,
       infiniteRadioEnabled: infiniteRadioEnabled ?? this.infiniteRadioEnabled,
       cacheTtlMinutes: cacheTtlMinutes ?? this.cacheTtlMinutes,
+      gaplessPlaybackEnabled: gaplessPlaybackEnabled ?? this.gaplessPlaybackEnabled,
     );
   }
 
@@ -110,6 +114,7 @@ class PlaybackState {
       'crossfadeDurationSeconds': crossfadeDurationSeconds,
       'infiniteRadioEnabled': infiniteRadioEnabled,
       'cacheTtlMinutes': cacheTtlMinutes,
+      'gaplessPlaybackEnabled': gaplessPlaybackEnabled,
     };
   }
 
@@ -143,6 +148,7 @@ class PlaybackState {
       crossfadeDurationSeconds: json['crossfadeDurationSeconds'] as int? ?? 3,
       infiniteRadioEnabled: json['infiniteRadioEnabled'] as bool? ?? false,
       cacheTtlMinutes: json['cacheTtlMinutes'] as int? ?? 2,
+      gaplessPlaybackEnabled: json['gaplessPlaybackEnabled'] as bool? ?? true,
     );
   }
 
@@ -170,6 +176,7 @@ class PlaybackState {
       crossfadeDurationSeconds: crossfadeDurationSeconds,
       infiniteRadioEnabled: infiniteRadioEnabled,
       cacheTtlMinutes: cacheTtlMinutes,
+      gaplessPlaybackEnabled: gaplessPlaybackEnabled,
     );
   }
 

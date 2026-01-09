@@ -49,7 +49,8 @@ class AudioPlayerService {
   // Pre-loading support for gapless playback
   JellyfinTrack? _preloadedTrack;
   bool _isPreloading = false;
-  
+  bool _gaplessPlaybackEnabled = true;
+
   // Audio cache service for pre-caching album tracks
   final AudioCacheService _audioCacheService = AudioCacheService.instance;
 
@@ -102,6 +103,14 @@ class AudioPlayerService {
   void setInfiniteRadioEnabled(bool enabled) {
     _infiniteRadioEnabled = enabled;
     debugPrint('🔄 Infinite Radio: ${enabled ? "enabled" : "disabled"}');
+  }
+
+  void setGaplessPlaybackEnabled(bool enabled) {
+    _gaplessPlaybackEnabled = enabled;
+    if (!enabled) {
+      _clearPreload();
+    }
+    debugPrint('🔄 Gapless Playback: ${enabled ? "enabled" : "disabled"}');
   }
 
   void _cancelCrossfade() {
@@ -350,70 +359,89 @@ class AudioPlayerService {
     }
 
     // Check if we need to fetch more tracks for infinite radio
-    // Do this before checking if we have a next track
-    await _checkInfiniteRadio();
+    // OPTIMIZATION: Check if we already have a next track. If so, don't block!
+    final hasNextTrack = _currentIndex + 1 < _queue.length;
+    
+    if (hasNextTrack) {
+      // We have a next track, so fetch more in background without waiting
+      if (_infiniteRadioEnabled) {
+         unawaited(_checkInfiniteRadio());
+      }
+    } else {
+      // No next track, we MUST wait for infinite radio if enabled
+      if (_infiniteRadioEnabled) {
+        await _checkInfiniteRadio();
+      }
+    }
 
     // Move to next track
     if (_currentIndex + 1 < _queue.length) {
       _isTransitioning = true;
 
-      final nextTrack = _queue[_currentIndex + 1];
+      try {
+        final nextTrack = _queue[_currentIndex + 1];
 
-      // Check if we have this track pre-loaded
-      if (_preloadedTrack?.id == nextTrack.id) {
-        debugPrint('⚡ Using pre-loaded track for instant playback: ${nextTrack.name}');
+        // Check if we have this track pre-loaded AND gapless is enabled
+        if (_gaplessPlaybackEnabled && _preloadedTrack?.id == nextTrack.id) {
+          debugPrint('⚡ Using pre-loaded track for instant playback: ${nextTrack.name}');
 
-        // SWAP PLAYERS for seamless transition
-        // 1. Detach listeners from current player (which is ending)
-        _detachListeners();
+          // SWAP PLAYERS for seamless transition
+          // 1. Detach listeners from current player (which is ending)
+          _detachListeners();
 
-        // 2. Play the pre-loaded track (already loaded in _nextPlayer)
-        await _nextPlayer.setVolume(_volume);
-        await _nextPlayer.resume();
+          // 2. Play the pre-loaded track (already loaded in _nextPlayer)
+          await _nextPlayer.setVolume(_volume);
+          await _nextPlayer.resume();
 
-        // 3. Stop the old player
-        await _player.stop();
+          // 3. IMPORTANT: Update AudioHandler to listen to the NEW player (which is playing)
+          // BEFORE stopping the old one. This prevents the OS from seeing a "Stop" state.
+          _audioHandler?.updatePlayer(_nextPlayer);
+          _audioHandler?.updateNautuneMediaItem(nextTrack);
 
-        // 4. Swap the references
-        final oldPlayer = _player;
-        _player = _nextPlayer;
-        _nextPlayer = oldPlayer; // Reuse old player for next pre-load
+          // 4. Stop the old player (AudioHandler is no longer listening to this one)
+          await _player.stop();
 
-        // 5. Re-attach listeners to the NEW main player
-        _attachPlayerListeners(_player);
+          // 5. Swap the references
+          final oldPlayer = _player;
+          _player = _nextPlayer;
+          _nextPlayer = oldPlayer; // Reuse old player for next pre-load
 
-        // 6. Update AudioHandler so lockscreen controls work with new player
-        _audioHandler?.updatePlayer(_player);
-        _audioHandler?.updateNautuneMediaItem(nextTrack);
+          // 6. Re-attach listeners to the NEW main player
+          _attachPlayerListeners(_player);
 
-        _currentIndex++;
-        _currentTrack = nextTrack;
-        _currentTrackController.add(_currentTrack);
-        
-        // 7. Explicitly emit playing state since the listener may not fire
-        //    if player was already playing when attached
-        _playingController.add(true);
-        _lastPlayingState = true;
-        
-        // Immediately update duration from metadata
-        if (nextTrack.duration != null) {
-          _durationController.add(nextTrack.duration);
+          _currentIndex++;
+          _currentTrack = nextTrack;
+          _currentTrackController.add(_currentTrack);
+          
+          // 7. Explicitly emit playing state since the listener may not fire
+          //    if player was already playing when attached
+          _playingController.add(true);
+          _lastPlayingState = true;
+          
+          // Immediately update duration from metadata
+          if (nextTrack.duration != null) {
+            _durationController.add(nextTrack.duration);
+          }
+
+          // Clear pre-load state
+          _preloadedTrack = null;
+        } else {
+          // No pre-loaded track or gapless disabled, do regular playback
+          _currentIndex++;
+          await playTrack(
+            _queue[_currentIndex],
+            queueContext: _queue,
+            fromShuffle: _isShuffleEnabled,
+          );
         }
-
-        // Clear pre-load state
-        _preloadedTrack = null;
-      } else {
-        // No pre-loaded track, do regular playback
-        _currentIndex++;
-        await playTrack(
-          _queue[_currentIndex],
-          queueContext: _queue,
-          fromShuffle: _isShuffleEnabled,
-        );
+      } catch (e) {
+        debugPrint('❌ Gapless transition failed: $e');
+        // If playTrack failed, maybe try the next one? 
+        // For now, at least we reset _isTransitioning so the user can try again
+      } finally {
+        _isTransitioning = false;
+        _saveCurrentPosition();
       }
-
-      _isTransitioning = false;
-      _saveCurrentPosition();
     } else {
       // Queue finished - handle repeat all mode
       if (_repeatMode == RepeatMode.all && _queue.isNotEmpty) {
@@ -607,10 +635,13 @@ class AudioPlayerService {
     // Clear any pre-loaded track since queue changed
     _clearPreload();
 
-    // Update audio handler with current track metadata
+    // Update audio handler with current track metadata immediately
+    // This is critical for Lock Screen to update BEFORE audio starts
     _audioHandler?.updateNautuneMediaItem(track);
     _audioHandler?.updateNautuneQueue(_queue);
     
+    // RESOLVE SOURCE BEFORE STOPPING PLAYER
+    // This minimizes "dead air" time which causes iOS background suspension
     final downloadUrl = track.directDownloadUrl();
     final universalUrl = track.universalStreamUrl(
       deviceId: _deviceId,
@@ -619,45 +650,11 @@ class AudioPlayerService {
       container: 'mp3',
     );
 
-    await _player.stop();
-
-    Future<bool> trySetSource(String? url, {bool isFile = false}) async {
-      if (url == null) return false;
-      try {
-        if (isFile) {
-          await _player.setSource(DeviceFileSource(url));
-        } else {
-          await _player.setSource(UrlSource(url));
-        }
-        // Apply ReplayGain normalization
-        final adjustedVolume = _volume * track.replayGainMultiplier;
-        await _player.setVolume(adjustedVolume.clamp(0.0, 1.0));
-        if (track.normalizationGain != null) {
-          debugPrint('🔊 Applied ReplayGain: ${track.normalizationGain} dB (multiplier: ${track.replayGainMultiplier.toStringAsFixed(2)})');
-        }
-        return true;
-      } on PlatformException {
-        return false;
-      }
-    }
-    Future<bool> trySetAssetSource(String? assetPath) async {
-      if (assetPath == null) return false;
-      final normalized = assetPath.startsWith('assets/')
-          ? assetPath.substring('assets/'.length)
-          : assetPath;
-      try {
-        await _player.setSource(AssetSource(normalized));
-        // Apply ReplayGain normalization
-        final adjustedVolume = _volume * track.replayGainMultiplier;
-        await _player.setVolume(adjustedVolume.clamp(0.0, 1.0));
-        return true;
-      } on PlatformException {
-        return false;
-      }
-    }
+    // Don't stop yet! Resolve the source first.
 
     String? activeUrl;
     bool isOffline = false;
+    bool isLocalFile = false;
     
     // Check for downloaded file first (works in airplane mode!)
     final localPath = _downloadService?.getLocalPath(track.id);
@@ -665,13 +662,10 @@ class AudioPlayerService {
       // Verify file exists before trying to play
       final file = File(localPath);
       if (await file.exists()) {
-          if (await trySetSource(localPath, isFile: true)) {
-            activeUrl = localPath;
-            isOffline = true;
-            debugPrint('✅ Playing from local file: $localPath');
-          } else {
-            debugPrint('⚠️ Local file exists but failed to load: $localPath');
-          }
+          activeUrl = localPath;
+          isOffline = true;
+          isLocalFile = true;
+          debugPrint('✅ Found local file: $localPath');
         } else {
           debugPrint('⚠️ Local file not found (may be orphaned): $localPath');
           // Clean up orphaned reference
@@ -683,20 +677,22 @@ class AudioPlayerService {
     if (activeUrl == null) {
       final cachedFile = await _audioCacheService.getCachedFile(track.id);
       if (cachedFile != null && await cachedFile.exists()) {
-        if (await trySetSource(cachedFile.path, isFile: true)) {
-          activeUrl = cachedFile.path;
-          debugPrint('✅ Playing from cache: ${cachedFile.path}');
-        }
+        activeUrl = cachedFile.path;
+        isLocalFile = true;
+        debugPrint('✅ Found in cache: ${cachedFile.path}');
       }
     }
     
     // Try streaming if no local/cached file
     if (activeUrl == null) {
-      if (await trySetSource(downloadUrl)) {
+      // We'll prefer downloadUrl, then universalUrl, then asset
+      // But we can't check validity easily without trying. 
+      // For streaming, we just assume the URL is good.
+      if (downloadUrl != null) {
         activeUrl = downloadUrl;
-      } else if (await trySetSource(universalUrl)) {
+      } else if (universalUrl != null) {
         activeUrl = universalUrl;
-      } else if (await trySetAssetSource(track.assetPathOverride)) {
+      } else if (track.assetPathOverride != null) {
         activeUrl = track.assetPathOverride;
       }
     }
@@ -707,9 +703,33 @@ class AudioPlayerService {
         message: 'Unable to play ${track.name}. File may be unavailable.',
       );
     }
+    
+    // NOW we touch the player.
+    // We don't explicitly call stop() because setSource will handle it, 
+    // and we want to minimize the gap.
+
+    Future<void> applySourceAndPlay() async {
+        if (isLocalFile) {
+           await _player.setSource(DeviceFileSource(activeUrl!));
+        } else if (activeUrl!.startsWith('assets/')) {
+           final normalized = activeUrl!.substring('assets/'.length);
+           await _player.setSource(AssetSource(normalized));
+        } else {
+           await _player.setSource(UrlSource(activeUrl!));
+        }
+
+        // Apply ReplayGain normalization
+        final adjustedVolume = _volume * track.replayGainMultiplier;
+        await _player.setVolume(adjustedVolume.clamp(0.0, 1.0));
+        if (track.normalizationGain != null) {
+           debugPrint('🔊 Applied ReplayGain: ${track.normalizationGain} dB');
+        }
+        
+        await _player.resume();
+    }
 
     try {
-      await _player.resume();
+      await applySourceAndPlay();
       
       // Report playback start to Jellyfin
       if (_reportingService != null) {
@@ -718,28 +738,24 @@ class AudioPlayerService {
           track,
           playMethod: isOffline ? 'DirectPlay' : (activeUrl == downloadUrl ? 'DirectStream' : 'Transcode'),
         );
-      } else {
-        debugPrint('⚠️ Reporting service not initialized!');
       }
       
       _lastPlayingState = true;
     } on PlatformException {
-      if (activeUrl != universalUrl && universalUrl != null) {
-        if (await trySetSource(universalUrl)) {
-          await _player.resume();
-          activeUrl = universalUrl;
+      // Fallback logic for streaming failure
+      if (!isLocalFile && activeUrl != universalUrl && universalUrl != null) {
+        debugPrint('⚠️ Primary stream failed, trying universal stream...');
+        activeUrl = universalUrl;
+        await applySourceAndPlay();
           
-          // Report transcoded playback
-          if (_reportingService != null) {
+        // Report transcoded playback
+        if (_reportingService != null) {
             await _reportingService!.reportPlaybackStart(
               track,
               playMethod: 'Transcode',
             );
-          }
-          _lastPlayingState = true;
-        } else {
-          rethrow;
         }
+        _lastPlayingState = true;
       } else {
         rethrow;
       }
@@ -869,10 +885,11 @@ class AudioPlayerService {
   }
 
   Future<void> stop() async {
-    // 1. Stop audio immediately to prevent "ghost" playback
+    // 1. Stop audio immediately
     await _player.stop();
 
-    // Save the current track state BEFORE clearing, to preserve favorite status
+    // Save state to persistence before clearing memory
+    // This allows "Resume" functionality on next app launch
     if (_currentTrack != null) {
       try {
         await _stateStore.savePlaybackSnapshot(
@@ -881,6 +898,9 @@ class AudioPlayerService {
           queue: _queue,
           currentQueueIndex: _currentIndex,
           isPlaying: false,
+          repeatMode: _repeatMode.name,
+          shuffleEnabled: _isShuffleEnabled,
+          volume: _volume,
         );
       } catch (e) {
         debugPrint('Error saving snapshot on stop: $e');
@@ -888,29 +908,27 @@ class AudioPlayerService {
       
       // Report stop to Jellyfin
       if (_reportingService != null) {
-        // Fire and forget reporting to avoid blocking UI
         _reportingService!.reportPlaybackStopped(
           _currentTrack!,
           _lastPosition,
-        ).catchError((e) {
-          debugPrint('Failed to report playback stop (likely offline): $e');
-        });
+        ).catchError((e) => debugPrint('Stop report failed: $e'));
       }
     }
     
+    // 2. CLEAR active memory state
+    // This makes the UI (Now Playing bar) and Lock Screen disappear
     _currentTrack = null;
     _currentTrackController.add(null);
-    _queue = []; // Create new growable list instead of clearing
+    _queue = [];
     _currentIndex = 0;
     _lastPosition = Duration.zero;
     _isShuffleEnabled = false;
-    _shuffleController.add(_isShuffleEnabled);
+    _shuffleController.add(false);
+    
     _emitIdleVisualizer();
-    try {
-      await _stateStore.clearPlaybackData();
-    } catch (e) {
-      debugPrint('Error clearing playback data: $e');
-    }
+    _playingController.add(false);
+
+    debugPrint('🛑 Playback stopped and queue cleared');
   }
 
   // Alias methods for compatibility
@@ -1406,6 +1424,7 @@ class AudioPlayerService {
 
   /// Check if we should pre-load the next track (when current track reaches 70%)
   void _checkPreloadTrigger(Duration position) async {
+    if (!_gaplessPlaybackEnabled) return;
     if (_isPreloading || _currentTrack == null) return;
 
     final duration = await _player.getDuration();

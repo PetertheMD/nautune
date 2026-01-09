@@ -632,228 +632,254 @@ class _TrackTile extends StatelessWidget {
         duration != null ? _formatDuration(duration) : '--:--';
     final showArtist = track.artists.isNotEmpty;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 48,
-                child: Text(
-                  displayTrackNumber,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue
-                    fontFeatures: const [ui.FontFeature.tabularFigures()],
+    return StreamBuilder<JellyfinTrack?>(
+      stream: appState.audioPlayerService.currentTrackStream,
+      builder: (context, snapshot) {
+        final isPlayingTrack = snapshot.data?.id == track.id;
+        
+        return Material(
+          color: isPlayingTrack 
+              ? theme.colorScheme.primaryContainer.withValues(alpha: 0.2) 
+              : Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 48,
+                    child: isPlayingTrack
+                        ? Icon(
+                            Icons.equalizer,
+                            color: theme.colorScheme.primary,
+                            size: 20,
+                          )
+                        : Text(
+                            displayTrackNumber,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.tertiary.withValues(alpha: 0.7),
+                              fontFeatures: const [ui.FontFeature.tabularFigures()],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
                   ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      track.name,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: theme.colorScheme.tertiary,  // Ocean blue
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (showArtist) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        track.displayArtist,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.tertiary.withValues(alpha: 0.6),  // Ocean blue dimmer
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          track.name,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: isPlayingTrack 
+                                ? theme.colorScheme.primary 
+                                : theme.colorScheme.tertiary,
+                            fontWeight: isPlayingTrack ? FontWeight.bold : null,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                durationText,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue
-                ),
-              ),
-              const SizedBox(width: 4),
-              IconButton(
-                icon: const Icon(Icons.more_vert, size: 20),
-                onPressed: () {
-                  final parentContext = context;
-                  showModalBottomSheet(
-                    context: parentContext,
-                    builder: (sheetContext) => SafeArea(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ListTile(
-                            leading: const Icon(Icons.play_arrow),
-                            title: const Text('Play Next'),
-                            onTap: () {
-                              Navigator.pop(sheetContext);
-                              appState.audioPlayerService.playNext([track]);
-                              ScaffoldMessenger.of(parentContext).showSnackBar(
-                                SnackBar(
-                                  content: Text('${track.name} will play next'),
-                                  duration: const Duration(seconds: 2),
-                                ),
-                              );
-                            },
+                        if (showArtist) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            track.displayArtist,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: isPlayingTrack
+                                  ? theme.colorScheme.primary.withValues(alpha: 0.8)
+                                  : theme.colorScheme.tertiary.withValues(alpha: 0.6),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          ListTile(
-                            leading: const Icon(Icons.queue_music),
-                            title: const Text('Add to Queue'),
-                            onTap: () {
-                              Navigator.pop(sheetContext);
-                              appState.audioPlayerService.addToQueue([track]);
-                              ScaffoldMessenger.of(parentContext).showSnackBar(
-                                SnackBar(
-                                  content: Text('${track.name} added to queue'),
-                                  duration: const Duration(seconds: 2),
-                                ),
-                              );
-                            },
-                          ),
-                          ListTile(
-                            leading: const Icon(Icons.playlist_add),
-                            title: const Text('Add to Playlist'),
-                            onTap: () async {
-                              Navigator.pop(sheetContext);
-                              await showAddToPlaylistDialog(
-                                context: parentContext,
-                                appState: appState,
-                                tracks: [track],
-                              );
-                            },
-                          ),
-                          ListTile(
-                            leading: const Icon(Icons.auto_awesome),
-                            title: const Text('Instant Mix'),
-                            onTap: () async {
-                              Navigator.pop(sheetContext);
-                              try {
-                                ScaffoldMessenger.of(parentContext).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Creating instant mix...'),
-                                    duration: Duration(seconds: 1),
-                                  ),
-                                );
-
-                                final mixTracks = await appState.jellyfinService.getInstantMix(
-                                  itemId: track.id,
-                                  limit: 50,
-                                );
-
-                                if (mixTracks.isEmpty) {
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    durationText,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: isPlayingTrack
+                          ? theme.colorScheme.primary.withValues(alpha: 0.8)
+                          : theme.colorScheme.tertiary.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: Icon(
+                      Icons.more_vert, 
+                      size: 20,
+                      color: isPlayingTrack ? theme.colorScheme.primary : null,
+                    ),
+                    onPressed: () {
+                      final parentContext = context;
+                      showModalBottomSheet(
+                        context: parentContext,
+                        builder: (sheetContext) => SafeArea(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ListTile(
+                                leading: const Icon(Icons.play_arrow),
+                                title: const Text('Play Next'),
+                                onTap: () {
+                                  Navigator.pop(sheetContext);
+                                  appState.audioPlayerService.playNext([track]);
                                   ScaffoldMessenger.of(parentContext).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('No similar tracks found'),
-                                      duration: Duration(seconds: 2),
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                await appState.audioPlayerService.playTrack(
-                                  mixTracks.first,
-                                  queueContext: mixTracks,
-                                );
-
-                                // Simple notification without persistent action button
-                                ScaffoldMessenger.of(parentContext).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Playing instant mix (${mixTracks.length} tracks)'),
-                                    duration: const Duration(seconds: 2),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
-                              } catch (e) {
-                                ScaffoldMessenger.of(parentContext).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to create mix: $e'),
-                                    backgroundColor: Theme.of(parentContext).colorScheme.error,
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                          ListTile(
-                            leading: const Icon(Icons.download),
-                            title: const Text('Download Track'),
-                            onTap: () async {
-                              Navigator.pop(sheetContext);
-                              final messenger = ScaffoldMessenger.of(parentContext);
-                              final theme = Theme.of(parentContext);
-                              final downloadService = appState.downloadService;
-                              try {
-                                final existing = downloadService.getDownload(track.id);
-                                if (existing != null) {
-                                  if (existing.isCompleted) {
-                                    messenger.showSnackBar(
-                                      SnackBar(
-                                        content: Text('"${track.name}" is already downloaded'),
-                                        duration: const Duration(seconds: 2),
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  if (existing.isFailed) {
-                                    await downloadService.retryDownload(track.id);
-                                    messenger.showSnackBar(
-                                      SnackBar(
-                                        content: Text('Retrying download for ${track.name}'),
-                                        duration: const Duration(seconds: 2),
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  messenger.showSnackBar(
                                     SnackBar(
-                                      content: Text('"${track.name}" is already in the download queue'),
+                                      content: Text('${track.name} will play next'),
                                       duration: const Duration(seconds: 2),
                                     ),
                                   );
-                                  return;
-                                }
-                                await downloadService.downloadTrack(track);
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text('Downloading ${track.name}'),
-                                    duration: const Duration(seconds: 2),
-                                  ),
-                                );
-                              } catch (e) {
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to download ${track.name}: $e'),
-                                    backgroundColor: theme.colorScheme.error,
-                                  ),
-                                );
-                              }
-                            },
+                                },
+                              ),
+                              ListTile(
+                                leading: const Icon(Icons.queue_music),
+                                title: const Text('Add to Queue'),
+                                onTap: () {
+                                  Navigator.pop(sheetContext);
+                                  appState.audioPlayerService.addToQueue([track]);
+                                  ScaffoldMessenger.of(parentContext).showSnackBar(
+                                    SnackBar(
+                                      content: Text('${track.name} added to queue'),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                },
+                              ),
+                              ListTile(
+                                leading: const Icon(Icons.playlist_add),
+                                title: const Text('Add to Playlist'),
+                                onTap: () async {
+                                  Navigator.pop(sheetContext);
+                                  await showAddToPlaylistDialog(
+                                    context: parentContext,
+                                    appState: appState,
+                                    tracks: [track],
+                                  );
+                                },
+                              ),
+                              ListTile(
+                                leading: const Icon(Icons.auto_awesome),
+                                title: const Text('Instant Mix'),
+                                onTap: () async {
+                                  Navigator.pop(sheetContext);
+                                  try {
+                                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Creating instant mix...'),
+                                        duration: Duration(seconds: 1),
+                                      ),
+                                    );
+
+                                    final mixTracks = await appState.jellyfinService.getInstantMix(
+                                      itemId: track.id,
+                                      limit: 50,
+                                    );
+
+                                    if (mixTracks.isEmpty) {
+                                      ScaffoldMessenger.of(parentContext).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('No similar tracks found'),
+                                          duration: Duration(seconds: 2),
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    await appState.audioPlayerService.playTrack(
+                                      mixTracks.first,
+                                      queueContext: mixTracks,
+                                    );
+
+                                    // Simple notification without persistent action button
+                                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Playing instant mix (${mixTracks.length} tracks)'),
+                                        duration: const Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  } catch (e) {
+                                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Failed to create mix: $e'),
+                                        backgroundColor: Theme.of(parentContext).colorScheme.error,
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                              ListTile(
+                                leading: const Icon(Icons.download),
+                                title: const Text('Download Track'),
+                                onTap: () async {
+                                  Navigator.pop(sheetContext);
+                                  final messenger = ScaffoldMessenger.of(parentContext);
+                                  final theme = Theme.of(parentContext);
+                                  final downloadService = appState.downloadService;
+                                  try {
+                                    final existing = downloadService.getDownload(track.id);
+                                    if (existing != null) {
+                                      if (existing.isCompleted) {
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            content: Text('"${track.name}" is already downloaded'),
+                                            duration: const Duration(seconds: 2),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      if (existing.isFailed) {
+                                        await downloadService.retryDownload(track.id);
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            content: Text('Retrying download for ${track.name}'),
+                                            duration: const Duration(seconds: 2),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content: Text('"${track.name}" is already in the download queue'),
+                                          duration: const Duration(seconds: 2),
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    await downloadService.downloadTrack(track);
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text('Downloading ${track.name}'),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                  } catch (e) {
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: Text('Failed to download ${track.name}: $e'),
+                                        backgroundColor: theme.colorScheme.error,
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+                        ),
+                      );
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

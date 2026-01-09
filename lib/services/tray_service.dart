@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -14,6 +15,9 @@ class TrayService with TrayListener {
 
   final AudioPlayerService _audioService;
   bool _isInitialized = false;
+  final StreamController<String> _actionController = StreamController.broadcast();
+
+  Stream<String> get actionStream => _actionController.stream;
 
   /// Initialize the system tray if on a supported desktop platform.
   Future<void> initialize() async {
@@ -23,17 +27,25 @@ class TrayService with TrayListener {
     }
 
     try {
-      // Set tray icon
-      await trayManager.setIcon(_getTrayIconPath());
+      // Listen for tray events immediately
+      trayManager.addListener(this);
 
-      // Set initial tooltip
-      await trayManager.setToolTip('Nautune - Not Playing');
+      // Set tray icon
+      try {
+        await trayManager.setIcon(_getTrayIconPath());
+      } catch (e) {
+        debugPrint('🔲 TrayService: Failed to set icon: $e');
+      }
+
+      // Set initial tooltip (ignore errors on Linux)
+      try {
+        await trayManager.setToolTip('Nautune - Not Playing');
+      } catch (e) {
+        // Ignored, likely not supported on this platform version
+      }
 
       // Create context menu
       await _updateContextMenu();
-
-      // Listen for tray events
-      trayManager.addListener(this);
 
       _isInitialized = true;
       debugPrint('🔲 TrayService: Initialized');
@@ -48,9 +60,13 @@ class TrayService with TrayListener {
 
     if (track != null) {
       final tooltip = '${track.name}\n${track.displayArtist}';
-      trayManager.setToolTip(tooltip);
+      try {
+        trayManager.setToolTip(tooltip);
+      } catch (_) {}
     } else {
-      trayManager.setToolTip('Nautune - Not Playing');
+      try {
+        trayManager.setToolTip('Nautune - Not Playing');
+      } catch (_) {}
     }
 
     _updateContextMenu();
@@ -94,7 +110,11 @@ class TrayService with TrayListener {
         MenuItem.separator(),
         MenuItem(
           key: 'show',
-          label: 'Show Nautune',
+          label: 'Show / Hide',
+        ),
+        MenuItem(
+          key: 'settings',
+          label: 'Settings',
         ),
         MenuItem.separator(),
         MenuItem(
@@ -136,9 +156,11 @@ class TrayService with TrayListener {
         _audioService.skipToNext();
         break;
       case 'show':
-        // This would need window_manager to actually show the window
-        // For now, we just log it
+        _actionController.add('show');
         debugPrint('🔲 TrayService: Show window requested');
+        break;
+      case 'settings':
+        _actionController.add('settings');
         break;
       case 'quit':
         // Exit the app
@@ -166,6 +188,7 @@ class TrayService with TrayListener {
 
   /// Clean up tray resources.
   Future<void> dispose() async {
+    _actionController.close();
     if (_isInitialized) {
       trayManager.removeListener(this);
       await trayManager.destroy();

@@ -65,6 +65,7 @@ class PlaybackStateStore {
     String? repeatMode,
     bool? shuffleEnabled,
     double? volume,
+    bool? gaplessPlaybackEnabled,
   }) async {
     await update((state) {
       final updatedQueueIds =
@@ -85,6 +86,7 @@ class PlaybackStateStore {
         repeatMode: repeatMode ?? state.repeatMode,
         shuffleEnabled: shuffleEnabled ?? state.shuffleEnabled,
         volume: volume ?? state.volume,
+        gaplessPlaybackEnabled: gaplessPlaybackEnabled ?? state.gaplessPlaybackEnabled,
       );
     });
   }
@@ -97,6 +99,7 @@ class PlaybackStateStore {
     int? crossfadeDurationSeconds,
     bool? infiniteRadioEnabled,
     int? cacheTtlMinutes,
+    bool? gaplessPlaybackEnabled,
   }) async {
     await update((state) {
       final mergedOffsets = Map<String, double>.from(state.scrollOffsets);
@@ -111,6 +114,7 @@ class PlaybackStateStore {
         crossfadeDurationSeconds: crossfadeDurationSeconds ?? state.crossfadeDurationSeconds,
         infiniteRadioEnabled: infiniteRadioEnabled ?? state.infiniteRadioEnabled,
         cacheTtlMinutes: cacheTtlMinutes ?? state.cacheTtlMinutes,
+        gaplessPlaybackEnabled: gaplessPlaybackEnabled ?? state.gaplessPlaybackEnabled,
       );
     });
   }

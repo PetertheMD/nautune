@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'app_state.dart';
 import 'jellyfin/jellyfin_service.dart';
@@ -13,6 +14,7 @@ import 'providers/ui_state_provider.dart';
 import 'screens/library_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/queue_screen.dart';
+import 'screens/settings_screen.dart';
 import 'services/bootstrap_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/download_service.dart';
@@ -82,6 +84,8 @@ Future<void> main() async {
   // Initialize legacy app state
   unawaited(appState.initialize());
 
+  await windowManager.ensureInitialized();
+
   runApp(
     NautuneApp(
       appState: appState,
@@ -117,14 +121,46 @@ class NautuneApp extends StatefulWidget {
 }
 
 class _NautuneAppState extends State<NautuneApp> with WidgetsBindingObserver {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  StreamSubscription<String>? _traySubscription;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    
+    // Listen to tray actions
+    final trayService = widget.appState.trayService;
+    if (trayService != null) {
+      _traySubscription = trayService.actionStream.listen((action) async {
+        if (action == 'settings') {
+          _navigatorKey.currentState?.push(
+            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          );
+        } else if (action == 'show') {
+          final isMinimized = await windowManager.isMinimized();
+          final isVisible = await windowManager.isVisible();
+          final isFocused = await windowManager.isFocused();
+          
+          if (!isVisible || isMinimized) {
+            await windowManager.show();
+            await windowManager.restore();
+            await windowManager.focus();
+          } else {
+            if (isFocused) {
+              await windowManager.minimize();
+            } else {
+              await windowManager.focus();
+            }
+          }
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
+    _traySubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -198,6 +234,7 @@ class _NautuneAppState extends State<NautuneApp> with WidgetsBindingObserver {
         ChangeNotifierProvider.value(value: widget.appState),
       ],
       child: MaterialApp(
+        navigatorKey: _navigatorKey,
         title: 'Nautune - Poseidon Music Player',
         theme: NautuneTheme.build(),
         debugShowCheckedModeBanner: false,
