@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart'; // For MissingPluginException
 import 'package:tray_manager/tray_manager.dart';
 
 import '../jellyfin/jellyfin_track.dart';
@@ -55,27 +56,27 @@ class TrayService with TrayListener {
   }
 
   /// Update tray with current track info.
-  void updateCurrentTrack(JellyfinTrack? track) {
+  Future<void> updateCurrentTrack(JellyfinTrack? track) async {
     if (!_isInitialized) return;
 
-    if (track != null) {
-      final tooltip = '${track.name}\n${track.displayArtist}';
-      try {
-        trayManager.setToolTip(tooltip);
-      } catch (_) {}
-    } else {
-      try {
-        trayManager.setToolTip('Nautune - Not Playing');
-      } catch (_) {}
+    try {
+      if (track != null) {
+        final tooltip = '${track.name}\n${track.displayArtist}';
+        await trayManager.setToolTip(tooltip);
+      } else {
+        await trayManager.setToolTip('Nautune - Not Playing');
+      }
+    } catch (e) {
+      // Ignore MissingPluginException on Linux if tray not fully supported
     }
 
-    _updateContextMenu();
+    await _updateContextMenu();
   }
 
-  /// Update tray playing state.
-  void updatePlayingState(bool isPlaying) {
+  /// Update playing state.
+  Future<void> updatePlayingState(bool isPlaying) async {
     if (!_isInitialized) return;
-    _updateContextMenu();
+    await _updateContextMenu();
   }
 
   Future<void> _updateContextMenu() async {
@@ -124,19 +125,31 @@ class TrayService with TrayListener {
       ],
     );
 
-    await trayManager.setContextMenu(menu);
+    try {
+      await trayManager.setContextMenu(menu);
+    } catch (e) {
+      debugPrint('🔲 TrayService: Failed to set context menu: $e');
+    }
   }
 
   @override
   void onTrayIconMouseDown() {
     // Show context menu on click
-    trayManager.popUpContextMenu();
+    try {
+      trayManager.popUpContextMenu();
+    } catch (e) {
+      debugPrint('🔲 TrayService: Failed to pop up context menu: $e');
+    }
   }
 
   @override
   void onTrayIconRightMouseDown() {
     // Also show context menu on right click
-    trayManager.popUpContextMenu();
+    try {
+      trayManager.popUpContextMenu();
+    } catch (e) {
+      debugPrint('🔲 TrayService: Failed to pop up context menu: $e');
+    }
   }
 
   @override

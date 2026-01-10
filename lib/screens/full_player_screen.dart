@@ -4,6 +4,7 @@ import 'dart:ui' as ui show Image, ImageFilter;
 import 'package:audio_video_progress_bar/audio_video_progress_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:palette_generator/palette_generator.dart';
 import 'package:provider/provider.dart';
 
 import '../app_state.dart';
@@ -126,40 +127,38 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> with SingleTickerPr
         );
       }
 
-      final imageStream = imageProvider.resolve(const ImageConfiguration());
-      final completer = Completer<ui.Image>();
+      final paletteGenerator = await PaletteGenerator.fromImageProvider(
+        imageProvider,
+        maximumColorCount: 20,
+      );
 
-      late ImageStreamListener listener;
-      listener = ImageStreamListener((info, _) {
-        completer.complete(info.image);
-        imageStream.removeListener(listener);
-      });
-
-      imageStream.addListener(listener);
-      final image = await completer.future;
-      
-      final ByteData? byteData = await image.toByteData();
-      if (byteData == null) return;
-      
-      final pixels = byteData.buffer.asUint8List();
       final colors = <Color>[];
       
-      for (int i = 0; i < pixels.length; i += 400) {
-        if (i + 2 < pixels.length) {
-          final r = pixels[i];
-          final g = pixels[i + 1];
-          final b = pixels[i + 2];
-          colors.add(Color.fromRGBO(r, g, b, 1.0));
-        }
+      // Prioritize vibrant and dominant colors for a rich gradient
+      if (paletteGenerator.darkVibrantColor != null) {
+        colors.add(paletteGenerator.darkVibrantColor!.color);
+      }
+      if (paletteGenerator.dominantColor != null) {
+        colors.add(paletteGenerator.dominantColor!.color);
+      }
+      if (paletteGenerator.lightVibrantColor != null) {
+        colors.add(paletteGenerator.lightVibrantColor!.color);
+      }
+      if (paletteGenerator.mutedColor != null) {
+        colors.add(paletteGenerator.mutedColor!.color);
       }
       
-      colors.sort((a, b) {
-        final lumA = (0.299 * (a.r * 255.0).round() + 0.587 * (a.g * 255.0).round() + 0.114 * (a.b * 255.0).round());
-        final lumB = (0.299 * (b.r * 255.0).round() + 0.587 * (b.g * 255.0).round() + 0.114 * (b.b * 255.0).round());
-        return lumA.compareTo(lumB);
-      });
-      
-      if (mounted && colors.isNotEmpty) {
+      // Fallback if palette generator fails to find enough distinct colors
+      if (colors.isEmpty) {
+        final theme = Theme.of(context);
+        colors.add(theme.colorScheme.primaryContainer);
+        colors.add(theme.colorScheme.surface);
+      } else if (colors.length == 1) {
+        // Create a gradient from the single color to a darker shade
+        colors.add(colors[0].withValues(alpha: 0.5)); // Darker variant
+      }
+
+      if (mounted) {
         setState(() {
           _paletteColors = colors;
         });
@@ -357,29 +356,33 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> with SingleTickerPr
                       body: Stack(
                         children: [
                           // Gradient background layer
-                          if (_paletteColors != null && _paletteColors!.length >= 3)
+                          if (_paletteColors != null && _paletteColors!.isNotEmpty)
                             Positioned.fill(
                               child: Container(
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
-                                    colors: [
-                                      _paletteColors![0].withValues(alpha: 0.6),
-                                      _paletteColors![_paletteColors!.length ~/ 2].withValues(alpha: 0.5),
-                                      _paletteColors![_paletteColors!.length - 1].withValues(alpha: 0.4),
-                                    ],
+                                    colors: _paletteColors!.length >= 2 
+                                        ? [
+                                            _paletteColors![0].withValues(alpha: 0.8), // More pronounced
+                                            _paletteColors![1].withValues(alpha: 0.6),
+                                          ]
+                                        : [
+                                            _paletteColors![0].withValues(alpha: 0.8),
+                                            Colors.black.withValues(alpha: 0.6),
+                                          ],
                                   ),
                                 ),
                               ),
                             ),
                           // Blur layer for extra effect
-                          if (_paletteColors != null && _paletteColors!.length >= 3)
+                          if (_paletteColors != null && _paletteColors!.isNotEmpty)
                             Positioned.fill(
                               child: BackdropFilter(
-                                filter: ui.ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+                                filter: ui.ImageFilter.blur(sigmaX: 100, sigmaY: 100), // Smoother blur
                                 child: Container(
-                                  color: Colors.black.withValues(alpha: 0.1),
+                                  color: Colors.black.withValues(alpha: 0.2), // Slight darken
                                 ),
                               ),
                             ),
