@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../jellyfin/jellyfin_playlist.dart';
 import '../jellyfin/jellyfin_track.dart';
+import '../widgets/jellyfin_image.dart';
 import '../widgets/now_playing_bar.dart';
 
 class PlaylistDetailScreen extends StatefulWidget {
@@ -86,10 +87,72 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     }
   }
 
+  void _onReorder(int oldIndex, int newIndex) async {
+    if (_tracks == null) return;
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final item = _tracks!.removeAt(oldIndex);
+    _tracks!.insert(newIndex, item);
+    setState(() {}); // Optimistic update
+
+    try {
+      await _appState!.jellyfinService.movePlaylistItem(
+        playlistId: widget.playlist.id,
+        itemId: item.id,
+        newIndex: newIndex,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to reorder: $e')),
+        );
+        _loadTracks(); // Revert
+      }
+    }
+  }
+
+  Future<void> _downloadPlaylist() async {
+    if (_tracks == null || _tracks!.isEmpty) return;
+    
+    final count = _tracks!.length;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Checking $count tracks for download...')),
+    );
+
+    int started = 0;
+    // Copy list to avoid concurrent modification issues
+    final tracksToDownload = List<JellyfinTrack>.from(_tracks!);
+    
+    for (final track in tracksToDownload) {
+      if (!mounted) break;
+      try {
+        final downloadService = _appState!.downloadService;
+        final existing = downloadService.getDownload(track.id);
+        
+        if (existing == null || existing.isFailed) {
+           await downloadService.downloadTrack(track);
+           started++;
+        }
+      } catch (_) {
+        // Ignore individual failures
+      }
+    }
+    
+    if (mounted) {
+       ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(started > 0 
+            ? 'Queued $started new downloads' 
+            : 'All tracks already downloaded or queued'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
   Future<void> _removeTrack(String trackId) async {
     try {
-      // Note: We need the entryId, not trackId, but for now we'll use trackId
-      // In a full implementation, tracks should include their playlist entry IDs
       await _appState!.jellyfinService.removeItemsFromPlaylist(
         playlistId: widget.playlist.id,
         entryIds: [trackId],
@@ -123,7 +186,11 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       appBar: AppBar(
         title: Text(widget.playlist.name),
         actions: [
-          // Shuffle button
+          IconButton(
+            icon: const Icon(Icons.download),
+            tooltip: 'Download Playlist',
+            onPressed: _downloadPlaylist,
+          ),
           IconButton(
             icon: const Icon(Icons.shuffle),
             tooltip: 'Shuffle',
@@ -133,13 +200,25 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               }
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () => _showRenameDialog(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: () => _showDeleteDialog(),
+          PopupMenuButton(
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                child: const ListTile(
+                  leading: Icon(Icons.edit),
+                  title: Text('Rename'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                onTap: () => Future.delayed(Duration.zero, _showRenameDialog),
+              ),
+              PopupMenuItem(
+                child: const ListTile(
+                  leading: Icon(Icons.delete, color: Colors.red),
+                  title: Text('Delete', style: TextStyle(color: Colors.red)),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                onTap: () => Future.delayed(Duration.zero, _showDeleteDialog),
+              ),
+            ],
           ),
         ],
       ),
@@ -177,45 +256,68 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                         ],
                       ),
                     )
-                  : ListView.separated(
+                  : ReorderableListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: _tracks!.length,
-                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      onReorder: _onReorder,
                       itemBuilder: (context, index) {
                         final track = _tracks![index];
                         final duration = track.duration;
                         final durationText = duration != null ? _formatDuration(duration) : '--:--';
 
                         return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: theme.colorScheme.secondaryContainer,
-                            child: Text(
-                              '${index + 1}',
-                              style: TextStyle(color: theme.colorScheme.onSecondaryContainer),
+                          key: ValueKey(track.id), // Important for ReorderableListView
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: (track.primaryImageTag != null || track.albumPrimaryImageTag != null)
+                                  ? JellyfinImage(
+                                      itemId: track.primaryImageTag != null ? track.id : (track.albumId ?? track.id),
+                                      imageTag: track.primaryImageTag ?? track.albumPrimaryImageTag ?? '',
+                                      trackId: track.id,
+                                      boxFit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        color: theme.colorScheme.secondaryContainer,
+                                        child: Center(
+                                          child: Text('${index + 1}', style: TextStyle(color: theme.colorScheme.onSecondaryContainer)),
+                                        ),
+                                      ),
+                                    )
+                                  : Container(
+                                      color: theme.colorScheme.secondaryContainer,
+                                      child: Center(
+                                        child: Text('${index + 1}', style: TextStyle(color: theme.colorScheme.onSecondaryContainer)),
+                                      ),
+                                    ),
                             ),
                           ),
                           title: Text(
                             track.name,
-                            style: TextStyle(color: theme.colorScheme.tertiary),  // Ocean blue
+                            style: TextStyle(color: theme.colorScheme.onSurface),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
                             track.displayArtist,
-                            style: TextStyle(color: theme.colorScheme.tertiary.withValues(alpha: 0.7)),  // Ocean blue
+                            style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
                                 durationText,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue
-                                ),
+                                style: theme.textTheme.bodySmall,
                               ),
-                              const SizedBox(width: 8),
                               IconButton(
                                 icon: const Icon(Icons.remove_circle_outline),
                                 onPressed: () => _removeTrack(track.id),
                               ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.drag_handle, color: Colors.grey),
                             ],
                           ),
                           onTap: () async {

@@ -298,6 +298,28 @@ class JellyfinClient {
         .toList();
   }
 
+  Future<void> movePlaylistItem({
+    required JellyfinCredentials credentials,
+    required String playlistId,
+    required String itemId,
+    required int newIndex,
+  }) async {
+    final uri = _buildUri('/Playlists/$playlistId/Items/$itemId/Move/$newIndex', {
+      'UserId': credentials.userId,
+    });
+
+    final response = await _robustClient.post(
+      uri,
+      headers: _defaultHeaders(credentials),
+    );
+
+    if (response.statusCode != 204 && response.statusCode != 200) {
+      throw JellyfinRequestException(
+        'Unable to move playlist item: ${response.statusCode}',
+      );
+    }
+  }
+
   Future<List<JellyfinTrack>> fetchTracksByIds({
     required JellyfinCredentials credentials,
     required List<String> ids,

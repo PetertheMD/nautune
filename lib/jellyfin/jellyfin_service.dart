@@ -639,6 +639,26 @@ class JellyfinService {
     _playlistCache.clear();
   }
 
+  Future<void> movePlaylistItem({
+    required String playlistId,
+    required String itemId,
+    required int newIndex,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    await client.movePlaylistItem(
+      credentials: session.credentials,
+      playlistId: playlistId,
+      itemId: itemId,
+      newIndex: newIndex,
+    );
+
+    _playlistCache.clear();
+  }
+
   Future<List<JellyfinTrack>> getPlaylistItems(String playlistId) async {
     final client = _client;
     if (client == null) throw StateError('Not connected');
