@@ -86,7 +86,7 @@ class AudioPlayerService {
 
   void setReportingService(PlaybackReportingService service) {
     _reportingService = service;
-    _reportingService!.attachPositionProvider(() => _lastPosition);
+    _reportingService?.attachPositionProvider(() => _lastPosition);
   }
 
   void setCrossfadeEnabled(bool enabled) {
@@ -318,7 +318,7 @@ class AudioPlayerService {
       if (_lastPlayingState != isPlaying && _currentTrack != null) {
         _lastPlayingState = isPlaying;
         if (_reportingService != null) {
-          _reportingService!.reportPlaybackProgress(
+          _reportingService?.reportPlaybackProgress(
             _currentTrack!,
             _lastPosition,
             !isPlaying, // isPaused
@@ -493,7 +493,13 @@ class AudioPlayerService {
   Future<void> _attemptRestoreFromPending({bool force = false}) async {
     if (_hasRestored && !force) return;
     final state = _pendingState ?? await _stateStore.load();
-    if (state == null) return;
+    if (state == null) {
+      debugPrint('📭 No playback state to restore');
+      return;
+    }
+    
+    debugPrint('📥 Restoring playback state: ${state.currentTrackName ?? "Unknown"} (Queue: ${state.queueIds.length})');
+    
     final queue = await _buildQueueFromState(state);
 
     if (state.queueIds.isNotEmpty && queue.isEmpty) {
@@ -709,13 +715,14 @@ class AudioPlayerService {
     // and we want to minimize the gap.
 
     Future<void> applySourceAndPlay() async {
+        final url = activeUrl!;
         if (isLocalFile) {
-           await _player.setSource(DeviceFileSource(activeUrl!));
-        } else if (activeUrl!.startsWith('assets/')) {
-           final normalized = activeUrl!.substring('assets/'.length);
+           await _player.setSource(DeviceFileSource(url));
+        } else if (url.startsWith('assets/')) {
+           final normalized = url.substring('assets/'.length);
            await _player.setSource(AssetSource(normalized));
         } else {
-           await _player.setSource(UrlSource(activeUrl!));
+           await _player.setSource(UrlSource(url));
         }
 
         // Apply ReplayGain normalization
@@ -734,7 +741,7 @@ class AudioPlayerService {
       // Report playback start to Jellyfin
       if (_reportingService != null) {
         debugPrint('🎵 Reporting playback start to Jellyfin: ${track.name}');
-        await _reportingService!.reportPlaybackStart(
+        await _reportingService?.reportPlaybackStart(
           track,
           playMethod: isOffline ? 'DirectPlay' : (activeUrl == downloadUrl ? 'DirectStream' : 'Transcode'),
         );
@@ -750,7 +757,7 @@ class AudioPlayerService {
           
         // Report transcoded playback
         if (_reportingService != null) {
-            await _reportingService!.reportPlaybackStart(
+            await _reportingService?.reportPlaybackStart(
               track,
               playMethod: 'Transcode',
             );
@@ -925,10 +932,7 @@ class AudioPlayerService {
   }
 
   Future<void> stop() async {
-    // 1. Stop audio immediately
-    await _player.stop();
-
-    // Save state to persistence before clearing memory
+    // 1. Save state to persistence before stopping player or clearing memory
     // This allows "Resume" functionality on next app launch
     if (_currentTrack != null) {
       try {
@@ -937,25 +941,30 @@ class AudioPlayerService {
           position: _lastPosition,
           queue: _queue,
           currentQueueIndex: _currentIndex,
-          isPlaying: false,
+          isPlaying: false, // Mark as stopped/paused for next launch
           repeatMode: _repeatMode.name,
           shuffleEnabled: _isShuffleEnabled,
           volume: _volume,
         );
+        debugPrint('💾 Saved playback state on stop: ${_currentTrack?.name}');
       } catch (e) {
         debugPrint('Error saving snapshot on stop: $e');
       }
       
       // Report stop to Jellyfin
       if (_reportingService != null) {
-        _reportingService!.reportPlaybackStopped(
+        // Fire and forget stop report
+        _reportingService?.reportPlaybackStopped(
           _currentTrack!,
           _lastPosition,
         ).catchError((e) => debugPrint('Stop report failed: $e'));
       }
     }
+
+    // 2. Stop audio
+    await _player.stop();
     
-    // 2. CLEAR active memory state
+    // 3. CLEAR active memory state
     // This makes the UI (Now Playing bar) and Lock Screen disappear
     _currentTrack = null;
     _currentTrackController.add(null);
