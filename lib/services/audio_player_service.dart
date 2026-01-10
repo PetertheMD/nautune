@@ -518,6 +518,10 @@ class AudioPlayerService {
     await _applyStateFromStorage(state, queue);
     _pendingState = null;
     _hasRestored = true;
+    } catch (e, stack) {
+      debugPrint('⚠️ Failed to restore playback state: $e\n$stack');
+      // Don't rethrow - we want app to continue even if restore fails
+    }
   }
 
   Future<List<JellyfinTrack>> _buildQueueFromState(PlaybackState state) async {
