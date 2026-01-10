@@ -147,7 +147,7 @@ class PlaybackState {
       crossfadeEnabled: json['crossfadeEnabled'] as bool? ?? false,
       crossfadeDurationSeconds: json['crossfadeDurationSeconds'] as int? ?? 3,
       infiniteRadioEnabled: json['infiniteRadioEnabled'] as bool? ?? false,
-      cacheTtlMinutes: json['cacheTtlMinutes'] as int? ?? 2,
+      cacheTtlMinutes: (json['cacheTtlMinutes'] as num?)?.toInt() ?? 2,
       gaplessPlaybackEnabled: json['gaplessPlaybackEnabled'] as bool? ?? true,
     );
   }

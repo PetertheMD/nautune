@@ -34,7 +34,9 @@ class PlaybackStateStore {
         return null;
       }
       return PlaybackState.fromJson(data);
-    } catch (_) {
+    } catch (e, stack) {
+      // ignore: avoid_print
+      print('Error loading playback state: $e\n$stack');
       return null;
     }
   }
