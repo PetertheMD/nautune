@@ -53,116 +53,130 @@ class NowPlayingBar extends StatelessWidget {
               color: theme.colorScheme.surface,
               child: SafeArea(
                 top: false,
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(
-                        color:
-                            theme.colorScheme.secondary.withValues(alpha: 0.25),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragEnd: (details) {
+                    final velocity = details.primaryVelocity;
+                    if (velocity == null) return;
+                    if (velocity < -200) {
+                      // Swipe Left -> Next
+                      audioService.next();
+                    } else if (velocity > 200) {
+                      // Swipe Right -> Previous
+                      audioService.previous();
+                    }
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        top: BorderSide(
+                          color:
+                              theme.colorScheme.secondary.withValues(alpha: 0.25),
+                        ),
                       ),
                     ),
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _WaveformStrip(
-                        audioService: audioService,
-                        track: track,
-                        isPlaying: isPlaying,
-                      ),
-                      const SizedBox(height: 6),
-                      StreamBuilder<PositionData>(
-                        stream: audioService.positionDataStream,
-                        builder: (context, snapshot) {
-                          final positionData = snapshot.data ??
-                              const PositionData(Duration.zero, Duration.zero, Duration.zero);
-                          return ProgressBar(
-                            progress: positionData.position,
-                            buffered: positionData.bufferedPosition,
-                            total: positionData.duration,
-                            onSeek: audioService.seek,
-                            barHeight: 3.0,
-                            thumbRadius: 0.0, // Hide thumb for mini player
-                            progressBarColor: theme.colorScheme.secondary,
-                            baseBarColor: theme.colorScheme.secondary.withValues(alpha: 0.2),
-                            bufferedBarColor: theme.colorScheme.secondary.withValues(alpha: 0.1),
-                            timeLabelLocation: TimeLabelLocation.none,
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.skip_previous),
-                            onPressed: () => audioService.previous(),
-                          ),
-                          _PlayPauseButton(
-                            audioService: audioService,
-                            isPlaying: isPlaying,
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.stop,
-                              color: theme.colorScheme.error,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _WaveformStrip(
+                          audioService: audioService,
+                          track: track,
+                          isPlaying: isPlaying,
+                        ),
+                        const SizedBox(height: 6),
+                        StreamBuilder<PositionData>(
+                          stream: audioService.positionDataStream,
+                          builder: (context, snapshot) {
+                            final positionData = snapshot.data ??
+                                const PositionData(Duration.zero, Duration.zero, Duration.zero);
+                            return ProgressBar(
+                              progress: positionData.position,
+                              buffered: positionData.bufferedPosition,
+                              total: positionData.duration,
+                              onSeek: audioService.seek,
+                              barHeight: 3.0,
+                              thumbRadius: 0.0, // Hide thumb for mini player
+                              progressBarColor: theme.colorScheme.secondary,
+                              baseBarColor: theme.colorScheme.secondary.withValues(alpha: 0.2),
+                              bufferedBarColor: theme.colorScheme.secondary.withValues(alpha: 0.1),
+                              timeLabelLocation: TimeLabelLocation.none,
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.skip_previous),
+                              onPressed: () => audioService.previous(),
                             ),
-                            onPressed: () => audioService.stop(),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.skip_next),
-                            onPressed: () => audioService.next(),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () => _openFullPlayer(context),
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 4),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      track.name,
-                                      style: theme.textTheme.bodyLarge?.copyWith(
-                                        fontWeight: FontWeight.w600,
+                            _PlayPauseButton(
+                              audioService: audioService,
+                              isPlaying: isPlaying,
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                Icons.stop,
+                                color: theme.colorScheme.error,
+                              ),
+                              onPressed: () => audioService.stop(),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.skip_next),
+                              onPressed: () => audioService.next(),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () => _openFullPlayer(context),
+                                child: Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 4),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        track.name,
+                                        style: theme.textTheme.bodyLarge?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _subtitleFor(track),
-                                      style:
-                                          theme.textTheme.bodySmall?.copyWith(
-                                        color: theme
-                                            .colorScheme.onSurfaceVariant,
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _subtitleFor(track),
+                                        style:
+                                            theme.textTheme.bodySmall?.copyWith(
+                                          color: theme
+                                              .colorScheme.onSurfaceVariant,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.queue_music),
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (context) => const QueueScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
+                            IconButton(
+                              icon: const Icon(Icons.queue_music),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) => const QueueScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -373,4 +387,3 @@ class _WaveformDisplayState extends State<_WaveformDisplay> {
     widget.audioService.seek(target);
   }
 }
-

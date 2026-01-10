@@ -805,7 +805,7 @@ class AudioPlayerService {
   
   Future<void> pause() async {
     HapticService.lightTap();
-    await _player.pause();
+    await _fadeOutAndPause();
     final position = await _player.getCurrentPosition();
     if (position != null) {
       _lastPosition = position;
@@ -826,8 +826,48 @@ class AudioPlayerService {
   
   Future<void> resume() async {
     HapticService.lightTap();
-    await _player.resume();
+    await _resumeAndFadeIn();
     await _stateStore.savePlaybackSnapshot(isPlaying: true);
+  }
+  
+  // Fade helpers
+  Future<void> _fadeOutAndPause() async {
+    _crossfadeTimer?.cancel();
+    _crossfadeTimer = null;
+    
+    // Quick fade out
+    const steps = 10;
+    const stepDuration = Duration(milliseconds: 30); // Total 300ms
+    final startVolume = _volume;
+    
+    for (int i = 0; i < steps; i++) {
+      final vol = startVolume * (1.0 - ((i + 1) / steps));
+      await _player.setVolume(vol);
+      await Future.delayed(stepDuration);
+    }
+    
+    await _player.pause();
+    await _player.setVolume(startVolume); // Restore for next play
+  }
+
+  Future<void> _resumeAndFadeIn() async {
+    _crossfadeTimer?.cancel();
+    _crossfadeTimer = null;
+
+    // Start silent
+    await _player.setVolume(0.0);
+    await _player.resume();
+
+    // Quick fade in
+    const steps = 10;
+    const stepDuration = Duration(milliseconds: 30); // Total 300ms
+    final targetVolume = _volume;
+
+    for (int i = 0; i <= steps; i++) {
+      final vol = targetVolume * (i / steps);
+      await _player.setVolume(vol);
+      await Future.delayed(stepDuration);
+    }
   }
   
   Future<void> seek(Duration position) async {
