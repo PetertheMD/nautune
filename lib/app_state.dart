@@ -63,6 +63,7 @@ class NautuneAppState extends ChangeNotifier {
     // Link download service to audio player for offline playback
     _audioPlayerService.setDownloadService(_downloadService);
     _audioPlayerService.setJellyfinService(_jellyfinService);
+    _audioPlayerService.setLocalCacheService(_cacheService);
     // CarPlay service is only available on iOS; initialize early for CarPlay to work
     // even when app is launched from CarPlay (phone app not open)
     if (Platform.isIOS) {

@@ -22,6 +22,12 @@ class PlaybackState {
     this.infiniteRadioEnabled = false,
     this.cacheTtlMinutes = 2,
     this.gaplessPlaybackEnabled = true,
+    // Download settings
+    this.maxConcurrentDownloads = 3,
+    this.wifiOnlyDownloads = false,
+    this.storageLimitMB = 0, // 0 = unlimited
+    this.autoCleanupEnabled = false,
+    this.autoCleanupDays = 30,
   });
 
   final String? currentTrackId;
@@ -44,6 +50,12 @@ class PlaybackState {
   final bool infiniteRadioEnabled;
   final int cacheTtlMinutes;
   final bool gaplessPlaybackEnabled;
+  // Download settings
+  final int maxConcurrentDownloads;
+  final bool wifiOnlyDownloads;
+  final int storageLimitMB; // 0 = unlimited
+  final bool autoCleanupEnabled;
+  final int autoCleanupDays;
 
   bool get hasTrack => currentTrackId != null;
 
@@ -68,6 +80,11 @@ class PlaybackState {
     bool? infiniteRadioEnabled,
     int? cacheTtlMinutes,
     bool? gaplessPlaybackEnabled,
+    int? maxConcurrentDownloads,
+    bool? wifiOnlyDownloads,
+    int? storageLimitMB,
+    bool? autoCleanupEnabled,
+    int? autoCleanupDays,
   }) {
     return PlaybackState(
       currentTrackId: currentTrackId ?? this.currentTrackId,
@@ -90,6 +107,11 @@ class PlaybackState {
       infiniteRadioEnabled: infiniteRadioEnabled ?? this.infiniteRadioEnabled,
       cacheTtlMinutes: cacheTtlMinutes ?? this.cacheTtlMinutes,
       gaplessPlaybackEnabled: gaplessPlaybackEnabled ?? this.gaplessPlaybackEnabled,
+      maxConcurrentDownloads: maxConcurrentDownloads ?? this.maxConcurrentDownloads,
+      wifiOnlyDownloads: wifiOnlyDownloads ?? this.wifiOnlyDownloads,
+      storageLimitMB: storageLimitMB ?? this.storageLimitMB,
+      autoCleanupEnabled: autoCleanupEnabled ?? this.autoCleanupEnabled,
+      autoCleanupDays: autoCleanupDays ?? this.autoCleanupDays,
     );
   }
 
@@ -115,6 +137,11 @@ class PlaybackState {
       'infiniteRadioEnabled': infiniteRadioEnabled,
       'cacheTtlMinutes': cacheTtlMinutes,
       'gaplessPlaybackEnabled': gaplessPlaybackEnabled,
+      'maxConcurrentDownloads': maxConcurrentDownloads,
+      'wifiOnlyDownloads': wifiOnlyDownloads,
+      'storageLimitMB': storageLimitMB,
+      'autoCleanupEnabled': autoCleanupEnabled,
+      'autoCleanupDays': autoCleanupDays,
     };
   }
 
@@ -152,6 +179,11 @@ class PlaybackState {
       infiniteRadioEnabled: json['infiniteRadioEnabled'] as bool? ?? false,
       cacheTtlMinutes: (json['cacheTtlMinutes'] as num?)?.toInt() ?? 2,
       gaplessPlaybackEnabled: json['gaplessPlaybackEnabled'] as bool? ?? true,
+      maxConcurrentDownloads: (json['maxConcurrentDownloads'] as num?)?.toInt() ?? 3,
+      wifiOnlyDownloads: json['wifiOnlyDownloads'] as bool? ?? false,
+      storageLimitMB: (json['storageLimitMB'] as num?)?.toInt() ?? 0,
+      autoCleanupEnabled: json['autoCleanupEnabled'] as bool? ?? false,
+      autoCleanupDays: (json['autoCleanupDays'] as num?)?.toInt() ?? 30,
     );
   }
 
@@ -180,6 +212,11 @@ class PlaybackState {
       infiniteRadioEnabled: infiniteRadioEnabled,
       cacheTtlMinutes: cacheTtlMinutes,
       gaplessPlaybackEnabled: gaplessPlaybackEnabled,
+      maxConcurrentDownloads: maxConcurrentDownloads,
+      wifiOnlyDownloads: wifiOnlyDownloads,
+      storageLimitMB: storageLimitMB,
+      autoCleanupEnabled: autoCleanupEnabled,
+      autoCleanupDays: autoCleanupDays,
     );
   }
 

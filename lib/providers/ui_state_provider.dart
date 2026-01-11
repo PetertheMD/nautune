@@ -37,6 +37,13 @@ class UIStateProvider extends ChangeNotifier {
   int _libraryTabIndex = 0;
   Map<String, double> _scrollOffsets = {};
 
+  // Download settings
+  int _maxConcurrentDownloads = 3;
+  bool _wifiOnlyDownloads = false;
+  int _storageLimitMB = 0;
+  bool _autoCleanupEnabled = false;
+  int _autoCleanupDays = 30;
+
   // Getters
   bool get showVolumeBar => _showVolumeBar;
   bool get crossfadeEnabled => _crossfadeEnabled;
@@ -45,6 +52,13 @@ class UIStateProvider extends ChangeNotifier {
   int get cacheTtlMinutes => _cacheTtlMinutes;
   int get libraryTabIndex => _libraryTabIndex;
   double? getScrollOffset(String key) => _scrollOffsets[key];
+
+  // Download settings getters
+  int get maxConcurrentDownloads => _maxConcurrentDownloads;
+  bool get wifiOnlyDownloads => _wifiOnlyDownloads;
+  int get storageLimitMB => _storageLimitMB;
+  bool get autoCleanupEnabled => _autoCleanupEnabled;
+  int get autoCleanupDays => _autoCleanupDays;
 
   /// Initialize UI state by loading persisted preferences.
   ///
@@ -62,6 +76,13 @@ class UIStateProvider extends ChangeNotifier {
         _cacheTtlMinutes = storedPlaybackState.cacheTtlMinutes;
         _libraryTabIndex = storedPlaybackState.libraryTabIndex;
         _scrollOffsets = Map<String, double>.from(storedPlaybackState.scrollOffsets);
+
+        // Download settings
+        _maxConcurrentDownloads = storedPlaybackState.maxConcurrentDownloads;
+        _wifiOnlyDownloads = storedPlaybackState.wifiOnlyDownloads;
+        _storageLimitMB = storedPlaybackState.storageLimitMB;
+        _autoCleanupEnabled = storedPlaybackState.autoCleanupEnabled;
+        _autoCleanupDays = storedPlaybackState.autoCleanupDays;
 
         debugPrint('UIStateProvider: Restored UI preferences');
         notifyListeners();
@@ -144,5 +165,45 @@ class UIStateProvider extends ChangeNotifier {
     );
     // Don't notify listeners for scroll updates - they're too frequent
     // Widgets should read the value when needed, not rebuild on every scroll pixel
+  }
+
+  // Download settings setters
+
+  /// Set max concurrent downloads (1-10).
+  void setMaxConcurrentDownloads(int value) {
+    _maxConcurrentDownloads = value.clamp(1, 10);
+    unawaited(_playbackStateStore.saveUiState(
+      maxConcurrentDownloads: _maxConcurrentDownloads,
+    ));
+    notifyListeners();
+  }
+
+  /// Set WiFi-only downloads.
+  void setWifiOnlyDownloads(bool value) {
+    _wifiOnlyDownloads = value;
+    unawaited(_playbackStateStore.saveUiState(
+      wifiOnlyDownloads: value,
+    ));
+    notifyListeners();
+  }
+
+  /// Set storage limit in MB (0 = unlimited).
+  void setStorageLimitMB(int value) {
+    _storageLimitMB = value;
+    unawaited(_playbackStateStore.saveUiState(
+      storageLimitMB: value,
+    ));
+    notifyListeners();
+  }
+
+  /// Set auto-cleanup settings.
+  void setAutoCleanup({bool? enabled, int? days}) {
+    if (enabled != null) _autoCleanupEnabled = enabled;
+    if (days != null) _autoCleanupDays = days;
+    unawaited(_playbackStateStore.saveUiState(
+      autoCleanupEnabled: _autoCleanupEnabled,
+      autoCleanupDays: _autoCleanupDays,
+    ));
+    notifyListeners();
   }
 }

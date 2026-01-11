@@ -17,6 +17,8 @@ import 'haptic_service.dart';
 import 'playback_reporting_service.dart';
 import 'playback_state_store.dart';
 import '../models/playback_state.dart';
+import '../models/play_stats.dart';
+import 'local_cache_service.dart';
 
 enum RepeatMode {
   off,      // No repeat
@@ -50,7 +52,12 @@ class AudioPlayerService {
   PlaybackReportingService? _reportingService;
   NautuneAudioHandler? _audioHandler;
   JellyfinService? _jellyfinService;
+  LocalCacheService? _cacheService;
+  PlayStatsAggregate _playStats = PlayStatsAggregate();
+  Duration _accumulatedTime = Duration.zero;
   double _volume = 1.0;
+
+  PlayStatsAggregate get playStats => _playStats;
   
   // Player subscriptions
   StreamSubscription? _playerPosSub;
@@ -137,8 +144,37 @@ class AudioPlayerService {
     _crossfadePlayer?.stop();
   }
 
+  void setLocalCacheService(LocalCacheService service) {
+    _cacheService = service;
+    _loadPlayStats();
+  }
+
+  Future<void> _loadPlayStats() async {
+    if (_cacheService == null || _jellyfinService?.session == null) return;
+    try {
+      final sessionKey = _cacheService!.cacheKeyForSession(_jellyfinService!.session!);
+      final statsMap = await _cacheService!.readPlayStats(sessionKey);
+      if (statsMap != null) {
+        _playStats = PlayStatsAggregate.fromJson(statsMap);
+      }
+    } catch (e) {
+      debugPrint('Error loading play stats: $e');
+    }
+  }
+
+  Future<void> _savePlayStats() async {
+    if (_cacheService == null || _jellyfinService?.session == null) return;
+    try {
+      final sessionKey = _cacheService!.cacheKeyForSession(_jellyfinService!.session!);
+      await _cacheService!.savePlayStats(sessionKey, _playStats.toJson());
+    } catch (e) {
+      debugPrint('Error saving play stats: $e');
+    }
+  }
+
   void setJellyfinService(JellyfinService service) {
     _jellyfinService = service;
+    _loadPlayStats();
     if (_pendingState != null && !_hasRestored) {
       unawaited(applyStoredState(_pendingState!));
     }
@@ -652,6 +688,10 @@ class AudioPlayerService {
 
     _currentTrack = track;
     _currentTrackController.add(track);
+
+    // Track play count
+    _playStats.incrementPlayCount(track.id);
+    unawaited(_savePlayStats());
 
     // Immediately update duration from metadata to prevent UI lag
     if (track.duration != null) {
@@ -1313,6 +1353,17 @@ class AudioPlayerService {
     
     final position = await _player.getCurrentPosition();
     if (position != null) {
+      // Track listen time
+      if (isPlaying) {
+        _playStats.addListenTime(_currentTrack!.id, const Duration(seconds: 1));
+        _accumulatedTime += const Duration(seconds: 1);
+        // Save every minute
+        if (_accumulatedTime.inSeconds >= 60) {
+          _accumulatedTime = Duration.zero;
+          unawaited(_savePlayStats());
+        }
+      }
+
       _lastPosition = position;
       await _stateStore.savePlaybackSnapshot(
         currentTrack: _currentTrack,

@@ -18,6 +18,7 @@ import '../repositories/music_repository.dart';
 import '../widgets/add_to_playlist_dialog.dart';
 import '../widgets/jellyfin_image.dart';
 import '../widgets/now_playing_bar.dart';
+import '../widgets/sync_status_indicator.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
 import 'genre_detail_screen.dart';
@@ -382,6 +383,7 @@ class _LibraryScreenState extends State<LibraryScreen>
               ],
             ),
             actions: [
+              const SyncStatusIndicator(),
               if (selectedId != null)
                 IconButton(
                   icon: const Icon(Icons.library_books_outlined),

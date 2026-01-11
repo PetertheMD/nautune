@@ -11,17 +11,54 @@ import '../jellyfin/jellyfin_album.dart';
 import '../jellyfin/jellyfin_service.dart';
 import '../jellyfin/jellyfin_track.dart';
 import '../models/download_item.dart';
+import 'connectivity_service.dart';
+import 'notification_service.dart';
+
+/// Storage statistics for downloads
+class StorageStats {
+  final int totalBytes;
+  final int trackCount;
+  final Map<String, int> byAlbum; // albumId -> bytes
+  final Map<String, int> byArtist; // artistName -> bytes
+  final Map<String, String> albumNames; // albumId -> albumName
+
+  StorageStats({
+    required this.totalBytes,
+    required this.trackCount,
+    required this.byAlbum,
+    required this.byArtist,
+    required this.albumNames,
+  });
+
+  String get formattedTotal => _formatBytes(totalBytes);
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+}
 
 class DownloadService extends ChangeNotifier {
   final JellyfinService jellyfinService;
+  final NotificationService? _notificationService;
+  ConnectivityService? _connectivityService;
   final Map<String, DownloadItem> _downloads = {};
   final List<String> _downloadQueue = [];
   bool _isDownloading = false;
-  final int _maxConcurrentDownloads = 3;
+  int _maxConcurrentDownloads = 3; // Now configurable
   int _activeDownloads = 0;
   bool _demoModeEnabled = false;
   Uint8List? _demoAudioBytes;
   final Set<String> _demoDownloadIds = <String>{};
+
+  // Download settings
+  bool _wifiOnlyDownloads = false;
+  int _storageLimitMB = 0; // 0 = unlimited
+  bool _autoCleanupEnabled = false;
+  int _autoCleanupDays = 30;
+  bool _pausedForMobileData = false; // Track if downloads paused due to mobile data
 
   // Secondary indexes for O(1) album/artist lookups instead of O(n) scans
   final Map<String, Set<String>> _albumIndex = {}; // albumId -> Set<trackId>
@@ -32,7 +69,10 @@ class DownloadService extends ChangeNotifier {
   static bool _hiveInitialized = false;
   Box<dynamic>? _box;
 
-  DownloadService({required this.jellyfinService}) {
+  DownloadService({
+    required this.jellyfinService,
+    NotificationService? notificationService,
+  }) : _notificationService = notificationService {
     _initializeAndLoad();
   }
 
@@ -103,6 +143,138 @@ class DownloadService extends ChangeNotifier {
   int get completedCount => completedDownloads.length;
   int get activeCount => activeDownloads.length;
   bool get isDemoMode => _demoModeEnabled;
+
+  // Settings getters
+  int get maxConcurrentDownloads => _maxConcurrentDownloads;
+  bool get wifiOnlyDownloads => _wifiOnlyDownloads;
+  int get storageLimitMB => _storageLimitMB;
+  bool get autoCleanupEnabled => _autoCleanupEnabled;
+  int get autoCleanupDays => _autoCleanupDays;
+
+  /// Update max concurrent downloads (1-10)
+  void setMaxConcurrentDownloads(int value) {
+    final newValue = value.clamp(1, 10);
+    if (_maxConcurrentDownloads != newValue) {
+      _maxConcurrentDownloads = newValue;
+      notifyListeners();
+      unawaited(_processQueue()); // Resume any waiting downloads
+    }
+  }
+
+  /// Update WiFi-only downloads setting
+  void setWifiOnlyDownloads(bool value) {
+    if (_wifiOnlyDownloads != value) {
+      _wifiOnlyDownloads = value;
+      notifyListeners();
+    }
+  }
+
+  /// Update storage limit in MB (0 = unlimited)
+  void setStorageLimitMB(int value) {
+    if (_storageLimitMB != value) {
+      _storageLimitMB = value;
+      notifyListeners();
+    }
+  }
+
+  /// Update auto-cleanup settings
+  void setAutoCleanup({bool? enabled, int? days}) {
+    bool changed = false;
+    if (enabled != null && _autoCleanupEnabled != enabled) {
+      _autoCleanupEnabled = enabled;
+      changed = true;
+    }
+    if (days != null && _autoCleanupDays != days) {
+      _autoCleanupDays = days;
+      changed = true;
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Load settings from persisted state
+  void loadSettings({
+    int? maxConcurrentDownloads,
+    bool? wifiOnlyDownloads,
+    int? storageLimitMB,
+    bool? autoCleanupEnabled,
+    int? autoCleanupDays,
+  }) {
+    if (maxConcurrentDownloads != null) {
+      _maxConcurrentDownloads = maxConcurrentDownloads.clamp(1, 10);
+    }
+    if (wifiOnlyDownloads != null) _wifiOnlyDownloads = wifiOnlyDownloads;
+    if (storageLimitMB != null) _storageLimitMB = storageLimitMB;
+    if (autoCleanupEnabled != null) _autoCleanupEnabled = autoCleanupEnabled;
+    if (autoCleanupDays != null) _autoCleanupDays = autoCleanupDays;
+  }
+
+  /// Set the connectivity service for WiFi-only checks
+  void setConnectivityService(ConnectivityService service) {
+    _connectivityService = service;
+  }
+
+  /// Check if downloads are paused due to mobile data
+  bool get isPausedForMobileData => _pausedForMobileData;
+
+  /// Check if we can proceed with download based on WiFi settings
+  Future<bool> _canProceedWithDownload() async {
+    if (!_wifiOnlyDownloads) return true;
+    if (_connectivityService == null) return true;
+
+    final isOnWifi = await _connectivityService!.isOnWifi();
+    if (!isOnWifi) {
+      _pausedForMobileData = true;
+      debugPrint('Downloads paused: WiFi-only mode enabled but on mobile data');
+      notifyListeners();
+      return false;
+    }
+
+    if (_pausedForMobileData) {
+      _pausedForMobileData = false;
+      notifyListeners();
+    }
+    return true;
+  }
+
+  void _updateNotification() {
+    if (_notificationService == null) return;
+    
+    if (_activeDownloads == 0) {
+       // Handled in _processQueue or finally block for completion
+       return;
+    }
+
+    if (_activeDownloads == 1) {
+       // Find the active one
+       try {
+         final activeItem = _downloads.values.firstWhere((d) => d.isDownloading);
+         _notificationService!.showProgress(
+            title: 'Downloading ${activeItem.track.name}',
+            body: '${(activeItem.progress * 100).toInt()}%',
+            progress: (activeItem.progress * 100).toInt(),
+         );
+       } catch (_) {
+         // Fallback if state is inconsistent
+       }
+    } else {
+       _notificationService!.showProgress(
+          title: 'Downloading $_activeDownloads tracks',
+          body: '$_activeDownloads active, ${_downloadQueue.length} queued',
+          progress: null,
+       );
+    }
+  }
+
+  /// Resume downloads when WiFi becomes available
+  Future<void> resumeIfOnWifi() async {
+    if (!_wifiOnlyDownloads || !_pausedForMobileData) return;
+
+    if (await _canProceedWithDownload()) {
+      _pausedForMobileData = false;
+      notifyListeners();
+      await _processQueue();
+    }
+  }
 
   void enableDemoMode({required Uint8List demoAudioBytes}) {
     _demoModeEnabled = true;
@@ -549,7 +721,7 @@ class DownloadService extends ChangeNotifier {
     notifyListeners();
     await _saveDownloads();
 
-    _processQueue();
+    unawaited(_processQueue());
   }
 
   Future<void> downloadAlbum(JellyfinAlbum album) async {
@@ -563,14 +735,34 @@ class DownloadService extends ChangeNotifier {
     }
   }
 
-  void _processQueue() {
-    if (_isDownloading || _downloadQueue.isEmpty) return;
+  Future<void> _processQueue() async {
+    // Check if we just finished everything
+    if (_activeDownloads == 0 && _downloadQueue.isEmpty) {
+      if (_isDownloading) { // Was running
+         _isDownloading = false;
+         _notificationService?.showComplete(title: 'Downloads Finished', body: 'All downloads complete');
+      }
+      return;
+    }
     
+    // Mark as downloading if we have active items (or are about to start)
+    if (_activeDownloads > 0) {
+      _isDownloading = true;
+    }
+
+    // Check WiFi status if WiFi-only downloads is enabled
+    if (!await _canProceedWithDownload()) {
+      debugPrint('Download queue paused: waiting for WiFi connection');
+      return;
+    }
+
     while (_activeDownloads < _maxConcurrentDownloads && _downloadQueue.isNotEmpty) {
       final trackId = _downloadQueue.removeAt(0);
       final item = _downloads[trackId];
       if (item != null && item.isQueued) {
+        // Start download (unawaited, but increments _activeDownloads synchronously)
         _startDownload(trackId);
+        _isDownloading = true;
       }
     }
   }
@@ -641,6 +833,7 @@ class DownloadService extends ChangeNotifier {
         
         if (downloadedBytes % (500 * 1024) == 0 || progress == 1.0) {
           notifyListeners();
+          _updateNotification();
         }
       }
 
@@ -682,7 +875,7 @@ class DownloadService extends ChangeNotifier {
       if (_activeDownloads == 0) {
         _isDownloading = false;
       }
-      _processQueue();
+      unawaited(_processQueue());
     }
   }
 
@@ -780,8 +973,8 @@ class DownloadService extends ChangeNotifier {
     _downloadQueue.add(trackId);
     notifyListeners();
     await _saveDownloads();
-    
-    _processQueue();
+
+    unawaited(_processQueue());
   }
 
   String? getLocalPath(String trackId) {
@@ -808,5 +1001,151 @@ class DownloadService extends ChangeNotifier {
       }
     }
     return totalSize;
+  }
+
+  /// Get detailed storage statistics
+  Future<StorageStats> getStorageStats() async {
+    int totalBytes = 0;
+    int trackCount = 0;
+    final byAlbum = <String, int>{};
+    final byArtist = <String, int>{};
+    final albumNames = <String, String>{};
+
+    for (final item in completedDownloads) {
+      try {
+        final file = File(item.localPath);
+        if (await file.exists()) {
+          final fileSize = await file.length();
+          totalBytes += fileSize;
+          trackCount++;
+
+          // Group by album
+          final albumId = item.track.albumId ?? 'unknown';
+          byAlbum[albumId] = (byAlbum[albumId] ?? 0) + fileSize;
+          albumNames[albumId] = item.track.album ?? 'Unknown Album';
+
+          // Group by artist
+          final artistName = item.track.displayArtist;
+          byArtist[artistName] = (byArtist[artistName] ?? 0) + fileSize;
+        }
+      } catch (e) {
+        debugPrint('Error getting file size for ${item.track.name}: $e');
+      }
+    }
+
+    return StorageStats(
+      totalBytes: totalBytes,
+      trackCount: trackCount,
+      byAlbum: byAlbum,
+      byArtist: byArtist,
+      albumNames: albumNames,
+    );
+  }
+
+  /// Check if storage limit is exceeded
+  Future<bool> isStorageLimitExceeded() async {
+    if (_storageLimitMB == 0) return false; // Unlimited
+    final totalSize = await getTotalDownloadSize();
+    return totalSize > _storageLimitMB * 1024 * 1024;
+  }
+
+  /// Get remaining storage space before limit
+  Future<int> getRemainingStorage() async {
+    if (_storageLimitMB == 0) return -1; // Unlimited
+    final totalSize = await getTotalDownloadSize();
+    final limitBytes = _storageLimitMB * 1024 * 1024;
+    return (limitBytes - totalSize).clamp(0, limitBytes);
+  }
+
+  /// Cleanup downloads older than specified duration
+  Future<int> cleanupByAge(Duration maxAge) async {
+    final cutoff = DateTime.now().subtract(maxAge);
+    final toDelete = <String>[];
+
+    for (final item in completedDownloads) {
+      final completedAt = item.completedAt;
+      if (completedAt != null && completedAt.isBefore(cutoff)) {
+        toDelete.add(item.track.id);
+      }
+    }
+
+    int deletedCount = 0;
+    for (final trackId in toDelete) {
+      await deleteDownload(trackId);
+      deletedCount++;
+    }
+
+    debugPrint('Cleaned up $deletedCount downloads older than ${maxAge.inDays} days');
+    return deletedCount;
+  }
+
+  /// Cleanup downloads to free space, starting with oldest
+  Future<int> cleanupToFreeSpace(int targetFreeMB) async {
+    if (targetFreeMB <= 0) return 0;
+
+    final targetFreeBytes = targetFreeMB * 1024 * 1024;
+    int currentSize = await getTotalDownloadSize();
+    final targetSize = (_storageLimitMB > 0 ? _storageLimitMB * 1024 * 1024 : currentSize) - targetFreeBytes;
+
+    if (currentSize <= targetSize) return 0;
+
+    // Sort by completion date (oldest first)
+    final sortedDownloads = List<DownloadItem>.from(completedDownloads)
+      ..sort((a, b) {
+        final aDate = a.completedAt ?? DateTime(2000);
+        final bDate = b.completedAt ?? DateTime(2000);
+        return aDate.compareTo(bDate);
+      });
+
+    int deletedCount = 0;
+    for (final item in sortedDownloads) {
+      if (currentSize <= targetSize) break;
+
+      final file = File(item.localPath);
+      if (await file.exists()) {
+        final fileSize = await file.length();
+        await deleteDownload(item.track.id);
+        currentSize -= fileSize;
+        deletedCount++;
+      }
+    }
+
+    debugPrint('Cleaned up $deletedCount downloads to free ${targetFreeMB}MB');
+    return deletedCount;
+  }
+
+  /// Cleanup all downloads for a specific album
+  Future<int> cleanupAlbum(String albumId) async {
+    final trackIds = trackIdsForAlbum(albumId).toList();
+    int deletedCount = 0;
+    for (final trackId in trackIds) {
+      await deleteDownload(trackId);
+      deletedCount++;
+    }
+    debugPrint('Cleaned up $deletedCount tracks from album $albumId');
+    return deletedCount;
+  }
+
+  /// Cleanup all downloads for a specific artist
+  Future<int> cleanupArtist(String artistName) async {
+    final trackIds = trackIdsForArtist(artistName).toList();
+    int deletedCount = 0;
+    for (final trackId in trackIds) {
+      await deleteDownload(trackId);
+      deletedCount++;
+    }
+    debugPrint('Cleaned up $deletedCount tracks from artist $artistName');
+    return deletedCount;
+  }
+
+  /// Run auto-cleanup if enabled
+  Future<int> runAutoCleanupIfEnabled() async {
+    if (!_autoCleanupEnabled) return 0;
+    return cleanupByAge(Duration(days: _autoCleanupDays));
+  }
+
+  /// Format bytes to human readable string (static utility)
+  static String formatBytes(int bytes) {
+    return StorageStats._formatBytes(bytes);
   }
 }

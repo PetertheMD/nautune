@@ -37,6 +37,35 @@ class ConnectivityService {
     }
   }
 
+  /// Check if currently connected via WiFi (not mobile data).
+  Future<bool> isOnWifi() async {
+    try {
+      final results = await _connectivity.checkConnectivity().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => [ConnectivityResult.none],
+      );
+      final primary = _extractPrimaryResult(results);
+      return primary == ConnectivityResult.wifi ||
+             primary == ConnectivityResult.ethernet;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Check if currently on mobile data.
+  Future<bool> isOnMobileData() async {
+    try {
+      final results = await _connectivity.checkConnectivity().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => [ConnectivityResult.none],
+      );
+      final primary = _extractPrimaryResult(results);
+      return primary == ConnectivityResult.mobile;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> _probeConnection(ConnectivityResult result) async {
     if (result == ConnectivityResult.none) {
       return false;

@@ -2,7 +2,26 @@
 
 Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter and delivers a beautiful deep-sea themed experience with smooth native audio playback and seamless Jellyfin integration.
 
-## 🚀 Latest Updates (v2.8.0)
+## 🚀 Latest Updates (v3.0.0)
+- **💾 Advanced Storage Management**:
+  - ✅ **Detailed Breakdown**: See exactly how much space each album and artist is using.
+  - ✅ **Smart Cleanup**: New tools to "Free 500MB" or "Clean Old Downloads" (older than 30 days) with one tap.
+  - ✅ **Storage Limits**: Set a hard cap on how much space Nautune can use (e.g., 2GB, 5GB, 10GB).
+  - ✅ **Auto-Cleanup**: Automatically remove downloads older than a configurable number of days.
+- **📥 Intelligent Download Service**:
+  - ✅ **Parallel Downloads**: Configurable concurrency (1-10 simultaneous downloads) for blazing fast library syncing.
+  - ✅ **WiFi-Only Enforcement**: Option to pause all downloads when on mobile data to save your data plan.
+  - ✅ **Background Notifications**: Real-time progress notifications in the system tray/shade showing download status even when the app is minimized.
+  - ✅ **Quick Download Presets**: One-tap buttons to download all your "Favorites," your "Top 20 Played," or "Recently Added" tracks.
+- **📈 Listen Time Tracking**:
+  - ✅ **Detailed Stats**: Nautune now tracks exactly how many times you've played a track and for how long.
+  - ✅ **Offline Persistence**: Stats are tracked even in airplane mode and synced/saved locally.
+  - ✅ **Data-Driven Discovery**: Powers the "Most Played" shelves with real, accurate listening data.
+- **🔄 Enhanced Offline Sync**:
+  - ✅ **Sync Status Indicator**: New animated icon in the app bar shows real-time sync status (syncing, pending actions, or offline).
+  - ✅ **Offline Action Queue**: Hearting tracks or creating playlists while offline is now more robust with improved retry logic and visual status.
+
+## 🚀 Previous Updates (v2.8.0)
 - **🎵 Synced Lyrics Experience**:
   - ✅ **Beautiful Lyrics UI**: New dedicated tab in the full-screen player with high-quality typography
   - ✅ **Auto-Scrolling**: Active lyrics automatically center and scroll smoothly as the song plays
@@ -439,199 +458,6 @@ Apple's Guideline 2.1 requires working reviewer access. Nautune includes an on-d
   - `assets/demo/demo_offline_track.mp3` – “Sirens and Silence” from Pixabay (track: https://pixabay.com/music/modern-classical-sirens-and-silence-10036/ · Pixabay License). This file also powers the offline/download view so reviewers see a real track in airplane mode.
 - Artwork: intentionally uses the shared fallbacks `assets/no_album_art.png` and `assets/no_artist_art.png`, making it easy to drop in a branded placeholder that demo + production both inherit.
 
-## ✨ Highlights
-
-### 🎵 Audio & Playback
-- **Native Engine**: Powered by `audioplayers` with platform-specific backends
-  - 🍎 **iOS/macOS**: AVFoundation (hardware-accelerated, native FLAC support)
-  - 🐧 **Linux**: GStreamer (native multimedia framework with FLAC codec)
-- **Gapless Playback**: True seamless transitions with intelligent pre-loading
-  - ✅ **70% pre-load trigger**: Next track loads at 70% of current track
-  - ✅ **Platform buffering**: Native decoders buffer actual audio data
-  - ✅ **Instant playback**: Pre-loaded tracks start immediately
-  - ✅ **Works offline**: Pre-loads both streaming and downloaded tracks
-  - ✅ **Auto-cleanup**: Clears pre-load when queue changes
-- **External Control Support**: Rock-solid media controls from any source
-  - ✅ USB-C audio devices (car head units, dongles)
-  - ✅ Bluetooth headphones and speakers
-  - ✅ Lock screen controls on iOS/Android
-  - ✅ Crash-proof error handling
-  - ✅ Repeat mode aware navigation
-- **Direct Play Only**: Always streams original Jellyfin files in native format (FLAC/AAC/etc.)
-  - ✅ No transcoding - preserves audio quality
-  - ✅ Native platform decoders handle all formats
-  - ✅ Reduced server load
-- **Original Quality Downloads**: Downloads always use original lossless format (FLAC preferred)
-  - ✅ Auto-detects format from Content-Type header (FLAC, MP3, M4A, OGG, OPUS, WAV)
-  - ✅ Preserves native audio quality
-  - ✅ No transcoding or quality loss
-  - ✅ Automatic file verification on startup
-  - ✅ Cleanup of orphaned download references
-- **Album Queueing**: One tap queues the whole album in disc/track-number order with seamless previous/next navigation
-- **Play Next & Queue Control**: Advanced queue management for power users
-  - ✅ **Play Next**: Insert tracks immediately after current song
-  - ✅ **Add to Queue**: Append tracks to end of queue
-  - ✅ **Available everywhere**: Three-dot menus on tracks in albums, favorites, search, fullscreen player
-  - ✅ **Smart handling**: Manages queue indices and pre-loading automatically
-- **Instant Mix**: AI-powered music discovery via Jellyfin
-  - ✅ **One-tap radio**: Create 50-track mixes from any track, album, or artist
-  - ✅ **Save as playlist**: One-tap save from snackbar after creation
-  - ✅ **Smart naming**: Auto-suggests contextual playlist names
-  - ✅ **Server intelligence**: Jellyfin analyzes musical similarity
-  - ✅ **Multiple triggers**: Sparkle icon (✨) in detail screens + track menus
-  - ✅ **Auto-play**: Starts playing immediately
-- **Advanced Playback State Persistence**: Complete session restoration
-  - ✅ Saves current track, position, queue, repeat mode, shuffle state
-  - ✅ Preserves volume level and UI preferences (library tab, scroll positions)
-  - ✅ Smart restoration: automatically resumes from last position on launch
-  - ✅ **Pause preserves queue**: Pausing saves queue for next session
-  - ✅ **Stop clears queue**: Stop button intentionally clears queue (fresh start)
-  - ✅ **App resume**: Background/foreground restores playback exactly where you left off
-  - ✅ Position saved every second for accurate resume
-- **Shuffle & Repeat**: Full playback control
-  - ✅ Shuffle mode: Randomizes queue while keeping current track
-  - ✅ Repeat modes: Off, All (repeat queue), One (repeat current track)
-  - ✅ State persisted across sessions
-  - ✅ Visual indicators for active modes
-- **Background Audio**: Keeps playing while the app is in the background
-- **Volume Control**: Direct audio volume adjustment with persistent slider in now playing bar
-- **Playback Reporting**: Full Jellyfin server integration
-  - ✅ Reports playback start with play method (DirectPlay/DirectStream)
-  - ✅ Real-time progress updates (position, pause state)
-  - ✅ Automatic "Recently Played" tracking in Jellyfin
-  - ✅ Session-based reporting with unique IDs
-  - ✅ Proper stop reporting with final position
-- **iOS Media Integration**: Native lock screen controls and CarPlay support
-  - ✅ Lock screen media controls via audio_service plugin
-  - ✅ Album artwork display on lock screen
-  - ✅ Play/pause, skip controls work from lock screen
-  - ✅ Seek controls on lock screen
-  - ✅ Background playback state tracking
-  - ✅ **Full CarPlay integration** powered by flutter_carplay plugin
-  - ✅ CarPlay library browsing (albums, artists, playlists, favorites, downloads)
-  - ✅ CarPlay supports offline playback with downloads (airplane mode works!)
-  - ✅ Tab-based navigation optimized for car displays
-  - ✅ Seamless integration with iOS audio session
-  - ✅ Clean, focused car-friendly UI
-
-### 📚 Library Browsing
-- **✅ Albums Tab**: Grid view with paginated loading (50 albums per page), album artwork, year, and artist info - click to see tracks
-- **✅ Artists Tab**: Browse all artists with paginated loading (50 per page) and circular profile artwork - click to see their albums
-- **✅ Genres Tab**: Browse music by genre - click any genre to see all albums with that tag (server-filtered)
-- **✅ Home Tab**: Beautiful discovery dashboard with 6 horizontal shelves
-  - **Continue Listening**: Resume tracks from where you left off with horizontal track chips
-  - **Recently Played**: Tracks you've played recently in horizontal scrollable list
-  - **Recently Added**: Latest albums added to your library with album artwork
-  - **Most Played Albums**: Your most-listened albums in horizontal grid
-  - **Most Played Tracks**: Your favorite tracks in horizontal scrollable list
-  - **Longest Tracks**: Epic tracks for long listening sessions
-  - All content is playable with tap-to-play functionality
-  - Horizontal-only layout for clean, consistent experience
-  - **Smart Tab Switching**: Automatically becomes "Downloads" tab when in offline mode
-- **✅ Instant Mix**: Server-powered music discovery creates 50-track playlists
-  - ✅ **From any source**: Generate mixes from tracks, albums, or artists
-  - ✅ **Save as playlist**: One-tap save button after mix creation with smart naming
-  - ✅ **Sparkle icon (✨)**: Quick access in album/artist detail screens
-  - ✅ **Track menus**: Instant Mix option in all three-dot menus
-  - ✅ **Auto-play**: Mix starts playing immediately after generation
-  - ✅ **Jellyfin matching**: Server analyzes music similarity (genre, era, style, audio features)
-- **✅ Play Next & Add to Queue**: Full queue control from any track menu
-  - ✅ **Play Next**: Insert track(s) immediately after current song
-  - ✅ **Add to Queue**: Append track(s) to end of queue
-  - ✅ **Smart feedback**: Toast notifications confirm actions
-  - ✅ **Queue management**: Automatic index handling and pre-load clearing
-- **✅ Offline Mode Toggle**: Wave icon (🌊) switches between online Jellyfin library and offline downloads
-  - **Tap**: Toggle online/offline mode (violet = offline, light purple = online)
-  - **Home Tab**: Automatically becomes Downloads management when offline
-  - **Search Tab**: Searches downloaded content only when offline
-  - **🛫 Offline-First Boot**: App automatically enters offline mode if network is unavailable during startup (10-second timeout)
-  - **Network Banner**: Visual indicator when offline with retry button to restore connection
-  - **Seamless Recovery**: Automatically syncs when internet returns
-- **✅ Recent Tab**: Toggle between recently played tracks (from Jellyfin history) and recently added albums with segmented control
-- **✅ Favorites Tab**: Jellyfin favorites integration with offline queue support
-  - ✅ Mark tracks/albums as favorites
-  - ✅ View favorite tracks list
-  - ✅ Sync favorites with Jellyfin server
-  - ✅ Toggle favorite state with heart icon
-  - ✅ **Offline queue**: Favorite actions queued when offline, synced when connection returns
-  - ✅ **Optimistic updates**: UI updates immediately even when offline
-- **✅ Playlists Tab**: Full playlist management with Jellyfin sync and offline persistence
-  - ✅ Create new playlists (queued when offline)
-  - ✅ Edit/rename playlists (three-dot menu or detail screen)
-  - ✅ Delete playlists with confirmation dialog
-  - ✅ View all tracks in playlist detail screen
-  - ✅ Add albums/tracks to playlists (long-press on albums, menu on tracks)
-  - ✅ Remove tracks from playlists
-  - ✅ Play playlists with queue support
-  - ✅ All changes sync to Jellyfin server instantly
-  - ✅ **Offline queue**: Playlist operations queued when offline, synced when connection returns
-  - ✅ **Local cache**: Playlists cached locally for offline viewing
-  - ✅ **Auto-refresh**: Track counts update immediately after adding items
-- **✅ Downloads Tab**: Full offline download support with original quality (FLAC/lossless), progress tracking, album batch downloads, individual track downloads, and file management
-  - ✅ **Download Albums**: Tap download icon on album cards or in album detail view
-  - ✅ **Download Tracks**: Long-press or use menu button on individual tracks
-  - ✅ **Progress Tracking**: Real-time progress bars for downloads
-  - ✅ **Cancellation**: Cancel in-progress downloads anytime
-  - ✅ **Smart Detection**: Won't re-download existing files
-  - ✅ **Original Quality**: Always downloads lossless format (FLAC, MP3, M4A auto-detected)
-  - ✅ **File Verification**: Checks files exist on startup, removes orphaned references
-  - ✅ **Better Error Handling**: Clear messages when files are missing or unavailable
-- **✅ Offline Library**: Click wave icon (🌊) to browse downloads by album or artist - **works in airplane mode!**
-- **✅ Settings**: Click "Nautune" title to view server info and about section (native quality playback always enabled)
-- **✅ Favorite Button**: Heart icon in fullscreen player synced with Jellyfin favorites API
-- **✅ Queue View**: Browse and reorder currently queued tracks via queue button in now playing bar
-- **Track Listings**: Full album detail screens with ordered track lists, durations, and padded numbers (multi-disc aware with disc separators)
-  - ✅ **Multi-Disc Support**: Disc separators (Disc 1, Disc 2, etc.) for box sets and compilations
-  - ✅ **Proper Ordering**: Tracks sorted by disc number then track number
-  - ✅ **Disc Grouping**: Visual separation between discs for clarity
-- **Artist Discography**: View all albums by an artist
-- **Bottom Navigation**: Icon-only rail keeps the most-used sections a single tap away on every platform
-- **Library Search Tab**: Dedicated search experience for quickly finding albums by name, showing artist and year context
-- **Smart Refresh**: Pull-to-refresh on all tabs for latest content sync
-- **Add to Playlist**: Long-press albums, use menu button on tracks, or toolbar button in album detail to add content to any playlist
-
-### 🎯 Jellyfin Integration
-- **Direct Streaming**: Streams music directly from your Jellyfin server with adaptive quality
-- **Album Browsing**: View all albums with high-quality artwork and metadata
-- **Favorites API**: Full Jellyfin favorites integration with offline queue
-  - ✅ Mark tracks/albums as favorites from fullscreen player
-  - ✅ View favorite tracks in Favorites tab
-  - ✅ Favorites sync with Jellyfin server instantly
-  - ✅ Heart icon toggles favorite state
-  - ✅ **Offline queue**: Favorite actions queued when offline
-  - ✅ **Optimistic UI updates**: Changes visible immediately
-  - ✅ **Automatic sync** when connection returns
-- **Playlist Support**: Full Jellyfin playlist integration with real-time sync and offline queue
-  - ✅ Create playlists on server
-  - ✅ Rename/edit playlists
-  - ✅ Delete playlists
-  - ✅ Add albums and tracks to playlists
-  - ✅ Remove tracks from playlists
-  - ✅ All changes persist on Jellyfin server
-  - ✅ **Global playlist loading**: Shows all user playlists (not library-filtered)
-  - ✅ **Offline operations queued** for sync when connection returns
-  - ✅ **Local playlist cache** for offline viewing
-  - ✅ **Automatic sync** on app startup and when going online
-  - ✅ **Track count auto-refresh** after adding items
-- **Recent Tracks**: Quick access to recently played and added music with Jellyfin sync
-- **Persistent Sessions**: Login once, stay connected across app launches
-- **Playback Reporting**: Full integration with Jellyfin's activity tracking
-  - ✅ Reports play method (DirectPlay/DirectStream)
-  - ✅ Real-time progress updates to server
-  - ✅ Updates "Recently Played" in Jellyfin dashboard
-  - ✅ Session-based reporting with proper start/stop events
-- **Offline Downloads**: Download albums and tracks for offline playback
-  - ✅ **Linux/Desktop**: Stored in project `downloads/` directory
-  - ✅ **iOS/Android**: Stored in app documents directory (persists across updates, **airplane mode compatible**)
-  - ✅ **Offline-First Boot**: App starts in offline mode automatically when no network is available
-  - ✅ Automatic offline playback when file exists (no internet required)
-  - ✅ Always downloads original format (FLAC, MP3, M4A auto-detected from server)
-  - ✅ **File verification**: Checks files exist on startup, removes broken references
-  - ✅ **Better error handling**: Shows clear messages for missing downloads
-  - ✅ **iOS CarPlay supports offline downloads** - browse and play in car without internet
-  - ✅ Download progress tracking and cancellation
-  - ✅ Batch album downloads
-
 ## 📸 Screenshots
 
 ### Linux
@@ -783,155 +609,24 @@ Nautune includes **full CarPlay integration** for iOS powered by the `flutter_ca
 - **Offline Downloads**: iOS stores downloads in app documents directory - accessible even offline
 - **Lock Screen Controls**: Album artwork, play/pause, skip buttons via audio_service plugin
 
-#### 🧪 Testing CarPlay
-CarPlay requires one of the following:
-- **Physical Device**: iPhone with CarPlay-enabled car or CarPlay-compatible head unit
-- **iOS Simulator**: Xcode → I/O → External Display → CarPlay window
-
-The CarPlay interface automatically appears when connected to a CarPlay system. Uses flutter_carplay's CPTabBarTemplate for tab navigation!
-
-#### 📱 iOS-Specific Features
-All iOS features are built and deployed via **Codemagic CI**:
-- ✅ Native AVFoundation audio engine (FLAC, AAC, all formats supported)
-- ✅ Lock screen media controls with album artwork
-- ✅ Background audio playback
-- ✅ CarPlay full library browsing and offline playback
-- ✅ Downloads stored in app documents (airplane mode compatible)
-- ✅ All Jellyfin features (favorites, playlists, playback reporting)
-
 ## 🗺️ Roadmap
 
-### ✅ Completed
-- [x] Jellyfin authentication and session persistence
-- [x] Library filtering and selection
-- [x] Album browsing with artwork
-- [x] **Artists view with discography**
-- [x] **Artist detail screen showing all albums**
-- [x] Playlists and recently added tracks
-- [x] **Album detail view with full track listings**
-- [x] **Multi-disc album support with disc separators**
-- [x] **Audio playback with native engine (direct streaming)**
-- [x] **Advanced playback state persistence** (track, position, queue, repeat, shuffle, volume, UI state)
-- [x] **Intelligent queue persistence** (pause saves queue, stop clears, app resume restores perfectly)
-- [x] **Shuffle mode** with queue randomization
-- [x] **Repeat modes** (off/all/one) with persistence
-- [x] **Gapless playback** with track preloading
-- [x] **Smart stream caching** - preloads 5 upcoming tracks for smooth playback
-- [x] **External media control stability** - crash-free USB-C/Bluetooth controls
-- [x] **Album card text fixes** - perfect rendering on iOS and all platforms
-- [x] **Native FLAC Playback**: Uses direct download URLs for original quality, platform decoders handle FLAC/AAC/etc. natively
-- [x] **Jellyfin Playback Reporting integration** for activity tracking
-- [x] **Individual track downloads** with progress tracking
-- [x] **Album batch downloads** with cancellation support
-- [x] **Smart download detection** (no duplicate downloads)
-- [x] **FLAC/Original format downloads** - auto-detects format from server
-- [x] **Download verification** - checks files on startup
-- [x] **Orphaned reference cleanup** - removes missing downloads automatically
-- [x] **Better playback error handling** - clear messages for unavailable files
-- [x] **Recent tab with toggle** between recently played and recently added
-- [x] **iOS CarPlay** powered by flutter_carplay plugin with full library browsing (albums, artists, playlists, favorites, downloads) and **offline support**
-- [x] **Home Tab with 6 horizontal shelves**: Continue Listening, Recently Played, Recently Added, Most Played Albums, Most Played Tracks, and Longest Tracks (all playable with tap-to-play)
-- [x] **Waveform visualization** using Jellyfin's waveform API with per-track caching
-- [x] **Tabbed navigation (Albums/Artists/Search/Favorites/Recent/Playlists/Downloads)** - 7 tabs total
-- [x] **Settings screen** with transcoding options accessible from app title
-- [x] **Now playing bar with controls and real-time waveform**
-- [x] **Full-screen player** with auto-updating UI (play/pause state, progress bar synced)
-- [x] **Volume slider** wired directly to `audioPlayer.setVolume()` for instant gain control with persistent show/hide preference
-- [x] **Headphone interruption handling** via `audio_session` (pause/resume & noisy events)
-- [x] **Favorite button** in fullscreen player with offline queue support
-  - [x] Heart icon synced with Jellyfin API
-  - [x] Offline queue for favorite actions
-  - [x] Optimistic UI updates (immediate feedback)
-  - [x] Automatic sync when connection returns
-- [x] **Full playlist management with Jellyfin integration and offline support**
-  - [x] Create playlists on Jellyfin server
-  - [x] Rename/edit playlists
-  - [x] Delete playlists with confirmation
-  - [x] Add albums to playlists (long-press on album cards)
-  - [x] Add tracks to playlists (menu button on tracks)
-  - [x] Playlist detail screen with track list
-  - [x] Remove tracks from playlists
-  - [x] All changes sync to server instantly
-  - [x] **Global playlist loading** - shows all playlists regardless of library
-  - [x] **Offline queue system** - operations queued when offline
-  - [x] **Local playlist cache** for offline viewing
-  - [x] **Automatic background sync** when connection returns
-  - [x] **Auto-refresh** - playlist track counts update immediately
-- [x] **Click tracks to play from any album**
-- [x] **Click artists to see their discography**
-- [x] **Back buttons on all detail screens**
-- [x] **Responsive layout** (adapts between mobile and desktop)
-- [x] **iOS lock screen controls** with album artwork and full playback control
-- [x] **Offline album artwork** - artwork automatically downloaded with tracks and displayed in airplane mode
-- [x] **Offline search** - search downloaded content without internet connection
-- [x] **Fixed offline mode toggle** - wave icon tap now works correctly
-- [x] **Offline album detail navigation** - tapping albums in offline mode opens detail instead of immediate playback
-- [x] **🛫 Offline-first boot** - app gracefully handles no network at startup and boots directly into offline mode with downloaded content
-- [x] **📄 Pagination** - albums and artists load 50 at a time with infinite scroll for smooth performance on large libraries
-- [x] **🎯 Library selection filter** - only music libraries shown (no playlists, audiobooks, or videos)
-- [x] **🎵 Smart Crossfade (Level 2)** - album-aware audio transitions
-  - [x] Album-aware logic (no crossfade within same album)
-  - [x] Exponential fade curves (natural sound)
-  - [x] Settings integration with simple toggle
-  - [x] Works with both streaming and offline
-  - [x] Persistent preference
+### ✅ Completed (v3.0.0)
+- [x] **Parallel Downloads** (1-10 concurrent slots)
+- [x] **Storage Management UI** with per-album/artist breakdown
+- [x] **Storage Quotas** and Auto-Cleanup logic
+- [x] **WiFi-Only Download** enforcement
+- [x] **Download Progress Notifications** (Android/Linux/iOS)
+- [x] **Listen Time Tracking** & Local Stats Persistence
+- [x] **Quick Download Presets** (Favorites/Top Played/Recent)
+- [x] **Sync Status Indicator** in App Bar
 
-### 🚧 In Progress / Planned
-- [ ] **AirPlay Support** (iOS/macOS) - Stream to HomePod, Apple TV, and AirPlay speakers
-  - AVRoutePickerView integration for native AirPlay picker
-  - System audio routing for external playback
-  - Control surface in player UI
-  - Platform fallback for non-Apple devices
-- [ ] **Equalizer and audio settings** - Fine-tune audio output with presets and custom EQ
-- [x] **Sorting options** - Sort albums/artists by name, date added, year, or play count ✅ v2.4.0
-- [ ] **Cross-platform stability** - Enhanced Windows, macOS, and Android support
-- [ ] **Smart Downloads** - Auto-download favorites and keep last 50 played songs offline
-- [x] **Infinite Radio Mode** - Endless playback that auto-generates next track when queue is low ✅ v2.4.0
-
-### Phase 1: Navigation Overhaul (The Skeleton)
-**Goal**: Make Nautune feel native on every platform
-
-**Desktop (Linux/Windows/macOS)**:
-- [ ] **Navigation Rail** - Replace BottomNavigationBar with persistent sidebar when screen width > 600
-  - Gives "Pro app" feel like Spotify/Roon
-  - Better use of widescreen real estate
-- [ ] **Mini Player Mode** - Picture-in-picture always-on-top window
-- [x] **System Tray Icon** - Background playback control ✅ v2.4.0
-- [ ] **Command Palette** - `/` key opens VS Code-style command search
-- [x] **MPRIS Integration** - Media keys and notification center controls (already implemented!)
-- [x] **Keyboard shortcuts** - Space, arrows, N/P/R/L (completed!)
-
-**Mobile (iOS/Android)**:
-- [ ] **Haptic Feedback** - Vibrations on Play/Next/Seek for tactile response
-- [x] **CarPlay** - Full library browsing and offline playback (completed!)
-- [ ] **AirPlay** - HomePod and Apple TV integration for iOS/macOS
-
-### Phase 2: The Dashboard (The Face)
-**Goal**: Transform the Home screen into a discovery engine
-
-- [ ] **Hero Header** - High-res artist background with "Jump Back In" button
-- [ ] **Time-of-Day Greeting** - "Good Evening, [User]" with contextual playlist
-- [ ] **Smart Shelves** (Netflix-style):
-  - "Rediscover" - Albums you loved 3 months ago but haven't played recently
-  - "On Deck" - Resume halfway-through playlists/albums
-  - "Offline Mix" - Highlight 100% downloaded content for airplane mode
-- [ ] **Dynamic Colors** - Extract theme from Hero album art using `ColorScheme.fromImageProvider()`
-- [ ] **Animated Cards** - Hover effects with scale/preview on desktop
-
-### Phase 3: Deep Integration (The Muscle)
-**Goal**: Polish and power-user features
-
-- [x] **ReplayGain** - Automatic volume normalization (completed!)
-- [x] **Dynamic Album Art Gradients** - Fullscreen player extracts colors from album art for immersive gradient backgrounds (completed!)
-- [ ] **Smart Downloads** - "Auto-download favorites" and "Keep last 50 played songs offline"
-- [x] **Lyrics Support** - Full synced UI with auto-scroll and tap-to-seek (completed!)
-- [x] **Smart Playlists / Instant Mix** - 50-track mixes from any track/album/artist with one-tap save as playlist (completed!)
-- [x] **Infinite Radio Mode** - Endless playback that auto-generates next track when queue is low ✅ v2.4.0
-- [ ] **Instant Mix Enhancement** - Better integration with Jellyfin's `/InstantMix` endpoint
-
-## 🐛 Known Issues
-
-- CarPlay testing requires physical device or iOS Simulator with CarPlay window
+### 🚧 Planned
+- [ ] **AirPlay 2 Support** for multi-room audio on iOS/macOS.
+- [ ] **Smart Auto-Downloads**: Option to automatically download new favorites.
+- [ ] **Desktop Mini-Player**: Ultra-compact PIP mode for desktop users.
+- [ ] **Advanced Equalizer**: 10-band EQ with per-genre presets.
+- [ ] **Shared Listening**: Sync playback with other Nautune users.
 
 ## 📝 Development Guidelines
 

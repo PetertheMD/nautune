@@ -11,6 +11,7 @@ import 'providers/connectivity_provider.dart';
 import 'providers/demo_mode_provider.dart';
 import 'providers/library_data_provider.dart';
 import 'providers/session_provider.dart';
+import 'providers/sync_status_provider.dart';
 import 'providers/ui_state_provider.dart';
 import 'screens/library_screen.dart';
 import 'screens/login_screen.dart';
@@ -20,6 +21,7 @@ import 'services/bootstrap_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/download_service.dart';
 import 'services/local_cache_service.dart';
+import 'services/notification_service.dart';
 import 'services/playback_state_store.dart';
 import 'theme/nautune_theme.dart';
 
@@ -36,6 +38,8 @@ Future<void> main() async {
   );
   final playbackStateStore = PlaybackStateStore();
   final sessionStore = JellyfinSessionStore();
+  final notificationService = NotificationService();
+  await notificationService.initialize();
 
   // Initialize providers first
   final sessionProvider = SessionProvider(
@@ -58,12 +62,17 @@ Future<void> main() async {
   );
 
   // Create download service standalone (needed by both appState and demoModeProvider)
-  final downloadService = DownloadService(jellyfinService: jellyfinService);
+  final downloadService = DownloadService(
+    jellyfinService: jellyfinService,
+    notificationService: notificationService,
+  );
 
   final demoModeProvider = DemoModeProvider(
     sessionProvider: sessionProvider,
     downloadService: downloadService,
   );
+
+  final syncStatusProvider = SyncStatusProvider();
 
   // Initialize legacy app state with demo mode provider
   final appState = NautuneAppState(
@@ -97,6 +106,7 @@ Future<void> main() async {
       uiStateProvider: uiStateProvider,
       libraryDataProvider: libraryDataProvider,
       demoModeProvider: demoModeProvider,
+      syncStatusProvider: syncStatusProvider,
     ),
   );
 }
@@ -110,6 +120,7 @@ class NautuneApp extends StatefulWidget {
     required this.uiStateProvider,
     required this.libraryDataProvider,
     required this.demoModeProvider,
+    required this.syncStatusProvider,
   });
 
   final NautuneAppState appState;
@@ -118,6 +129,7 @@ class NautuneApp extends StatefulWidget {
   final UIStateProvider uiStateProvider;
   final LibraryDataProvider libraryDataProvider;
   final DemoModeProvider demoModeProvider;
+  final SyncStatusProvider syncStatusProvider;
 
   @override
   State<NautuneApp> createState() => _NautuneAppState();
@@ -232,6 +244,7 @@ class _NautuneAppState extends State<NautuneApp> with WidgetsBindingObserver {
         ChangeNotifierProvider.value(value: widget.uiStateProvider),
         ChangeNotifierProvider.value(value: widget.libraryDataProvider),
         ChangeNotifierProvider.value(value: widget.demoModeProvider),
+        ChangeNotifierProvider.value(value: widget.syncStatusProvider),
 
         // Legacy app state (will be phased out)
         ChangeNotifierProvider.value(value: widget.appState),

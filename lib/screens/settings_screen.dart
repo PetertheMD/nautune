@@ -6,6 +6,7 @@ import '../app_state.dart';
 import '../providers/session_provider.dart';
 import '../providers/ui_state_provider.dart';
 import '../services/audio_cache_service.dart';
+import '../services/download_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -230,6 +231,150 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
+              'Downloads',
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ListenableBuilder(
+            listenable: appState.downloadService,
+            builder: (context, _) {
+              final downloadService = appState.downloadService;
+              return Column(
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.download, color: theme.colorScheme.primary),
+                    title: const Text('Concurrent Downloads'),
+                    subtitle: Text('${downloadService.maxConcurrentDownloads} simultaneous downloads'),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        const Text('1'),
+                        Expanded(
+                          child: Slider(
+                            value: downloadService.maxConcurrentDownloads.toDouble(),
+                            min: 1,
+                            max: 10,
+                            divisions: 9,
+                            label: '${downloadService.maxConcurrentDownloads}',
+                            onChanged: (value) {
+                              final newValue = value.round();
+                              downloadService.setMaxConcurrentDownloads(newValue);
+                              uiStateProvider.setMaxConcurrentDownloads(newValue);
+                            },
+                          ),
+                        ),
+                        const Text('10'),
+                      ],
+                    ),
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.wifi, color: theme.colorScheme.primary),
+                    title: const Text('WiFi-Only Downloads'),
+                    subtitle: const Text('Only download when connected to WiFi'),
+                    trailing: Switch(
+                      value: downloadService.wifiOnlyDownloads,
+                      onChanged: (value) {
+                        downloadService.setWifiOnlyDownloads(value);
+                        uiStateProvider.setWifiOnlyDownloads(value);
+                      },
+                    ),
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.storage, color: theme.colorScheme.primary),
+                    title: const Text('Storage Limit'),
+                    subtitle: Text(
+                      downloadService.storageLimitMB == 0
+                          ? 'Unlimited'
+                          : downloadService.storageLimitMB >= 1024
+                              ? '${(downloadService.storageLimitMB / 1024).toStringAsFixed(1)} GB'
+                              : '${downloadService.storageLimitMB} MB'
+                    ),
+                    trailing: SizedBox(
+                      width: 150,
+                      child: _StorageLimitSlider(
+                        currentMB: downloadService.storageLimitMB,
+                        onChanged: (mb) {
+                          downloadService.setStorageLimitMB(mb);
+                          uiStateProvider.setStorageLimitMB(mb);
+                        },
+                      ),
+                    ),
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.auto_delete, color: theme.colorScheme.primary),
+                    title: const Text('Auto-Cleanup'),
+                    subtitle: Text(
+                      downloadService.autoCleanupEnabled
+                          ? 'Remove downloads older than ${downloadService.autoCleanupDays} days'
+                          : 'Keep all downloads'
+                    ),
+                    trailing: Switch(
+                      value: downloadService.autoCleanupEnabled,
+                      onChanged: (value) {
+                        downloadService.setAutoCleanup(enabled: value);
+                        uiStateProvider.setAutoCleanup(enabled: value);
+                      },
+                    ),
+                  ),
+                  if (downloadService.autoCleanupEnabled)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          const Text('7d'),
+                          Expanded(
+                            child: Slider(
+                              value: downloadService.autoCleanupDays.toDouble(),
+                              min: 7,
+                              max: 90,
+                              divisions: 11,
+                              label: '${downloadService.autoCleanupDays} days',
+                              onChanged: (value) {
+                                final days = value.round();
+                                downloadService.setAutoCleanup(days: days);
+                                uiStateProvider.setAutoCleanup(days: days);
+                              },
+                            ),
+                          ),
+                          const Text('90d'),
+                        ],
+                      ),
+                    ),
+                  ListTile(
+                    leading: Icon(Icons.folder_open, color: theme.colorScheme.primary),
+                    title: const Text('Manage Storage'),
+                    subtitle: FutureBuilder<int>(
+                      future: downloadService.getTotalDownloadSize(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          return Text('${downloadService.completedCount} tracks using ${_formatBytes(snapshot.data!)}');
+                        }
+                        return const Text('Calculating...');
+                      },
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const _StorageManagementScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
               'About',
               style: theme.textTheme.titleMedium?.copyWith(
                 color: theme.colorScheme.primary,
@@ -270,6 +415,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
+String _formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+}
+
 class _CacheTtlSlider extends StatelessWidget {
   final int currentMinutes;
   final ValueChanged<int> onChanged;
@@ -305,6 +457,376 @@ class _CacheTtlSlider extends StatelessWidget {
       onChanged: (value) {
         onChanged(_presets[value.round()]);
       },
+    );
+  }
+}
+
+class _StorageLimitSlider extends StatelessWidget {
+  final int currentMB;
+  final ValueChanged<int> onChanged;
+
+  const _StorageLimitSlider({
+    required this.currentMB,
+    required this.onChanged,
+  });
+
+  // Presets: 0 (unlimited), 500MB, 1GB, 2GB, 5GB, 10GB
+  static const List<int> _presets = [0, 512, 1024, 2048, 5120, 10240];
+
+  int _getClosestIndex(int mb) {
+    int closestIndex = 0;
+    int minDiff = (mb - _presets[0]).abs();
+    for (int i = 1; i < _presets.length; i++) {
+      int diff = (mb - _presets[i]).abs();
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestIndex = i;
+      }
+    }
+    return closestIndex;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final index = _getClosestIndex(currentMB);
+    return Slider(
+      value: index.toDouble(),
+      min: 0,
+      max: (_presets.length - 1).toDouble(),
+      divisions: _presets.length - 1,
+      onChanged: (value) {
+        onChanged(_presets[value.round()]);
+      },
+    );
+  }
+}
+
+class _StorageManagementScreen extends StatefulWidget {
+  const _StorageManagementScreen();
+
+  @override
+  State<_StorageManagementScreen> createState() => _StorageManagementScreenState();
+}
+
+class _StorageManagementScreenState extends State<_StorageManagementScreen> {
+  bool _showByAlbum = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final appState = Provider.of<NautuneAppState>(context);
+    final downloadService = appState.downloadService;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Storage Management'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            tooltip: 'Clear All Downloads',
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Clear All Downloads?'),
+                  content: const Text('This will permanently delete all downloaded tracks. This action cannot be undone.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Delete All'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await downloadService.clearAllDownloads();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('All downloads cleared')),
+                  );
+                }
+              }
+            },
+          ),
+        ],
+      ),
+      body: ListenableBuilder(
+        listenable: downloadService,
+        builder: (context, _) {
+          return FutureBuilder(
+            future: downloadService.getStorageStats(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final stats = snapshot.data!;
+
+              return Column(
+                children: [
+                  // Storage summary card
+                  Card(
+                    margin: const EdgeInsets.all(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _StatItem(
+                                icon: Icons.storage,
+                                label: 'Total Size',
+                                value: stats.formattedTotal,
+                              ),
+                              _StatItem(
+                                icon: Icons.music_note,
+                                label: 'Tracks',
+                                value: '${stats.trackCount}',
+                              ),
+                              _StatItem(
+                                icon: Icons.album,
+                                label: 'Albums',
+                                value: '${stats.byAlbum.length}',
+                              ),
+                            ],
+                          ),
+                          if (downloadService.storageLimitMB > 0) ...[
+                            const SizedBox(height: 16),
+                            LinearProgressIndicator(
+                              value: stats.totalBytes / (downloadService.storageLimitMB * 1024 * 1024),
+                              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${_formatBytes(stats.totalBytes)} of ${_formatBytes(downloadService.storageLimitMB * 1024 * 1024)}',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Quick actions
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.tonalIcon(
+                            onPressed: () async {
+                              final deleted = await downloadService.cleanupByAge(const Duration(days: 30));
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Removed $deleted old downloads')),
+                                );
+                                setState(() {});
+                              }
+                            },
+                            icon: const Icon(Icons.history),
+                            label: const Text('Clean Old'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: FilledButton.tonalIcon(
+                            onPressed: () async {
+                              final deleted = await downloadService.cleanupToFreeSpace(500);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Removed $deleted downloads to free 500MB')),
+                                );
+                                setState(() {});
+                              }
+                            },
+                            icon: const Icon(Icons.cleaning_services),
+                            label: const Text('Free 500MB'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Toggle between album/artist view
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: true, label: Text('By Album'), icon: Icon(Icons.album)),
+                        ButtonSegment(value: false, label: Text('By Artist'), icon: Icon(Icons.person)),
+                      ],
+                      selected: {_showByAlbum},
+                      onSelectionChanged: (selection) {
+                        setState(() => _showByAlbum = selection.first);
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // List of albums/artists with storage usage
+                  Expanded(
+                    child: _showByAlbum
+                        ? _buildAlbumList(stats, downloadService, theme)
+                        : _buildArtistList(stats, downloadService, theme),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildAlbumList(StorageStats stats, DownloadService downloadService, ThemeData theme) {
+    final sortedAlbums = stats.byAlbum.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    if (sortedAlbums.isEmpty) {
+      return const Center(child: Text('No downloads'));
+    }
+
+    return ListView.builder(
+      itemCount: sortedAlbums.length,
+      itemBuilder: (context, index) {
+        final entry = sortedAlbums[index];
+        final albumId = entry.key;
+        final bytes = entry.value;
+        final albumName = stats.albumNames[albumId] ?? 'Unknown Album';
+        final trackCount = downloadService.trackIdsForAlbum(albumId).length;
+
+        return ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.album)),
+          title: Text(albumName, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text('$trackCount tracks'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_formatBytes(bytes), style: theme.textTheme.bodySmall),
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Delete Album?'),
+                      content: Text('Remove all $trackCount downloaded tracks from "$albumName"?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await downloadService.cleanupAlbum(albumId);
+                    if (context.mounted) {
+                      setState(() {});
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildArtistList(StorageStats stats, DownloadService downloadService, ThemeData theme) {
+    final sortedArtists = stats.byArtist.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    if (sortedArtists.isEmpty) {
+      return const Center(child: Text('No downloads'));
+    }
+
+    return ListView.builder(
+      itemCount: sortedArtists.length,
+      itemBuilder: (context, index) {
+        final entry = sortedArtists[index];
+        final artistName = entry.key;
+        final bytes = entry.value;
+        final trackCount = downloadService.trackIdsForArtist(artistName).length;
+
+        return ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.person)),
+          title: Text(artistName, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text('$trackCount tracks'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_formatBytes(bytes), style: theme.textTheme.bodySmall),
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Delete Artist?'),
+                      content: Text('Remove all $trackCount downloaded tracks from "$artistName"?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await downloadService.cleanupArtist(artistName);
+                    if (context.mounted) {
+                      setState(() {});
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _StatItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        Icon(icon, color: theme.colorScheme.primary),
+        const SizedBox(height: 4),
+        Text(value, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        Text(label, style: theme.textTheme.bodySmall),
+      ],
     );
   }
 }

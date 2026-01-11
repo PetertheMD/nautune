@@ -202,6 +202,20 @@ class LocalCacheService {
     }
   }
 
+  Future<void> savePlayStats(
+    String sessionKey,
+    Map<String, dynamic> statsJson,
+  ) {
+    return _writeMap(
+      _k('play_stats', sessionKey),
+      statsJson,
+    );
+  }
+
+  Future<Map<String, dynamic>?> readPlayStats(String sessionKey) async {
+    return _readMap(_k('play_stats', sessionKey));
+  }
+
   String _k(String namespace, String sessionKey, [String? libraryId]) {
     if (libraryId == null) {
       return '$namespace|$sessionKey';
@@ -226,6 +240,27 @@ class LocalCacheService {
           .whereType<Map>()
           .map((entry) => Map<String, dynamic>.from(entry))
           .toList();
+    }
+    return null;
+  }
+
+  Future<void> _writeMap(
+    String key,
+    Map<String, dynamic> payload,
+  ) async {
+    await _box.put(key, {
+      _updatedAtKey: DateTime.now().millisecondsSinceEpoch,
+      _payloadKey: payload,
+    });
+  }
+
+  Map<String, dynamic>? _readMap(String key) {
+    final raw = _box.get(key);
+    if (raw is Map) {
+      final payload = raw[_payloadKey];
+      if (payload is Map) {
+        return Map<String, dynamic>.from(payload);
+      }
     }
     return null;
   }

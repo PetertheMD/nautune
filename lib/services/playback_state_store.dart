@@ -125,6 +125,11 @@ class PlaybackStateStore {
     bool? infiniteRadioEnabled,
     int? cacheTtlMinutes,
     bool? gaplessPlaybackEnabled,
+    int? maxConcurrentDownloads,
+    bool? wifiOnlyDownloads,
+    int? storageLimitMB,
+    bool? autoCleanupEnabled,
+    int? autoCleanupDays,
   }) async {
     await update((state) {
       final mergedOffsets = Map<String, double>.from(state.scrollOffsets);
@@ -140,6 +145,11 @@ class PlaybackStateStore {
         infiniteRadioEnabled: infiniteRadioEnabled ?? state.infiniteRadioEnabled,
         cacheTtlMinutes: cacheTtlMinutes ?? state.cacheTtlMinutes,
         gaplessPlaybackEnabled: gaplessPlaybackEnabled ?? state.gaplessPlaybackEnabled,
+        maxConcurrentDownloads: maxConcurrentDownloads ?? state.maxConcurrentDownloads,
+        wifiOnlyDownloads: wifiOnlyDownloads ?? state.wifiOnlyDownloads,
+        storageLimitMB: storageLimitMB ?? state.storageLimitMB,
+        autoCleanupEnabled: autoCleanupEnabled ?? state.autoCleanupEnabled,
+        autoCleanupDays: autoCleanupDays ?? state.autoCleanupDays,
       );
     });
   }
