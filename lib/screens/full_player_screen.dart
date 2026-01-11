@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui' as ui show Image, ImageFilter;
 
 import 'package:audio_video_progress_bar/audio_video_progress_bar.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
@@ -16,6 +18,64 @@ import '../widgets/add_to_playlist_dialog.dart';
 import '../widgets/jellyfin_image.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
+
+/// Top-level function for compute() - extracts vibrant colors from image pixels in isolate
+Future<List<int>> _extractColorsInIsolate(Uint32List pixels) async {
+  // Run the quantization to find the dominant color clusters
+  final result = await QuantizerCelebi().quantize(pixels, 128);
+  final colorToCount = result.colorToCount;
+
+  // RAW VIBRANCY SCORING
+  // Score = Population * (Chroma^2)
+  final sortedEntries = colorToCount.entries.toList()
+    ..sort((a, b) {
+      final hctA = Hct.fromInt(a.key);
+      final hctB = Hct.fromInt(b.key);
+      final scoreA = a.value * (hctA.chroma * hctA.chroma);
+      final scoreB = b.value * (hctB.chroma * hctB.chroma);
+      return scoreB.compareTo(scoreA);
+    });
+
+  final selectedColors = <int>[];
+
+  for (final entry in sortedEntries) {
+    if (selectedColors.length >= 4) break;
+
+    final colorInt = entry.key;
+    final hct = Hct.fromInt(colorInt);
+
+    // Skip absolute greys
+    if (hct.chroma < 5) continue;
+
+    // Distinctness check
+    bool isDistinct = true;
+    for (final existing in selectedColors) {
+      final existingHct = Hct.fromInt(existing);
+      final hueDiff = (hct.hue - existingHct.hue).abs();
+      final normalizedHueDiff = hueDiff > 180 ? 360 - hueDiff : hueDiff;
+      if (normalizedHueDiff < 15) {
+        isDistinct = false;
+        break;
+      }
+    }
+
+    if (isDistinct) {
+      // Add with full alpha
+      selectedColors.add(colorInt | 0xFF000000);
+    }
+  }
+
+  // Fallback if we found nothing (e.g. B&W image)
+  if (selectedColors.isEmpty) {
+    final populationSorted = colorToCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    for (final entry in populationSorted.take(4)) {
+      selectedColors.add(entry.key | 0xFF000000);
+    }
+  }
+
+  return selectedColors;
+}
 
 class FullPlayerScreen extends StatefulWidget {
   const FullPlayerScreen({super.key});
@@ -154,79 +214,23 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> with SingleTickerPr
       
       final ByteData? byteData = await image.toByteData();
       if (byteData == null) return;
-      
-      final pixels = byteData.buffer.asUint32List();
-      
-      // Run the quantization to find the dominant color clusters
-      final result = await QuantizerCelebi().quantize(pixels, 128);
-      final colorToCount = result.colorToCount;
-      
-      // RAW VIBRANCY SCORING
-      // We ignore Material "suitability" and just want the colors that define the image.
-      // Score = Population * (Chroma^2). 
-      // This heavily favors saturated colors even if they are less frequent than dull backgrounds.
-      final sortedEntries = colorToCount.entries.toList()
-        ..sort((a, b) {
-          final hctA = Hct.fromInt(a.key);
-          final hctB = Hct.fromInt(b.key);
-          
-          // Chroma is 0..~120. Population is int.
-          // Squaring chroma gives massive weight to vibrancy.
-          final scoreA = a.value * (hctA.chroma * hctA.chroma);
-          final scoreB = b.value * (hctB.chroma * hctB.chroma);
-          
-          return scoreB.compareTo(scoreA);
-        });
-      
-      final selectedColors = <Color>[];
-      
-      for (final entry in sortedEntries) {
-        if (selectedColors.length >= 4) break;
-        
-        final colorInt = entry.key;
-        final hct = Hct.fromInt(colorInt);
-        
-        // Only filter pure grime/noise
-        // Keep dark colors if they are vibrant (deep purple/blue)
-        // Keep light colors if they are vibrant (neon yellow/cyan)
-        if (hct.chroma < 5) continue; // Skip absolute greys (unless image is B&W, handled by fallback)
 
-        // Distinctness check
-        bool isDistinct = true;
-        for (final existing in selectedColors) {
-          // ignore: deprecated_member_use
-          final existingHct = Hct.fromInt(existing.value);
-          final hueDiff = (hct.hue - existingHct.hue).abs();
-          final normalizedHueDiff = hueDiff > 180 ? 360 - hueDiff : hueDiff;
-          
-          // If hues are very close, skip (unless one is much brighter/darker?)
-          // Let's just enforce hue diversity.
-          if (normalizedHueDiff < 15) {
-            isDistinct = false;
-            break;
-          }
-        }
-        
-        if (isDistinct) {
-          selectedColors.add(Color(colorInt).withValues(alpha: 1.0));
-        }
-      }
-      
-      // If we found nothing (e.g. B&W image), fall back to just population sort
-      if (selectedColors.isEmpty) {
-        final populationSorted = colorToCount.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value));
-        for (final entry in populationSorted.take(4)) {
-           selectedColors.add(Color(entry.key).withValues(alpha: 1.0));
-        }
-      }
-      
-      // Fallback
+      final pixels = byteData.buffer.asUint32List();
+
+      // Process colors in isolate to avoid UI jank
+      final colorInts = await compute(_extractColorsInIsolate, pixels);
+
+      // Convert int colors back to Color objects
+      List<Color> selectedColors = colorInts.map((c) => Color(c)).toList();
+
+      // Fallback if still empty
       if (selectedColors.isEmpty) {
         if (!mounted) return;
         final theme = Theme.of(context);
-        selectedColors.add(theme.colorScheme.primaryContainer);
-        selectedColors.add(theme.colorScheme.surface);
+        selectedColors = [
+          theme.colorScheme.primaryContainer,
+          theme.colorScheme.surface,
+        ];
       }
 
       if (mounted) {

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'jellyfin_session.dart';
@@ -8,13 +9,82 @@ import 'jellyfin_session.dart';
 class JellyfinSessionStore {
   static const _boxName = 'nautune_session';
   static const _sessionKey = 'session';
+  static const _secureStorageKey = 'hive_encryption_key';
+  
+  final _secureStorage = const FlutterSecureStorage();
 
   Future<Box> _box() async {
     try {
       if (!Hive.isBoxOpen(_boxName)) {
         debugPrint('📦 JellyfinSessionStore: Opening Hive box: $_boxName');
-        final box = await Hive.openBox(_boxName);
-        debugPrint('✅ JellyfinSessionStore: Box opened successfully');
+        
+        // Check for existing encryption key
+        String? keyString = await _secureStorage.read(key: _secureStorageKey);
+        Uint8List encryptionKey;
+        
+        if (keyString == null) {
+          debugPrint('🔐 JellyfinSessionStore: Generating new encryption key');
+          // Check for unencrypted data to migrate
+          if (await Hive.boxExists(_boxName)) {
+            debugPrint('📦 JellyfinSessionStore: Found existing box, attempting migration');
+            dynamic oldData;
+            bool migrationSucceeded = false;
+
+            try {
+              final oldBox = await Hive.openBox(_boxName);
+              oldData = oldBox.get(_sessionKey);
+              await oldBox.close();
+              await Hive.deleteBoxFromDisk(_boxName);
+              migrationSucceeded = true;
+            } catch (e) {
+              debugPrint('⚠️ JellyfinSessionStore: Failed to read old data: $e');
+              // Try to delete corrupt box and start fresh
+              try {
+                await Hive.deleteBoxFromDisk(_boxName);
+                debugPrint('🗑️ JellyfinSessionStore: Deleted corrupt box');
+              } catch (_) {
+                // Ignore deletion errors
+              }
+            }
+
+            // Generate and save new key
+            final key = Hive.generateSecureKey();
+            await _secureStorage.write(
+              key: _secureStorageKey,
+              value: base64UrlEncode(key),
+            );
+            encryptionKey = Uint8List.fromList(key);
+
+            // Re-open with encryption and restore data if migration succeeded
+            final newBox = await Hive.openBox(
+              _boxName,
+              encryptionCipher: HiveAesCipher(encryptionKey),
+            );
+            if (migrationSucceeded && oldData != null) {
+              await newBox.put(_sessionKey, oldData);
+              debugPrint('✅ JellyfinSessionStore: Migration completed successfully');
+            } else if (!migrationSucceeded) {
+              debugPrint('ℹ️ JellyfinSessionStore: Starting fresh after failed migration');
+            }
+            return newBox;
+          }
+          
+          // Generate new key
+          final key = Hive.generateSecureKey();
+          await _secureStorage.write(
+            key: _secureStorageKey, 
+            value: base64UrlEncode(key),
+          );
+          encryptionKey = Uint8List.fromList(key);
+        } else {
+          encryptionKey = base64Url.decode(keyString);
+        }
+
+        final box = await Hive.openBox(
+          _boxName,
+          encryptionCipher: HiveAesCipher(encryptionKey),
+        );
+        debugPrint('✅ JellyfinSessionStore: Encrypted box opened successfully');
         return box;
       }
       return Hive.box(_boxName);

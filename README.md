@@ -2,7 +2,18 @@
 
 Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter and delivers a beautiful deep-sea themed experience with smooth native audio playback and seamless Jellyfin integration.
 
-## 🚀 Latest Updates (v2.7.5)
+## 🚀 Latest Updates (v2.7.9)
+- **🔒 Security Hardening**:
+  - ✅ **Removed sensitive debug logging**: API error responses no longer log full body content that may contain user data
+  - ✅ **Android network security config**: Explicit network security policy with documented cleartext allowance for local Jellyfin servers
+  - ✅ **Improved URL validation**: Server URLs now validated for proper format (scheme, host) before use
+  - ✅ **Session migration robustness**: Encrypted storage migration now handles corrupt data gracefully instead of silently failing
+- **⚡ Performance Optimizations**:
+  - ✅ **Color extraction moved to isolate**: Album art gradient extraction now runs in background isolate, eliminating UI jank when switching tracks
+  - ✅ **Fixed memory leak**: System tray stream listeners now properly cancelled on dispose
+  - ✅ **Cached filtered favorites**: Offline favorites list no longer recomputed on every frame
+
+## 🚀 Previous Updates (v2.7.5)
 - **🎵 Advanced Playlist Management**:
   - ✅ **Drag-and-Drop Reordering**: Long-press and drag tracks to reorder them in any playlist
   - ✅ **Offline Playlist Sync**: Download entire playlists with a single tap for airplane-mode listening
@@ -406,9 +417,6 @@ Poseidon's cross-platform Jellyfin music player. Nautune is built with Flutter a
 - Deferred `NautuneAppState.initialize()` work and CarPlay setup to run after the first Flutter frame, preventing black-screen hangs caused by plugin initialization failures.
 - Hardened startup logging (`Nautune initialization started/finished`) to make it easier to diagnose device issues from Xcode or `flutter logs`.
 - CarPlay integrations now match Jellyfin data more accurately by tracking album artist IDs and forwarding precise playback positions to the Jellyfin server.
-
-fix any 
-
 
 ## 🧪 Review / Demo Mode
 

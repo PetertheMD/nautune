@@ -571,7 +571,7 @@ class JellyfinService {
     if (tag != null) {
       params['tag'] = tag;
     }
-    params['api_key'] = session.credentials.accessToken;
+    // params['api_key'] = session.credentials.accessToken; // REMOVED: Token should be sent via header
 
     final query = params.entries
         .map((entry) => '${Uri.encodeQueryComponent(entry.key)}=${Uri.encodeQueryComponent(entry.value)}')
@@ -590,8 +590,31 @@ class JellyfinService {
     };
   }
 
+  /// Validates and normalizes a server URL
+  /// Throws ArgumentError if the URL is invalid
   String _normalizeServerUrl(String rawUrl) {
     final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('Server URL cannot be empty');
+    }
+
+    // Validate URL format
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null) {
+      throw ArgumentError('Invalid URL format');
+    }
+
+    // Must have http or https scheme
+    if (!uri.hasScheme || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      throw ArgumentError('URL must start with http:// or https://');
+    }
+
+    // Must have a host
+    if (!uri.hasAuthority || uri.host.isEmpty) {
+      throw ArgumentError('URL must include a server address');
+    }
+
+    // Remove trailing slash if present
     if (trimmed.endsWith('/')) {
       return trimmed.substring(0, trimmed.length - 1);
     }

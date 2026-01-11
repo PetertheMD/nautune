@@ -724,9 +724,9 @@ class JellyfinClient {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       debugPrint('❌ Jellyfin API error: ${response.statusCode}');
-      debugPrint('❌ Response body: ${response.body}');
+      // Note: Response body not logged to avoid leaking sensitive data
       throw JellyfinRequestException(
-        'Request failed: ${response.statusCode} ${response.body}',
+        'Request failed with status ${response.statusCode}',
       );
     }
 

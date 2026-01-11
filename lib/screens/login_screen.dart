@@ -22,18 +22,23 @@ class _LoginScreenState extends State<LoginScreen> {
   late SessionProvider _sessionProvider;
   late DemoModeProvider _demoModeProvider;
 
+  // Demo mode credentials - these are intentional for the built-in demo feature
+  // Demo mode runs entirely offline with bundled sample content
+  static const _demoUsername = 'tester';
+  static const _demoPassword = 'testing';
+
   bool _looksLikeDemoRequest({String? serverValue}) {
     final server = serverValue ?? _serverController.text;
     return server.trim().isEmpty &&
-        _usernameController.text.trim().toLowerCase() == 'tester' &&
-        _passwordController.text == 'testing';
+        _usernameController.text.trim().toLowerCase() == _demoUsername &&
+        _passwordController.text == _demoPassword;
   }
 
   void _fillDemoCredentials() {
     setState(() {
       _serverController.clear();
-      _usernameController.text = 'tester';
-      _passwordController.text = 'testing';
+      _usernameController.text = _demoUsername;
+      _passwordController.text = _demoPassword;
     });
   }
 

@@ -84,11 +84,11 @@ class NautuneAppState extends ChangeNotifier {
         try {
           _trayService = TrayService(audioService: _audioPlayerService);
           await _trayService?.initialize();
-          // Listen to track changes to update tray
-          _audioPlayerService.currentTrackStream.listen((track) {
+          // Listen to track changes to update tray (store subscriptions for cleanup)
+          _trayTrackSubscription = _audioPlayerService.currentTrackStream.listen((track) {
             _trayService?.updateCurrentTrack(track);
           });
-          _audioPlayerService.playingStream.listen((isPlaying) {
+          _trayPlayingSubscription = _audioPlayerService.playingStream.listen((isPlaying) {
             _trayService?.updatePlayingState(isPlaying);
           });
           debugPrint('✅ System tray service initialized');
@@ -121,6 +121,8 @@ class NautuneAppState extends ChangeNotifier {
   CarPlayService? _carPlayService;
   TrayService? _trayService;
   StreamSubscription<bool>? _connectivitySubscription;
+  StreamSubscription<JellyfinTrack?>? _trayTrackSubscription;
+  StreamSubscription<bool>? _trayPlayingSubscription;
   bool _connectivityMonitorInitialized = false;
   Map<String, double> _libraryScrollOffsets = {};
   int _restoredLibraryTabIndex = 0;
@@ -2143,6 +2145,8 @@ class NautuneAppState extends ChangeNotifier {
   @override
   void dispose() {
     _connectivitySubscription?.cancel();
+    _trayTrackSubscription?.cancel();
+    _trayPlayingSubscription?.cancel();
     _demoModeProvider?.removeListener(_onDemoModeChanged);
     _sessionProvider?.removeListener(_onSessionChanged);
     super.dispose();

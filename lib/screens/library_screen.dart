@@ -46,6 +46,11 @@ class _LibraryScreenState extends State<LibraryScreen>
   bool? _previousNetworkAvailable;
   bool _hasInitialized = false;
 
+  // Cached filtered favorites to avoid recomputing on every build
+  List<JellyfinTrack>? _cachedFilteredFavorites;
+  List<JellyfinTrack>? _lastFavoriteTracks;
+  bool? _lastOfflineModeForFavorites;
+
   @override
   void initState() {
     super.initState();
@@ -121,6 +126,33 @@ class _LibraryScreenState extends State<LibraryScreen>
     }
   }
 
+  /// Returns filtered favorites with caching to avoid recomputing on every build
+  List<JellyfinTrack>? _getFilteredFavorites(NautuneAppState appState) {
+    final favoriteTracks = appState.favoriteTracks;
+    final isOffline = appState.isOfflineMode;
+
+    // Check if we can use cached result
+    if (identical(_lastFavoriteTracks, favoriteTracks) &&
+        _lastOfflineModeForFavorites == isOffline &&
+        _cachedFilteredFavorites != null) {
+      return _cachedFilteredFavorites;
+    }
+
+    // Update cache
+    _lastFavoriteTracks = favoriteTracks;
+    _lastOfflineModeForFavorites = isOffline;
+
+    if (isOffline && favoriteTracks != null) {
+      _cachedFilteredFavorites = favoriteTracks
+          .where((t) => appState.downloadService.isDownloaded(t.id))
+          .toList();
+    } else {
+      _cachedFilteredFavorites = favoriteTracks;
+    }
+
+    return _cachedFilteredFavorites;
+  }
+
   Future<void> _handleManualRefresh() async {
     final appState = _appState;
     if (appState == null) return;
@@ -178,12 +210,8 @@ class _LibraryScreenState extends State<LibraryScreen>
         final playlists = appState.playlists;
         final isLoadingPlaylists = appState.isLoadingPlaylists;
         final playlistsError = appState.playlistsError;
-        var favoriteTracks = appState.favoriteTracks;
-        if (appState.isOfflineMode && favoriteTracks != null) {
-          favoriteTracks = favoriteTracks.where((t) => 
-            appState.downloadService.isDownloaded(t.id)
-          ).toList();
-        }
+        // Use cached filtered favorites to avoid recomputing on every build
+        final favoriteTracks = _getFilteredFavorites(appState);
         final isLoadingFavorites = appState.isLoadingFavorites;
         final favoritesError = appState.favoritesError;
 
