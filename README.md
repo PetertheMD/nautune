@@ -463,49 +463,6 @@ Apple's Guideline 2.1 requires working reviewer access. Nautune includes an on-d
 <img src="screenshots/IMG_9052.jpg" width="300" alt="Nautune on iOS">
 
 
-## 🎨 Key Components
-
-### Now Playing Bar (`lib/widgets/now_playing_bar.dart`)
-- **Waveform Progress Strip**: Tinted Jellyfin waveform with a synthetic fallback when the server can't provide one
-- **Scrub Anywhere**: Drag the waveform or slider to seek instantly
-- **Mini Controls**: Play/Pause/Stop/Skip buttons always accessible
-- **Tap to Expand**: Opens the full-screen player
-
-### Library Screen (`lib/screens/library_screen.dart`)
-- **Albums Tab**: Grid view with infinite scroll support, album artwork
-- **Artists Tab**: Full artist browser with discography navigation
-- **Search Tab**: Search albums inside the selected library, displaying artist attribution and year
-- **Favorites Tab**: Recent and favorited tracks in a list
-- **Playlists Tab**: Your Jellyfin playlists with full management (create, edit, delete, add/remove tracks)
-- **Bottom Navigation**: Material `NavigationBar` mirrors the tab order for quick access on mobile and desktop
-
-### Playlist Detail Screen (`lib/screens/playlist_detail_screen.dart`)
-- **Track List**: View all tracks in a playlist with play functionality
-- **Remove Tracks**: Individual track removal with ❌ button
-- **Edit/Rename**: Toolbar button to rename playlist
-- **Delete**: Toolbar button to delete entire playlist
-- **Play Queue**: Play individual tracks or queue entire playlist
-
-### Audio Player Service (`lib/services/audio_player_service.dart`)
-- Manages playback lifecycle and queues
-- Prioritises direct-play URLs with adaptive fallback to Jellyfin transcoding
-- Auto-saves position every second and restores on launch
-- Configures native audio session for optimal performance
-
-### Playback State Persistence
-- **Complete Session Restoration**: Full playback state saved and restored
-  - ✅ Current track, position, queue, album context
-  - ✅ Repeat mode (off/all/one) and shuffle state
-  - ✅ Volume level and UI preferences (library tab, scroll positions)
-  - ✅ Show/hide volume bar preference
-- **Smart Restoration**: Automatically resumes from last position on app launch
-- **Intelligent Queue Handling**:
-  - ✅ **Pause saves queue**: Pausing preserves queue for next session
-  - ✅ **Stop clears queue**: Stop button intentionally clears everything (fresh start)
-  - ✅ **App resume**: Background/foreground restores playback exactly where you left off
-- **Real-time Saving**: Position saved every second for accurate resume
-- **Stored in Hive**: Persists across app restarts and force-closes via fast, local storage
-
 ## 🔧 Development
 
 ### Run in Debug Mode
@@ -578,17 +535,6 @@ flutter test
 
 Nautune includes **full CarPlay integration** for iOS powered by the `flutter_carplay` plugin:
 
-#### ✅ Features
-- **Tab Navigation**: Library, Favorites, Downloads tabs with car-friendly segmented controls
-- **Library Browsing**: Browse albums, artists, and playlists while driving
-- **Track Playback**: Play any track directly from CarPlay with full queue support
-- **Proper Queue Context**: Playing a track queues the entire album/playlist for continuous playback
-- **Offline Support**: Browse and play downloaded music in airplane mode (no internet required)
-- **Auto-Refresh**: Content updates automatically when library data changes or CarPlay connects
-- **Empty State Handling**: Clear messages when no content available (with offline-aware messaging)
-- **Connection State Tracking**: Properly detects and handles CarPlay connect/disconnect events
-- **Native Integration**: Uses flutter_carplay plugin for seamless iOS integration
-- **Clean UI**: Optimized for minimal distraction while driving
 
 #### 🔧 Implementation Details
 - **Flutter CarPlay Plugin**: `flutter_carplay: ^1.1.4` handles all CarPlay UI and interactions
@@ -604,20 +550,8 @@ Nautune includes **full CarPlay integration** for iOS powered by the `flutter_ca
 
 ## 🗺️ Roadmap
 
-### ✅ Completed (v3.0.0)
-- [x] **Parallel Downloads** (1-10 concurrent slots)
-- [x] **Storage Management UI** with per-album/artist breakdown
-- [x] **Storage Quotas** and Auto-Cleanup logic
-- [x] **WiFi-Only Download** enforcement
-- [x] **Download Progress Notifications** (Android/Linux/iOS)
-- [x] **Listen Time Tracking** & Local Stats Persistence
-- [x] **Quick Download Presets** (Favorites/Top Played/Recent)
-- [x] **Sync Status Indicator** in App Bar
 
 ### 🚧 Planned
-- [ ] **AirPlay 2 Support** for multi-room audio on iOS/macOS.
-- [ ] **Smart Auto-Downloads**: Option to automatically download new favorites.
-- [ ] **Desktop Mini-Player**: Ultra-compact PIP mode for desktop users.
 - [ ] **Advanced Equalizer**: 10-band EQ with per-genre presets.
 - [ ] **Shared Listening**: Sync playback with other Nautune users.
 
