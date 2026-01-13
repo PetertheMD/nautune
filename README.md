@@ -16,10 +16,6 @@
   - ✅ **Flutter 3.9+ Ready**: Transitioned to the latest transparency APIs (`withValues`) and removed deprecated code.
   - ✅ **Enhanced Reliability**: Safe shadowing of core services to prevent potential null-pointer crashes during background tasks.
 
-## 📁 Smarter File Organization (v3.4.0)
-- ✅ **Dedicated App Folder**: All app data now stored in `nautune/` subfolder (Linux/macOS/Windows) to keep your Documents directory clean.
-- ✅ **Automatic Migration**: Your existing library and settings are moved to the new location on first launch—zero configuration required.
-- ✅ **Refined Fullplayer**: Quality indicators (Direct/Transcode) moved below track info for better layout balance on small screens.
 
 ## ✨ Key Features
 - **Global Search**: Unified search across your entire library with instant results.
