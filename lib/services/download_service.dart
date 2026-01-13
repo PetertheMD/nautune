@@ -85,7 +85,7 @@ class DownloadService extends ChangeNotifier {
 
   Future<void> _initHive() async {
     if (!_hiveInitialized) {
-      await Hive.initFlutter();
+      await Hive.initFlutter('nautune');
       _hiveInitialized = true;
     }
     _box = await Hive.openBox<dynamic>(_boxName);
@@ -519,10 +519,10 @@ class DownloadService extends ChangeNotifier {
 
   Future<String> _getDownloadPath(JellyfinTrack track, {String? extension}) async {
     Directory downloadsDir;
-    
+
     if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
       downloadsDir = Directory(
-        '${Directory.current.path}${Platform.pathSeparator}downloads',
+        '${Directory.current.path}${Platform.pathSeparator}nautune${Platform.pathSeparator}downloads',
       );
     } else {
       // iOS/Android: MUST use app documents directory (sandbox requirement)
@@ -544,10 +544,10 @@ class DownloadService extends ChangeNotifier {
 
   Future<String> _getArtworkPath(String trackId) async {
     Directory downloadsDir;
-    
+
     if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
       downloadsDir = Directory(
-        '${Directory.current.path}${Platform.pathSeparator}downloads/artwork',
+        '${Directory.current.path}${Platform.pathSeparator}nautune${Platform.pathSeparator}downloads${Platform.pathSeparator}artwork',
       );
     } else {
       final dir = await getApplicationDocumentsDirectory();

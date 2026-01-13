@@ -24,7 +24,7 @@ class LocalCacheService {
   /// Ensures Hive is ready and returns a cache service instance.
   static Future<LocalCacheService> create() async {
     if (!_hiveInitialized) {
-      await Hive.initFlutter();
+      await Hive.initFlutter('nautune');
       _hiveInitialized = true;
     }
     final box = await Hive.openBox<dynamic>(_boxName);

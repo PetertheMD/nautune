@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -26,8 +27,76 @@ import 'services/notification_service.dart';
 import 'services/playback_state_store.dart';
 import 'theme/nautune_theme.dart';
 
+/// Migrates old Hive files from ~/Documents/ to ~/Documents/nautune/
+/// Only runs if files exist in old location and NOT in new location.
+Future<void> _migrateHiveFiles() async {
+  final docsDir = await getApplicationDocumentsDirectory();
+  final oldPath = docsDir.path;
+  final newPath = '${docsDir.path}${Platform.pathSeparator}nautune';
+  final newDir = Directory(newPath);
+
+  const hiveBoxNames = [
+    'nautune_session',
+    'nautune_playback',
+    'nautune_downloads',
+    'nautune_cache',
+    'nautune_playlists',
+    'nautune_sync_queue',
+    'nautune_search_history',
+  ];
+
+  // Check if any files already exist in the new location
+  if (await newDir.exists()) {
+    for (final boxName in hiveBoxNames) {
+      final newHiveFile = File('$newPath${Platform.pathSeparator}$boxName.hive');
+      if (await newHiveFile.exists()) {
+        // Files already in new location, no migration needed
+        return;
+      }
+    }
+  }
+
+  // Check if old files exist and need migration
+  final filesToMove = <File>[];
+  for (final boxName in hiveBoxNames) {
+    final oldHiveFile = File('$oldPath${Platform.pathSeparator}$boxName.hive');
+    final oldLockFile = File('$oldPath${Platform.pathSeparator}$boxName.lock');
+    if (await oldHiveFile.exists()) {
+      filesToMove.add(oldHiveFile);
+    }
+    if (await oldLockFile.exists()) {
+      filesToMove.add(oldLockFile);
+    }
+  }
+
+  // No old files to migrate
+  if (filesToMove.isEmpty) {
+    return;
+  }
+
+  // Create new directory and move files
+  if (!await newDir.exists()) {
+    await newDir.create(recursive: true);
+  }
+
+  for (final file in filesToMove) {
+    final fileName = file.path.split(Platform.pathSeparator).last;
+    final newFile = File('$newPath${Platform.pathSeparator}$fileName');
+    try {
+      await file.rename(newFile.path);
+    } catch (_) {
+      // If rename fails (cross-device), copy and delete
+      await file.copy(newFile.path);
+      await file.delete();
+    }
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Migrate old Hive files to nautune subfolder (one-time migration)
+  await _migrateHiveFiles();
 
   // Initialize core services
   final jellyfinService = JellyfinService();
