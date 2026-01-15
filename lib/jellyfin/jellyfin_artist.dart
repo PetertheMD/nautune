@@ -7,6 +7,7 @@ class JellyfinArtist {
     this.genres,
     this.albumCount,
     this.songCount,
+    this.playCount,
   });
 
   final String id;
@@ -16,6 +17,7 @@ class JellyfinArtist {
   final List<String>? genres;
   final int? albumCount;
   final int? songCount;
+  final int? playCount;
 
   factory JellyfinArtist.fromJson(Map<String, dynamic> json) {
     final imageTags = json['ImageTags'];
@@ -30,6 +32,18 @@ class JellyfinArtist {
     final songCountVal = json['SongCount'];
     final songCount = songCountVal is int ? songCountVal : (songCountVal is num ? songCountVal.toInt() : null);
 
+    // Parse play count from UserData
+    int? playCount;
+    final userData = json['UserData'];
+    if (userData is Map) {
+      final pc = userData['PlayCount'];
+      if (pc is int) {
+        playCount = pc;
+      } else if (pc is num) {
+        playCount = pc.toInt();
+      }
+    }
+
     return JellyfinArtist(
       id: json['Id'] is String ? json['Id'] as String : '',
       name: json['Name'] is String ? json['Name'] as String : '',
@@ -38,6 +52,7 @@ class JellyfinArtist {
       genres: genresList,
       albumCount: albumCount,
       songCount: songCount,
+      playCount: playCount,
     );
   }
 

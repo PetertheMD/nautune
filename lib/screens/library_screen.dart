@@ -403,7 +403,28 @@ class _LibraryScreenState extends State<LibraryScreen>
               ),
               IconButton(
                 icon: const Icon(Icons.logout),
-                onPressed: () => appState.disconnect(),
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('Log Out'),
+                      content: const Text('Are you sure you want to log out?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(dialogContext, true),
+                          child: const Text('Log Out'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    appState.disconnect();
+                  }
+                },
               ),
             ],
           ),

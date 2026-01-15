@@ -871,7 +871,7 @@ class JellyfinClient {
       'Recursive': 'true',
       'Limit': limit.toString(),
       // 'Filters': 'IsPlayed', // Removed to ensure Artists/Albums show up even if not marked "fully played"
-      'Fields': 'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,MediaStreams,UserData',
+      'Fields': 'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,MediaStreams,UserData,Genres',
       'EnableImageTypes': 'Primary,Thumb',
       'EnableUserData': 'true',
     };

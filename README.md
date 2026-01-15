@@ -2,11 +2,17 @@
 
 **Nautune** (Poseidon Music Player) is a high-performance, visually stunning music client for Jellyfin. Built for speed, offline reliability, and an immersive listening experience.
 
-## 🚀 Latest Updates (v3.5.0)
-- **👤 Immersive Profile & Stats**:
-  - ✅ **Deep Listening Stats**: Track your habits with "Total Plays" and "Listening Hours" (calculated from your top 50 tracks).
+## 🚀 Latest Updates (v3.6.0)
+- **📊 Enhanced Profile & Stats**:
+  - ✅ **Accurate Top Artists & Albums**: Now calculated from your actual track play history (aggregated from individual track plays).
+  - ✅ **Genre Breakdown**: See your top genres with colorful progress bars showing listening distribution.
+  - ✅ **Listening Insights**: Average track length, longest/shortest tracks you've listened to.
+  - ✅ **Library Diversity Score**: See how varied your listening habits are with unique artists/albums count and diversity percentage.
+  - ✅ **Logout Confirmation**: Added "Are you sure?" dialog to prevent accidental logouts.
+- **👤 Immersive Profile & Stats** (v3.5.0):
+  - ✅ **Deep Listening Stats**: Track your habits with "Total Plays" and "Listening Hours" (calculated from your top 100 tracks).
   - ✅ **Dynamic Backgrounds**: The profile screen now features a beautiful background gradient extracted from your most-played track's album art.
-  - ✅ **Organized Dashboard**: New 2x2 grid layout for quick stats (Total Plays, Hours, Top Artist, Top Album).
+  - ✅ **Organized Dashboard**: 3-row grid layout for quick stats (Total Plays, Hours, Top Artist, Top Album, Artists, Albums, Diversity).
   - ✅ **Jellyfin Integration**: Personalized profile image and server info directly from your account.
 - **🔍 Unified Global Search**:
   - ✅ **Instant Discovery**: Search across albums, artists, and tracks simultaneously in a single view.
@@ -41,14 +47,27 @@ Nautune follows a clean data structure on Linux for easy backups and management:
 
 ## 📸 Screenshots
 
-### Linux
-<img src="screenshots/Screenshot_20251105_163913.png" width="400" alt="Nautune on Linux">
-<img src="screenshots/Screenshot_20251105_164039.png" width="400" alt="Nautune on Linux">
+### Linux / Desktop
+<img src="screenshots/linux-ipad1.png" width="400" alt="Nautune on Linux - Library Picker">
+<img src="screenshots/linux-ipad2.png" width="400" alt="Nautune on Linux">
 
 ### iOS
-<img src="screenshots/IMG_9047.jpg" width="300" alt="Nautune on iOS">
-<img src="screenshots/IMG_9048.jpg" width="300" alt="Nautune on iOS">
-<img src="screenshots/IMG_9052.jpg" width="300" alt="Nautune on iOS">
+<img src="screenshots/ios1.png" width="250" alt="Nautune on iOS">
+<img src="screenshots/ios2.png" width="250" alt="Nautune on iOS">
+<img src="screenshots/ios3.png" width="250" alt="Nautune on iOS">
+<img src="screenshots/ios4.png" width="250" alt="Nautune on iOS">
+<img src="screenshots/ios5.png" width="250" alt="Nautune on iOS">
+<img src="screenshots/ios6.png" width="250" alt="Nautune on iOS">
+<img src="screenshots/ios7.jpg" width="250" alt="Nautune on iOS">
+<img src="screenshots/ios8.jpg" width="250" alt="Nautune on iOS">
+<img src="screenshots/ios9.jpg" width="250" alt="Nautune on iOS">
+
+### CarPlay
+<img src="screenshots/carplay1.png" width="300" alt="Nautune CarPlay">
+<img src="screenshots/carplay2.png" width="300" alt="Nautune CarPlay">
+<img src="screenshots/carplay3.png" width="300" alt="Nautune CarPlay">
+<img src="screenshots/carplay4.png" width="300" alt="Nautune CarPlay">
+<img src="screenshots/carplay5.png" width="300" alt="Nautune CarPlay">
 
 ## 🧪 Review / Demo Mode
 

@@ -27,6 +27,7 @@ class JellyfinTrack {
     this.sampleRate,
     this.bitDepth,
     this.channels,
+    this.genres,
   });
 
   final String id;
@@ -56,6 +57,7 @@ class JellyfinTrack {
   final int? sampleRate; // Sample rate in Hz (44100, 48000, 96000, etc.)
   final int? bitDepth; // Bit depth (16, 24, 32)
   final int? channels; // Number of audio channels (1=mono, 2=stereo, 6=5.1, etc.)
+  final List<String>? genres; // Track genres for stats
 
   factory JellyfinTrack.fromJson(Map<String, dynamic> json, {String? serverUrl, String? token, String? userId}) {
     final rawArtists = json['Artists'];
@@ -132,6 +134,10 @@ class JellyfinTrack {
     // If MediaStreams is missing, these tracks may need re-scanning in Jellyfin
     // or the API doesn't support MediaStreams for certain item types
 
+    // Parse genres
+    final rawGenres = json['Genres'];
+    final genresList = (rawGenres is List) ? rawGenres.whereType<String>().toList() : null;
+
     return JellyfinTrack(
       id: json['Id'] is String ? json['Id'] as String : '',
       name: json['Name'] is String ? json['Name'] as String : '',
@@ -158,6 +164,7 @@ class JellyfinTrack {
       sampleRate: sampleRate,
       bitDepth: bitDepth,
       channels: channels,
+      genres: genresList,
     );
   }
 
@@ -187,6 +194,7 @@ class JellyfinTrack {
     int? sampleRate,
     int? bitDepth,
     int? channels,
+    List<String>? genres,
   }) {
     return JellyfinTrack(
       id: id ?? this.id,
@@ -214,6 +222,7 @@ class JellyfinTrack {
       sampleRate: sampleRate ?? this.sampleRate,
       bitDepth: bitDepth ?? this.bitDepth,
       channels: channels ?? this.channels,
+      genres: genres ?? this.genres,
     );
   }
 
@@ -518,6 +527,7 @@ class JellyfinTrack {
       'sampleRate': sampleRate,
       'bitDepth': bitDepth,
       'channels': channels,
+      'genres': genres,
     };
   }
 
@@ -530,6 +540,9 @@ class JellyfinTrack {
 
     final normVal = json['normalizationGain'];
     final normalizationGain = normVal is num ? normVal.toDouble() : null;
+
+    final rawGenres = json['genres'];
+    final genresList = (rawGenres is List) ? rawGenres.whereType<String>().toList() : null;
 
     return JellyfinTrack(
       id: json['id'] is String ? json['id'] as String : '',
@@ -556,6 +569,7 @@ class JellyfinTrack {
       sampleRate: json['sampleRate'] is int ? json['sampleRate'] as int : (json['sampleRate'] is num ? (json['sampleRate'] as num).toInt() : null),
       bitDepth: json['bitDepth'] is int ? json['bitDepth'] as int : (json['bitDepth'] is num ? (json['bitDepth'] as num).toInt() : null),
       channels: json['channels'] is int ? json['channels'] as int : (json['channels'] is num ? (json['channels'] as num).toInt() : null),
+      genres: genresList,
     );
   }
 

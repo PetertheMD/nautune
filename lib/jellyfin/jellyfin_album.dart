@@ -8,6 +8,7 @@ class JellyfinAlbum {
     this.primaryImageTag,
     this.isFavorite = false,
     this.genres,
+    this.playCount,
   });
 
   final String id;
@@ -18,6 +19,7 @@ class JellyfinAlbum {
   final String? primaryImageTag;
   final bool isFavorite;
   final List<String>? genres;
+  final int? playCount;
 
   factory JellyfinAlbum.fromJson(Map<String, dynamic> json) {
     List<Map<String, dynamic>> extractArtistMaps(String key) {
@@ -65,6 +67,17 @@ class JellyfinAlbum {
             .whereType<String>()
             .toList();
 
+    // Parse play count from UserData
+    int? playCount;
+    if (userData is Map) {
+      final pc = userData['PlayCount'];
+      if (pc is int) {
+        playCount = pc;
+      } else if (pc is num) {
+        playCount = pc.toInt();
+      }
+    }
+
     return JellyfinAlbum(
       id: json['Id'] as String? ?? '',
       name: json['Name'] as String? ?? '',
@@ -74,6 +87,7 @@ class JellyfinAlbum {
       primaryImageTag: imageTags is Map ? (imageTags['Primary'] as String?) : null,
       isFavorite: userData is Map ? (userData['IsFavorite'] as bool? ?? false) : false,
       genres: genresList,
+      playCount: playCount,
     );
   }
 
