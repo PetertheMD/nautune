@@ -480,9 +480,9 @@ class AudioPlayerService {
       _checkPreloadTrigger(position);
       // Pre-fetch lyrics for next track at ~50% playback
       _checkLyricsPrefetch(position);
-      // Sync iOS FFT shadow player position (every ~2 seconds)
-      if (Platform.isIOS && position.inSeconds % 2 == 0) {
-        IOSFFTService.instance.syncPosition(position.inSeconds.toDouble());
+      // Sync iOS FFT shadow player position (every second, with ms precision)
+      if (Platform.isIOS && position.inMilliseconds % 1000 < 50) {
+        IOSFFTService.instance.syncPosition(position.inMilliseconds / 1000.0);
       }
     });
 
@@ -1219,13 +1219,22 @@ class AudioPlayerService {
       debugPrint('🎵 iOS FFT: Starting from cache: ${track.name}');
 
       await IOSFFTService.instance.setAudioUrl(filePath);
+
+      // Sync to current playback position BEFORE starting capture
+      // Use milliseconds for precision
+      final currentPosMs = _lastPosition.inMilliseconds.toDouble() / 1000.0;
+      await IOSFFTService.instance.syncPosition(currentPosMs);
+
       await IOSFFTService.instance.startCapture();
 
-      // Sync to current playback position
-      final currentPos = _lastPosition.inSeconds.toDouble();
-      await IOSFFTService.instance.syncPosition(currentPos);
+      // Sync again after a short delay to ensure accuracy
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (_currentTrack?.id == trackId) {
+        final updatedPos = _lastPosition.inMilliseconds.toDouble() / 1000.0;
+        await IOSFFTService.instance.syncPosition(updatedPos);
+      }
 
-      debugPrint('🎵 iOS FFT: Synced to position ${currentPos}s');
+      debugPrint('🎵 iOS FFT: Started and synced to ${currentPosMs}s');
     }).catchError((e) {
       debugPrint('⚠️ iOS FFT: Error caching for FFT: $e');
     });

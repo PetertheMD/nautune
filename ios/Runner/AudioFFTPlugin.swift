@@ -264,21 +264,38 @@ public class AudioFFTPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
         let currentTime = CMTimeGetSeconds(player.currentTime())
         let diff = abs(currentTime - position)
 
-        // If more than 0.5 seconds out of sync, seek
-        if diff > 0.5 {
-            let time = CMTime(seconds: position, preferredTimescale: 1000)
+        // If more than 0.2 seconds out of sync, seek immediately
+        if diff > 0.2 {
+            let time = CMTime(seconds: position, preferredTimescale: 44100)  // Sample-accurate
             player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         }
     }
 
     private func checkSync() {
+        guard let player = shadowPlayer else { return }
+
         // Ensure shadow player is playing if capture is active
-        if isCapturing && shadowPlayer?.rate == 0 {
-            shadowPlayer?.play()
+        if isCapturing && player.rate == 0 {
+            player.play()
+        }
+
+        // Verify sync with target position
+        if isCapturing && targetPosition > 0 {
+            let currentTime = CMTimeGetSeconds(player.currentTime())
+            let diff = abs(currentTime - targetPosition)
+            if diff > 0.3 {
+                let time = CMTime(seconds: targetPosition, preferredTimescale: 44100)
+                player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+            }
         }
     }
 
-    // MARK: - FFT Processing
+    // High-pass filter state (matches Linux)
+    private var lastX: Float = 0
+    private var lastY: Float = 0
+    private var peakHistory: Float = 0.1
+
+    // MARK: - FFT Processing (matched to Linux PulseAudio quality)
 
     fileprivate func processAudioBuffer(_ bufferList: UnsafeMutablePointer<AudioBufferList>, frames: CMItemCount) {
         guard let setup = fftSetup, isCapturing else { return }
@@ -296,10 +313,52 @@ public class AudioFFTPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
             samples[i] = floatData[i]
         }
 
+        // === PREPROCESSING (matches Linux) ===
+
+        // 1. DC offset removal
+        var mean: Float = 0
+        vDSP_meanv(samples, 1, &mean, vDSP_Length(fftSize))
+
+        // 2. High-pass filter + find peak
+        var filtered = [Float](repeating: 0, count: fftSize)
+        var localPeak: Float = 0.001
+
+        for i in 0..<fftSize {
+            let x = samples[i] - mean
+            let y = 0.98 * (lastY + x - lastX)
+            lastX = x
+            lastY = y
+            filtered[i] = y
+            localPeak = max(localPeak, abs(y))
+        }
+
+        // 3. Smooth peak for AGC
+        peakHistory = peakHistory * 0.92 + localPeak * 0.08
+
+        // 4. Noise gate + gain
+        let noiseThreshold: Float = 0.008
+        let maxGain: Float = 20.0
+
+        var gain = 0.4 / max(0.001, peakHistory)
+        gain = min(max(gain, 1.0), maxGain)
+
+        if peakHistory < noiseThreshold {
+            let gateFactor = pow(peakHistory / noiseThreshold, 2)
+            gain *= gateFactor
+        }
+
+        // 5. Apply gain
+        var processed = [Float](repeating: 0, count: fftSize)
+        for i in 0..<fftSize {
+            processed[i] = min(max(filtered[i] * gain, -1.0), 1.0)
+        }
+
+        // === FFT ===
+
         // Apply Hanning window
         var window = [Float](repeating: 0, count: fftSize)
         vDSP_hann_window(&window, vDSP_Length(fftSize), Int32(vDSP_HANN_NORM))
-        vDSP_vmul(samples, 1, window, 1, &samples, 1, vDSP_Length(fftSize))
+        vDSP_vmul(processed, 1, window, 1, &processed, 1, vDSP_Length(fftSize))
 
         // Prepare for FFT
         var realp = [Float](repeating: 0, count: fftSize / 2)
@@ -309,7 +368,7 @@ public class AudioFFTPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
             imagp.withUnsafeMutableBufferPointer { imagPtr in
                 var splitComplex = DSPSplitComplex(realp: realPtr.baseAddress!, imagp: imagPtr.baseAddress!)
 
-                samples.withUnsafeBufferPointer { samplesPtr in
+                processed.withUnsafeBufferPointer { samplesPtr in
                     samplesPtr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: fftSize / 2) { complexPtr in
                         vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(fftSize / 2))
                     }
@@ -322,25 +381,26 @@ public class AudioFFTPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
                 var magnitudes = [Float](repeating: 0, count: fftSize / 2)
                 vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(fftSize / 2))
 
-                // Scale
-                var scaledMagnitudes = [Float](repeating: 0, count: fftSize / 2)
-                var scale = Float(1.0 / Float(fftSize))
-                vDSP_vsmul(magnitudes, 1, &scale, &scaledMagnitudes, 1, vDSP_Length(fftSize / 2))
-
-                // Extract frequency bands (assuming 44.1kHz sample rate)
-                // Bass: 20-180Hz, Mid: 180-2000Hz, Treble: 2000-20000Hz
+                // Scale and sqrt for magnitude
                 let spectrumSize = fftSize / 2
-                let bassEnd = Int(Float(spectrumSize) * 0.008)     // ~180Hz
-                let midEnd = Int(Float(spectrumSize) * 0.09)       // ~2000Hz
+                var spectrum = [Float](repeating: 0, count: spectrumSize)
+                for i in 0..<spectrumSize {
+                    spectrum[i] = sqrt(magnitudes[i]) / Float(spectrumSize)
+                }
 
-                let bass = self.averageBand(scaledMagnitudes, start: 1, end: max(2, bassEnd)) * 30.0
-                let mid = self.averageBand(scaledMagnitudes, start: bassEnd, end: midEnd) * 40.0
-                let treble = self.averageBand(scaledMagnitudes, start: midEnd, end: spectrumSize) * 80.0
+                // === FREQUENCY BANDS (matched to Linux: 4%, 20%) ===
+                let bassEnd = Int(Float(spectrumSize) * 0.04)   // 0-4% (~0-180Hz)
+                let midEnd = Int(Float(spectrumSize) * 0.20)    // 4-20% (~180-2000Hz)
+
+                // RMS averaging (matches Linux)
+                let bass = self.rmsAverage(spectrum, start: 0, end: max(1, bassEnd)) * 30.0
+                let mid = self.rmsAverage(spectrum, start: bassEnd, end: midEnd) * 40.0
+                let treble = self.rmsAverage(spectrum, start: midEnd, end: spectrumSize) * 80.0
 
                 // RMS amplitude
                 var rms: Float = 0
-                vDSP_rmsqv(samples, 1, &rms, vDSP_Length(self.fftSize))
-                let amplitude = min(rms * 3.0, 1.0)
+                vDSP_rmsqv(processed, 1, &rms, vDSP_Length(self.fftSize))
+                let amplitude = min(rms * 2.0, 1.0)
 
                 // Send to Flutter
                 self.sendFFTData(
@@ -353,17 +413,19 @@ public class AudioFFTPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
         }
     }
 
-    private func averageBand(_ data: [Float], start: Int, end: Int) -> Float {
+    // RMS averaging (matches Linux implementation)
+    private func rmsAverage(_ data: [Float], start: Int, end: Int) -> Float {
         guard end > start && !data.isEmpty else { return 0 }
         let safeStart = max(0, min(start, data.count))
         let safeEnd = max(safeStart, min(end, data.count))
         guard safeEnd > safeStart else { return 0 }
 
-        var sum: Float = 0
+        // RMS = sqrt(sum of squares / count)
+        var sumSquares: Float = 0
         for i in safeStart..<safeEnd {
-            sum += sqrt(data[i])
+            sumSquares += data[i] * data[i]
         }
-        return sum / Float(safeEnd - safeStart)
+        return sqrt(sumSquares / Float(safeEnd - safeStart))
     }
 
     private func sendFFTData(bass: Float, mid: Float, treble: Float, amplitude: Float) {
