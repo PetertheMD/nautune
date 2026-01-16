@@ -18,6 +18,7 @@ import '../repositories/music_repository.dart';
 import '../widgets/add_to_playlist_dialog.dart';
 import '../widgets/jellyfin_image.dart';
 import '../widgets/now_playing_bar.dart';
+import '../widgets/skeleton_loader.dart';
 import '../widgets/sync_status_indicator.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
@@ -1065,11 +1066,13 @@ class _AlbumsTab extends StatelessWidget {
 class _ShelfHeader extends StatelessWidget {
   const _ShelfHeader({
     required this.title,
+    this.subtitle,
     required this.onRefresh,
     required this.isLoading,
   });
 
   final String title;
+  final String? subtitle;
   final VoidCallback onRefresh;
   final bool isLoading;
 
@@ -1080,13 +1083,28 @@ class _ShelfHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Row(
         children: [
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          const Spacer(),
           if (isLoading)
             const SizedBox(
               width: 18,
@@ -1137,7 +1155,7 @@ class _ContinueListeningShelf extends StatelessWidget {
         SizedBox(
           height: 140,
           child: !hasData && isLoading
-              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SkeletonTrackShelf()
               : hasData
                   ? ListView.separated(
                       scrollDirection: Axis.horizontal,
@@ -1265,7 +1283,7 @@ class _RecentlyAddedShelf extends StatelessWidget {
         SizedBox(
           height: 240,
           child: !hasData && isLoading
-              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SkeletonAlbumShelf()
               : hasData
                   ? ListView.separated(
                       scrollDirection: Axis.horizontal,
@@ -1495,7 +1513,7 @@ class _RecentlyPlayedShelf extends StatelessWidget {
         SizedBox(
           height: 140,
           child: !hasData && isLoading
-              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SkeletonTrackShelf()
               : hasData
                   ? ListView.separated(
                       scrollDirection: Axis.horizontal,
@@ -1523,68 +1541,8 @@ class _RecentlyPlayedShelf extends StatelessWidget {
   }
 }
 
-class _MostPlayedAlbumsShelf extends StatelessWidget {
-  const _MostPlayedAlbumsShelf({
-    required this.albums,
-    required this.isLoading,
-    required this.appState,
-    required this.onAlbumTap,
-    required this.onRefresh,
-  });
-
-  final List<JellyfinAlbum>? albums;
-  final bool isLoading;
-  final NautuneAppState appState;
-  final void Function(JellyfinAlbum) onAlbumTap;
-  final VoidCallback onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final hasData = albums != null && albums!.isNotEmpty;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _ShelfHeader(
-          title: 'Most Played Albums',
-          onRefresh: onRefresh,
-          isLoading: isLoading,
-        ),
-        SizedBox(
-          height: 240,
-          child: !hasData && isLoading
-              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-              : hasData
-                  ? ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: albums!.length,
-                      separatorBuilder: (context, _) => const SizedBox(width: 12),
-                      itemBuilder: (context, index) {
-                        final album = albums![index];
-                        return _MiniAlbumCard(
-                          album: album,
-                          appState: appState,
-                          onTap: () => onAlbumTap(album),
-                        );
-                      },
-                    )
-                  : Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'No play history yet.',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MostPlayedTracksShelf extends StatelessWidget {
-  const _MostPlayedTracksShelf({
+class _DiscoverShelf extends StatelessWidget {
+  const _DiscoverShelf({
     required this.tracks,
     required this.isLoading,
     required this.onPlay,
@@ -1605,14 +1563,15 @@ class _MostPlayedTracksShelf extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _ShelfHeader(
-          title: 'Most Played Tracks',
+          title: 'Discover',
+          subtitle: 'Albums you rarely play',
           onRefresh: onRefresh,
           isLoading: isLoading,
         ),
         SizedBox(
           height: 140,
           child: !hasData && isLoading
-              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SkeletonTrackShelf()
               : hasData
                   ? ListView.separated(
                       scrollDirection: Axis.horizontal,
@@ -1630,7 +1589,7 @@ class _MostPlayedTracksShelf extends StatelessWidget {
                   : Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
-                        'No play history yet.',
+                        'No tracks to discover yet.',
                         style: theme.textTheme.bodySmall,
                       ),
                     ),
@@ -1640,8 +1599,71 @@ class _MostPlayedTracksShelf extends StatelessWidget {
   }
 }
 
-class _LongestTracksShelf extends StatelessWidget {
-  const _LongestTracksShelf({
+class _RecommendationsShelf extends StatelessWidget {
+  const _RecommendationsShelf({
+    required this.tracks,
+    required this.isLoading,
+    required this.onPlay,
+    required this.onRefresh,
+    this.seedTrackName,
+  });
+
+  final List<JellyfinTrack>? tracks;
+  final bool isLoading;
+  final void Function(JellyfinTrack) onPlay;
+  final VoidCallback onRefresh;
+  final String? seedTrackName;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasData = tracks != null && tracks!.isNotEmpty;
+    final subtitle = seedTrackName != null
+        ? 'Based on "$seedTrackName"'
+        : 'Based on your listening';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ShelfHeader(
+          title: 'For You',
+          subtitle: subtitle,
+          onRefresh: onRefresh,
+          isLoading: isLoading,
+        ),
+        SizedBox(
+          height: 140,
+          child: !hasData && isLoading
+              ? const SkeletonTrackShelf()
+              : hasData
+                  ? ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: tracks!.length,
+                      separatorBuilder: (context, _) => const SizedBox(width: 12),
+                      itemBuilder: (context, index) {
+                        final track = tracks![index];
+                        return _TrackChip(
+                          track: track,
+                          onTap: () => onPlay(track),
+                        );
+                      },
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'Play some music to get recommendations.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OnThisDayShelf extends StatelessWidget {
+  const _OnThisDayShelf({
     required this.tracks,
     required this.isLoading,
     required this.onPlay,
@@ -1657,19 +1679,22 @@ class _LongestTracksShelf extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final hasData = tracks != null && tracks!.isNotEmpty;
+    final now = DateTime.now();
+    final dayOrdinal = _ordinal(now.day);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _ShelfHeader(
-          title: 'Longest Tracks',
+          title: 'On This Day',
+          subtitle: 'Tracks you played on the $dayOrdinal',
           onRefresh: onRefresh,
           isLoading: isLoading,
         ),
         SizedBox(
           height: 140,
           child: !hasData && isLoading
-              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SkeletonTrackShelf()
               : hasData
                   ? ListView.separated(
                       scrollDirection: Axis.horizontal,
@@ -1687,13 +1712,23 @@ class _LongestTracksShelf extends StatelessWidget {
                   : Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
-                        'No tracks found.',
+                        'No listening history for this date.',
                         style: theme.textTheme.bodySmall,
                       ),
                     ),
         ),
       ],
     );
+  }
+
+  String _ordinal(int day) {
+    if (day >= 11 && day <= 13) return '${day}th';
+    switch (day % 10) {
+      case 1: return '${day}st';
+      case 2: return '${day}nd';
+      case 3: return '${day}rd';
+      default: return '${day}th';
+    }
   }
 }
 
@@ -2397,21 +2432,22 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
     final recentlyPlayedLoading = widget.appState.isLoadingRecentlyPlayed;
     final recentlyAdded = widget.appState.recentlyAddedAlbums;
     final recentlyAddedLoading = widget.appState.isLoadingRecentlyAdded;
-    final mostPlayedAlbums = widget.appState.mostPlayedAlbums;
-    final mostPlayedAlbumsLoading = widget.appState.isLoadingMostPlayedAlbums;
-    final mostPlayedTracks = widget.appState.mostPlayedTracks;
-    final mostPlayedTracksLoading = widget.appState.isLoadingMostPlayedTracks;
-    final longestTracks = widget.appState.longestTracks;
-    final longestTracksLoading = widget.appState.isLoadingLongestTracks;
+    final discoverTracks = widget.appState.discoverTracks;
+    final discoverLoading = widget.appState.isLoadingDiscover;
+    final onThisDayTracks = widget.appState.onThisDayTracks;
+    final onThisDayLoading = widget.appState.isLoadingOnThisDay;
+    final recommendationTracks = widget.appState.recommendationTracks;
+    final recommendationLoading = widget.appState.isLoadingRecommendations;
+    final recommendationSeedName = widget.appState.recommendationSeedTrackName;
 
     final showContinue = continueLoading || (continueTracks != null && continueTracks.isNotEmpty);
     final showRecentlyPlayed = recentlyPlayedLoading || (recentlyPlayed != null && recentlyPlayed.isNotEmpty);
     final showRecentlyAdded = recentlyAddedLoading || (recentlyAdded != null && recentlyAdded.isNotEmpty);
-    final showMostPlayedAlbums = mostPlayedAlbumsLoading || (mostPlayedAlbums != null && mostPlayedAlbums.isNotEmpty);
-    final showMostPlayedTracks = mostPlayedTracksLoading || (mostPlayedTracks != null && mostPlayedTracks.isNotEmpty);
-    final showLongestTracks = longestTracksLoading || (longestTracks != null && longestTracks.isNotEmpty);
+    final showDiscover = discoverLoading || (discoverTracks != null && discoverTracks.isNotEmpty);
+    final showOnThisDay = onThisDayLoading || (onThisDayTracks != null && onThisDayTracks.isNotEmpty);
+    final showRecommendations = recommendationLoading || (recommendationTracks != null && recommendationTracks.isNotEmpty);
 
-    if (!showContinue && !showRecentlyPlayed && !showRecentlyAdded && !showMostPlayedAlbums && !showMostPlayedTracks && !showLongestTracks) {
+    if (!showContinue && !showRecentlyPlayed && !showRecentlyAdded && !showDiscover && !showOnThisDay && !showRecommendations) {
       return null;
     }
 
@@ -2459,43 +2495,49 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
           ),
           const SizedBox(height: 20),
         ],
-        if (showMostPlayedAlbums) ...[
-          _MostPlayedAlbumsShelf(
-            albums: mostPlayedAlbums,
-            isLoading: mostPlayedAlbumsLoading,
-            appState: widget.appState,
-            onAlbumTap: widget.onAlbumTap,
-            onRefresh: () => widget.appState.refreshMostPlayedAlbums(),
-          ),
-          const SizedBox(height: 20),
-        ],
-        if (showMostPlayedTracks) ...[
-          _MostPlayedTracksShelf(
-            tracks: mostPlayedTracks,
-            isLoading: mostPlayedTracksLoading,
+        if (showDiscover) ...[
+          _DiscoverShelf(
+            tracks: discoverTracks,
+            isLoading: discoverLoading,
             onPlay: (track) {
-              final queue = mostPlayedTracks ?? const <JellyfinTrack>[];
+              final queue = discoverTracks ?? const <JellyfinTrack>[];
               widget.appState.audioPlayerService.playTrack(
                 track,
                 queueContext: queue,
               );
             },
-            onRefresh: () => widget.appState.refreshMostPlayedTracks(),
+            onRefresh: () => widget.appState.refreshDiscover(),
           ),
           const SizedBox(height: 20),
         ],
-        if (showLongestTracks) ...[
-          _LongestTracksShelf(
-            tracks: longestTracks,
-            isLoading: longestTracksLoading,
+        if (showOnThisDay) ...[
+          _OnThisDayShelf(
+            tracks: onThisDayTracks,
+            isLoading: onThisDayLoading,
             onPlay: (track) {
-              final queue = longestTracks ?? const <JellyfinTrack>[];
+              final queue = onThisDayTracks ?? const <JellyfinTrack>[];
               widget.appState.audioPlayerService.playTrack(
                 track,
                 queueContext: queue,
               );
             },
-            onRefresh: () => widget.appState.refreshLongestTracks(),
+            onRefresh: () => widget.appState.refreshOnThisDay(),
+          ),
+          const SizedBox(height: 20),
+        ],
+        if (showRecommendations) ...[
+          _RecommendationsShelf(
+            tracks: recommendationTracks,
+            isLoading: recommendationLoading,
+            seedTrackName: recommendationSeedName,
+            onPlay: (track) {
+              final queue = recommendationTracks ?? const <JellyfinTrack>[];
+              widget.appState.audioPlayerService.playTrack(
+                track,
+                queueContext: queue,
+              );
+            },
+            onRefresh: () => widget.appState.refreshRecommendations(),
           ),
           const SizedBox(height: 12),
         ],

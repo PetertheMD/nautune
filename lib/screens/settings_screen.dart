@@ -5,9 +5,11 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../models/playback_state.dart' show StreamingQuality, StreamingQualityExtension;
 import '../providers/session_provider.dart';
+import '../providers/theme_provider.dart';
 import '../providers/ui_state_provider.dart';
 import '../services/audio_cache_service.dart';
 import '../services/download_service.dart';
+import '../theme/nautune_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -36,6 +38,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return '$days ${days == 1 ? 'day' : 'days'}';
     }
     return '1 week';
+  }
+
+  Widget _buildAppearanceSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'Appearance',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        ListTile(
+          leading: Icon(Icons.palette, color: theme.colorScheme.primary),
+          title: const Text('Color Theme'),
+          subtitle: Text(themeProvider.palette.name),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => _showThemePicker(context),
+        ),
+      ],
+    );
+  }
+
+  void _showThemePicker(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => _ThemePickerSheet(
+        currentPalette: themeProvider.palette,
+        onSelect: (palette) {
+          themeProvider.setPalette(palette);
+          Navigator.pop(context);
+        },
+      ),
+    );
   }
 
   @override
@@ -77,6 +127,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Library'),
             subtitle: Text(sessionProvider.session?.selectedLibraryName ?? 'None selected'),
           ),
+          const Divider(),
+          _buildAppearanceSection(context),
           const Divider(),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -876,6 +928,204 @@ class _StatItem extends StatelessWidget {
         Text(value, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
         Text(label, style: theme.textTheme.bodySmall),
       ],
+    );
+  }
+}
+
+class _ThemePickerSheet extends StatelessWidget {
+  final NautuneColorPalette currentPalette;
+  final ValueChanged<NautuneColorPalette> onSelect;
+
+  const _ThemePickerSheet({
+    required this.currentPalette,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: EdgeInsets.only(
+        top: 16,
+        left: 16,
+        right: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Choose Theme',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Select a color palette for the app',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 20),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 1.5,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: NautunePalettes.all.length,
+            itemBuilder: (context, index) {
+              final palette = NautunePalettes.all[index];
+              final isSelected = palette.id == currentPalette.id;
+
+              return _ThemePaletteCard(
+                palette: palette,
+                isSelected: isSelected,
+                onTap: () => onSelect(palette),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThemePaletteCard extends StatelessWidget {
+  final NautuneColorPalette palette;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ThemePaletteCard({
+    required this.palette,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: palette.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected ? palette.primary : palette.primary.withValues(alpha: 0.3),
+              width: isSelected ? 3 : 1,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: palette.primary.withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Stack(
+            children: [
+              // Color preview circles
+              Positioned(
+                top: 12,
+                left: 12,
+                child: Row(
+                  children: [
+                    _ColorCircle(color: palette.primary, size: 24),
+                    const SizedBox(width: 6),
+                    _ColorCircle(color: palette.secondary, size: 24),
+                    const SizedBox(width: 6),
+                    _ColorCircle(color: palette.textPrimary, size: 24),
+                  ],
+                ),
+              ),
+              // Theme name
+              Positioned(
+                bottom: 12,
+                left: 12,
+                right: 12,
+                child: Text(
+                  palette.name,
+                  style: TextStyle(
+                    color: palette.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // Selected indicator
+              if (isSelected)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: palette.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.check,
+                      size: 14,
+                      color: palette.surface,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ColorCircle extends StatelessWidget {
+  final Color color;
+  final double size;
+
+  const _ColorCircle({
+    required this.color,
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.2),
+          width: 1,
+        ),
+      ),
     );
   }
 }

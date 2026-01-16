@@ -139,11 +139,16 @@ class _MiniPlayerScreenState extends State<MiniPlayerScreen> with WindowListener
   Future<void> _restoreMainWindow() async {
     // Restore standard title bar
     await windowManager.setTitleBarStyle(TitleBarStyle.normal);
-    
+
     // Restore standard size
     await windowManager.setSize(const Size(1280, 800));
     await windowManager.setMinimumSize(const Size(400, 600));
     await windowManager.setAlignment(Alignment.center);
+
+    // Wait for the window resize to complete before navigating
+    // This prevents layout overflow errors in the full player
+    await Future.delayed(const Duration(milliseconds: 100));
+
     if (mounted) {
       Navigator.of(context).pop();
     }
@@ -281,6 +286,32 @@ class _MiniPlayerScreenState extends State<MiniPlayerScreen> with WindowListener
     }
   }
 
+  /// Build album art with proper fallback logic for itemId and imageTag
+  Widget _buildAlbumArt(JellyfinTrack track) {
+    // Use same fallback logic as _extractColors for consistency
+    String? imageTag = track.primaryImageTag;
+    String itemId = track.id;
+
+    // Fallback to album art if track doesn't have its own image
+    if (imageTag == null || imageTag.isEmpty) {
+      imageTag = track.albumPrimaryImageTag;
+      itemId = track.albumId ?? track.id;
+    }
+
+    // Further fallback to parent thumb
+    if (imageTag == null || imageTag.isEmpty) {
+      imageTag = track.parentThumbImageTag;
+      itemId = track.albumId ?? track.id;
+    }
+
+    return JellyfinImage(
+      itemId: itemId,
+      imageTag: imageTag,
+      trackId: track.id,
+      boxFit: BoxFit.cover,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<NautuneAppState>(context);
@@ -360,15 +391,10 @@ class _MiniPlayerScreenState extends State<MiniPlayerScreen> with WindowListener
               else
                 Row(
                   children: [
-                    // Album Art
+                    // Album Art - use same fallback logic as _extractColors
                     AspectRatio(
                       aspectRatio: 1,
-                      child: JellyfinImage(
-                        itemId: track.id,
-                        imageTag: track.primaryImageTag ?? track.albumPrimaryImageTag,
-                        trackId: track.id,
-                        boxFit: BoxFit.cover,
-                      ),
+                      child: _buildAlbumArt(track),
                     ),
                     
                     // Info & Controls

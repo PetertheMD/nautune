@@ -13,6 +13,7 @@ import 'providers/demo_mode_provider.dart';
 import 'providers/library_data_provider.dart';
 import 'providers/session_provider.dart';
 import 'providers/sync_status_provider.dart';
+import 'providers/theme_provider.dart';
 import 'providers/ui_state_provider.dart';
 import 'screens/library_screen.dart';
 import 'screens/login_screen.dart';
@@ -22,10 +23,10 @@ import 'screens/settings_screen.dart';
 import 'services/bootstrap_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/download_service.dart';
+import 'services/listening_analytics_service.dart';
 import 'services/local_cache_service.dart';
 import 'services/notification_service.dart';
 import 'services/playback_state_store.dart';
-import 'theme/nautune_theme.dart';
 
 /// Migrates old Hive files from ~/Documents/ to ~/Documents/nautune/
 /// Only runs if files exist in old location and NOT in new location.
@@ -144,6 +145,10 @@ Future<void> main() async {
 
   final syncStatusProvider = SyncStatusProvider();
 
+  final themeProvider = ThemeProvider(
+    playbackStateStore: playbackStateStore,
+  );
+
   // Initialize legacy app state with demo mode provider
   final appState = NautuneAppState(
     jellyfinService: jellyfinService,
@@ -156,10 +161,12 @@ Future<void> main() async {
     demoModeProvider: demoModeProvider,
     sessionProvider: sessionProvider,);
 
-  // Initialize providers in sequence
+  // Initialize providers and services in sequence
   await sessionProvider.initialize();
   await connectivityProvider.initialize();
   await uiStateProvider.initialize();
+  await themeProvider.initialize();
+  await ListeningAnalyticsService().initialize();
 
   // Initialize legacy app state
   unawaited(appState.initialize());
@@ -177,6 +184,7 @@ Future<void> main() async {
       libraryDataProvider: libraryDataProvider,
       demoModeProvider: demoModeProvider,
       syncStatusProvider: syncStatusProvider,
+      themeProvider: themeProvider,
     ),
   );
 }
@@ -191,6 +199,7 @@ class NautuneApp extends StatefulWidget {
     required this.libraryDataProvider,
     required this.demoModeProvider,
     required this.syncStatusProvider,
+    required this.themeProvider,
   });
 
   final NautuneAppState appState;
@@ -200,6 +209,7 @@ class NautuneApp extends StatefulWidget {
   final LibraryDataProvider libraryDataProvider;
   final DemoModeProvider demoModeProvider;
   final SyncStatusProvider syncStatusProvider;
+  final ThemeProvider themeProvider;
 
   @override
   State<NautuneApp> createState() => _NautuneAppState();
@@ -345,20 +355,22 @@ class _NautuneAppState extends State<NautuneApp> with WidgetsBindingObserver, Wi
         ChangeNotifierProvider.value(value: widget.libraryDataProvider),
         ChangeNotifierProvider.value(value: widget.demoModeProvider),
         ChangeNotifierProvider.value(value: widget.syncStatusProvider),
+        ChangeNotifierProvider.value(value: widget.themeProvider),
 
         // Legacy app state (will be phased out)
         ChangeNotifierProvider.value(value: widget.appState),
       ],
-      child: MaterialApp(
-        navigatorKey: _navigatorKey,
-        title: 'Nautune - Poseidon Music Player',
-        theme: NautuneTheme.build(),
-        debugShowCheckedModeBanner: false,
-        routes: {
-          '/queue': (context) => const QueueScreen(),
-          '/mini': (context) => const MiniPlayerScreen(),
-        },
-        home: Consumer2<SessionProvider, NautuneAppState>(
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) => MaterialApp(
+          navigatorKey: _navigatorKey,
+          title: 'Nautune - Poseidon Music Player',
+          theme: themeProvider.themeData,
+          debugShowCheckedModeBanner: false,
+          routes: {
+            '/queue': (context) => const QueueScreen(),
+            '/mini': (context) => const MiniPlayerScreen(),
+          },
+          home: Consumer2<SessionProvider, NautuneAppState>(
           builder: (context, session, app, _) {
             // Show loading while initializing
             if (!session.isInitialized || !app.isInitialized) {
@@ -377,6 +389,7 @@ class _NautuneAppState extends State<NautuneApp> with WidgetsBindingObserver, Wi
             // Show library screen
             return const LibraryScreen();
           },
+        ),
         ),
       ),
     );

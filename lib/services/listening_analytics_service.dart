@@ -1,0 +1,743 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+
+import '../jellyfin/jellyfin_track.dart';
+
+/// Represents a single play event recorded locally
+class PlayEvent {
+  final String trackId;
+  final String trackName;
+  final String? albumId;
+  final String? albumName;
+  final List<String> artists;
+  final List<String> genres;
+  final DateTime timestamp;
+  final int durationMs;
+
+  PlayEvent({
+    required this.trackId,
+    required this.trackName,
+    this.albumId,
+    this.albumName,
+    required this.artists,
+    required this.genres,
+    required this.timestamp,
+    required this.durationMs,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'trackId': trackId,
+    'trackName': trackName,
+    'albumId': albumId,
+    'albumName': albumName,
+    'artists': artists,
+    'genres': genres,
+    'timestamp': timestamp.toIso8601String(),
+    'durationMs': durationMs,
+  };
+
+  factory PlayEvent.fromJson(Map<String, dynamic> json) => PlayEvent(
+    trackId: json['trackId'] as String,
+    trackName: json['trackName'] as String,
+    albumId: json['albumId'] as String?,
+    albumName: json['albumName'] as String?,
+    artists: (json['artists'] as List<dynamic>).cast<String>(),
+    genres: (json['genres'] as List<dynamic>?)?.cast<String>() ?? [],
+    timestamp: DateTime.parse(json['timestamp'] as String),
+    durationMs: json['durationMs'] as int? ?? 0,
+  );
+}
+
+/// Listening streak information
+class ListeningStreak {
+  final int currentStreak;
+  final int longestStreak;
+  final DateTime? lastListeningDate;
+  final bool listenedToday;
+
+  ListeningStreak({
+    required this.currentStreak,
+    required this.longestStreak,
+    this.lastListeningDate,
+    required this.listenedToday,
+  });
+}
+
+/// Comparison between two time periods
+class PeriodComparison {
+  final int currentPeriodPlays;
+  final int previousPeriodPlays;
+  final Duration currentPeriodTime;
+  final Duration previousPeriodTime;
+  final int currentPeriodUniqueTracks;
+  final int previousPeriodUniqueTracks;
+
+  PeriodComparison({
+    required this.currentPeriodPlays,
+    required this.previousPeriodPlays,
+    required this.currentPeriodTime,
+    required this.previousPeriodTime,
+    required this.currentPeriodUniqueTracks,
+    required this.previousPeriodUniqueTracks,
+  });
+
+  /// Percentage change in plays (-100 to +infinity)
+  double get playsChangePercent {
+    if (previousPeriodPlays == 0) return currentPeriodPlays > 0 ? 100 : 0;
+    return ((currentPeriodPlays - previousPeriodPlays) / previousPeriodPlays) * 100;
+  }
+
+  /// Percentage change in listening time
+  double get timeChangePercent {
+    if (previousPeriodTime.inSeconds == 0) {
+      return currentPeriodTime.inSeconds > 0 ? 100 : 0;
+    }
+    return ((currentPeriodTime.inSeconds - previousPeriodTime.inSeconds) /
+            previousPeriodTime.inSeconds) * 100;
+  }
+}
+
+/// Represents a listening milestone/achievement
+class ListeningMilestone {
+  final String id;
+  final String name;
+  final String description;
+  final IconType iconType;
+  final int targetValue;
+  final int currentValue;
+  final bool isUnlocked;
+
+  ListeningMilestone({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.iconType,
+    required this.targetValue,
+    required this.currentValue,
+  }) : isUnlocked = currentValue >= targetValue;
+
+  double get progress => (currentValue / targetValue).clamp(0.0, 1.0);
+}
+
+enum IconType {
+  plays,
+  hours,
+  streak,
+  artists,
+  albums,
+  tracks,
+}
+
+/// Collection of all milestones with progress
+class ListeningMilestones {
+  final List<ListeningMilestone> all;
+  final List<ListeningMilestone> unlocked;
+  final ListeningMilestone? nextToUnlock;
+
+  ListeningMilestones({
+    required this.all,
+  })  : unlocked = all.where((m) => m.isUnlocked).toList(),
+        nextToUnlock = all.where((m) => !m.isUnlocked).fold<ListeningMilestone?>(
+          null,
+          (closest, m) => closest == null || m.progress > closest.progress ? m : closest,
+        );
+
+  int get unlockedCount => unlocked.length;
+  int get totalCount => all.length;
+}
+
+/// Heatmap data for listening activity
+class ListeningHeatmap {
+  /// Map of (dayOfWeek 0-6, hourOfDay 0-23) -> play count
+  final Map<int, Map<int, int>> data;
+  final int maxCount;
+
+  ListeningHeatmap({required this.data, required this.maxCount});
+
+  /// Get intensity (0.0-1.0) for a specific day/hour cell
+  double getIntensity(int dayOfWeek, int hourOfDay) {
+    if (maxCount == 0) return 0;
+    final count = data[dayOfWeek]?[hourOfDay] ?? 0;
+    return count / maxCount;
+  }
+
+  /// Get the raw count for a specific day/hour cell
+  int getCount(int dayOfWeek, int hourOfDay) {
+    return data[dayOfWeek]?[hourOfDay] ?? 0;
+  }
+}
+
+/// Service for recording and querying local listening analytics
+class ListeningAnalyticsService {
+  static const _boxName = 'nautune_analytics';
+  static const _eventsKey = 'play_events';
+  static const _streakKey = 'streak_data';
+
+  Box? _box;
+  List<PlayEvent> _events = [];
+  bool _initialized = false;
+
+  /// Singleton instance
+  static final ListeningAnalyticsService _instance = ListeningAnalyticsService._internal();
+  factory ListeningAnalyticsService() => _instance;
+  ListeningAnalyticsService._internal();
+
+  bool get isInitialized => _initialized;
+
+  /// Initialize the service and load existing data
+  Future<void> initialize() async {
+    if (_initialized) return;
+
+    try {
+      _box = await Hive.openBox(_boxName);
+      await _loadEvents();
+      _initialized = true;
+      debugPrint('ListeningAnalyticsService: Initialized with ${_events.length} events');
+    } catch (e) {
+      debugPrint('ListeningAnalyticsService: Failed to initialize: $e');
+    }
+  }
+
+  Future<void> _loadEvents() async {
+    final raw = _box?.get(_eventsKey);
+    if (raw == null) {
+      _events = [];
+      return;
+    }
+
+    try {
+      final List<dynamic> jsonList;
+      if (raw is String) {
+        jsonList = jsonDecode(raw) as List<dynamic>;
+      } else if (raw is List) {
+        jsonList = raw;
+      } else {
+        _events = [];
+        return;
+      }
+
+      _events = jsonList
+          .map((e) => PlayEvent.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+
+      // Sort by timestamp descending (most recent first)
+      _events.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    } catch (e) {
+      debugPrint('ListeningAnalyticsService: Error loading events: $e');
+      _events = [];
+    }
+  }
+
+  Future<void> _saveEvents() async {
+    if (_box == null) return;
+
+    // Keep only last 180 days (6 months) of events to prevent unbounded growth
+    final cutoff = DateTime.now().subtract(const Duration(days: 180));
+    _events.removeWhere((e) => e.timestamp.isBefore(cutoff));
+
+    final jsonList = _events.map((e) => e.toJson()).toList();
+    await _box!.put(_eventsKey, jsonEncode(jsonList));
+  }
+
+  /// Record a play event for a track
+  Future<void> recordPlay(JellyfinTrack track) async {
+    if (!_initialized) {
+      debugPrint('ListeningAnalyticsService: Not initialized, skipping record');
+      return;
+    }
+
+    final event = PlayEvent(
+      trackId: track.id,
+      trackName: track.name,
+      albumId: track.albumId,
+      albumName: track.album,
+      artists: track.artists,
+      genres: track.genres ?? [],
+      timestamp: DateTime.now(),
+      durationMs: track.runTimeTicks != null ? track.runTimeTicks! ~/ 10000 : 0,
+    );
+
+    _events.insert(0, event); // Add to front (most recent)
+
+    // Save asynchronously
+    unawaited(_saveEvents());
+
+    debugPrint('ListeningAnalyticsService: Recorded play for "${track.name}"');
+  }
+
+  /// Get play counts by hour of day (0-23) for the given date range
+  Map<int, int> getPlaysByHourOfDay({DateTime? since}) {
+    final cutoff = since ?? DateTime.now().subtract(const Duration(days: 30));
+    final counts = <int, int>{};
+
+    for (int i = 0; i < 24; i++) {
+      counts[i] = 0;
+    }
+
+    for (final event in _events) {
+      if (event.timestamp.isAfter(cutoff)) {
+        final hour = event.timestamp.hour;
+        counts[hour] = (counts[hour] ?? 0) + 1;
+      }
+    }
+
+    return counts;
+  }
+
+  /// Get play counts by day of week (0=Monday, 6=Sunday) for the given date range
+  Map<int, int> getPlaysByDayOfWeek({DateTime? since}) {
+    final cutoff = since ?? DateTime.now().subtract(const Duration(days: 30));
+    final counts = <int, int>{};
+
+    for (int i = 0; i < 7; i++) {
+      counts[i] = 0;
+    }
+
+    for (final event in _events) {
+      if (event.timestamp.isAfter(cutoff)) {
+        // DateTime.weekday is 1-7 (Monday-Sunday), convert to 0-6
+        final day = event.timestamp.weekday - 1;
+        counts[day] = (counts[day] ?? 0) + 1;
+      }
+    }
+
+    return counts;
+  }
+
+  /// Get a heatmap of listening activity (day of week x hour of day)
+  ListeningHeatmap getListeningHeatmap({DateTime? since}) {
+    final cutoff = since ?? DateTime.now().subtract(const Duration(days: 30));
+    final data = <int, Map<int, int>>{};
+    int maxCount = 0;
+
+    // Initialize all cells to 0
+    for (int day = 0; day < 7; day++) {
+      data[day] = {};
+      for (int hour = 0; hour < 24; hour++) {
+        data[day]![hour] = 0;
+      }
+    }
+
+    // Count events
+    for (final event in _events) {
+      if (event.timestamp.isAfter(cutoff)) {
+        final day = event.timestamp.weekday - 1; // 0-6
+        final hour = event.timestamp.hour; // 0-23
+        data[day]![hour] = (data[day]![hour] ?? 0) + 1;
+        if (data[day]![hour]! > maxCount) {
+          maxCount = data[day]![hour]!;
+        }
+      }
+    }
+
+    return ListeningHeatmap(data: data, maxCount: maxCount);
+  }
+
+  /// Get listening streak information
+  ListeningStreak getStreakInfo() {
+    if (_events.isEmpty) {
+      return ListeningStreak(
+        currentStreak: 0,
+        longestStreak: 0,
+        listenedToday: false,
+      );
+    }
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    // Get unique days with listening activity
+    final listeningDays = <DateTime>{};
+    for (final event in _events) {
+      final day = DateTime(event.timestamp.year, event.timestamp.month, event.timestamp.day);
+      listeningDays.add(day);
+    }
+
+    final sortedDays = listeningDays.toList()..sort((a, b) => b.compareTo(a));
+
+    final listenedToday = sortedDays.isNotEmpty && sortedDays.first == today;
+
+    // Calculate current streak
+    int currentStreak = 0;
+    DateTime checkDate = listenedToday ? today : yesterday;
+
+    for (final day in sortedDays) {
+      if (day == checkDate) {
+        currentStreak++;
+        checkDate = checkDate.subtract(const Duration(days: 1));
+      } else if (day.isBefore(checkDate)) {
+        break;
+      }
+    }
+
+    // If we didn't listen today or yesterday, streak is broken
+    if (!listenedToday && (sortedDays.isEmpty || sortedDays.first != yesterday)) {
+      currentStreak = 0;
+    }
+
+    // Calculate longest streak
+    int longestStreak = 0;
+    int tempStreak = 0;
+    DateTime? prevDay;
+
+    for (final day in sortedDays.reversed) {
+      if (prevDay == null) {
+        tempStreak = 1;
+      } else {
+        final diff = day.difference(prevDay).inDays;
+        if (diff == 1) {
+          tempStreak++;
+        } else {
+          if (tempStreak > longestStreak) {
+            longestStreak = tempStreak;
+          }
+          tempStreak = 1;
+        }
+      }
+      prevDay = day;
+    }
+    if (tempStreak > longestStreak) {
+      longestStreak = tempStreak;
+    }
+
+    return ListeningStreak(
+      currentStreak: currentStreak,
+      longestStreak: longestStreak,
+      lastListeningDate: sortedDays.isNotEmpty ? sortedDays.first : null,
+      listenedToday: listenedToday,
+    );
+  }
+
+  /// Compare this week vs last week
+  PeriodComparison getWeekOverWeekComparison() {
+    final now = DateTime.now();
+    final startOfThisWeek = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - 1));
+    final startOfLastWeek = startOfThisWeek.subtract(const Duration(days: 7));
+
+    return _comparePeriods(
+      currentStart: startOfThisWeek,
+      currentEnd: now,
+      previousStart: startOfLastWeek,
+      previousEnd: startOfThisWeek,
+    );
+  }
+
+  /// Compare this month vs last month
+  PeriodComparison getMonthOverMonthComparison() {
+    final now = DateTime.now();
+    final startOfThisMonth = DateTime(now.year, now.month, 1);
+    final startOfLastMonth = DateTime(now.year, now.month - 1, 1);
+
+    return _comparePeriods(
+      currentStart: startOfThisMonth,
+      currentEnd: now,
+      previousStart: startOfLastMonth,
+      previousEnd: startOfThisMonth,
+    );
+  }
+
+  PeriodComparison _comparePeriods({
+    required DateTime currentStart,
+    required DateTime currentEnd,
+    required DateTime previousStart,
+    required DateTime previousEnd,
+  }) {
+    int currentPlays = 0;
+    int previousPlays = 0;
+    int currentTimeMs = 0;
+    int previousTimeMs = 0;
+    final currentTracks = <String>{};
+    final previousTracks = <String>{};
+
+    for (final event in _events) {
+      if (event.timestamp.isAfter(currentStart) && event.timestamp.isBefore(currentEnd)) {
+        currentPlays++;
+        currentTimeMs += event.durationMs;
+        currentTracks.add(event.trackId);
+      } else if (event.timestamp.isAfter(previousStart) && event.timestamp.isBefore(previousEnd)) {
+        previousPlays++;
+        previousTimeMs += event.durationMs;
+        previousTracks.add(event.trackId);
+      }
+    }
+
+    return PeriodComparison(
+      currentPeriodPlays: currentPlays,
+      previousPeriodPlays: previousPlays,
+      currentPeriodTime: Duration(milliseconds: currentTimeMs),
+      previousPeriodTime: Duration(milliseconds: previousTimeMs),
+      currentPeriodUniqueTracks: currentTracks.length,
+      previousPeriodUniqueTracks: previousTracks.length,
+    );
+  }
+
+  /// Get total plays in the given date range
+  int getTotalPlays({DateTime? since}) {
+    final cutoff = since ?? DateTime(2000);
+    return _events.where((e) => e.timestamp.isAfter(cutoff)).length;
+  }
+
+  /// Get total listening time in the given date range
+  Duration getTotalListeningTime({DateTime? since}) {
+    final cutoff = since ?? DateTime(2000);
+    int totalMs = 0;
+    for (final event in _events) {
+      if (event.timestamp.isAfter(cutoff)) {
+        totalMs += event.durationMs;
+      }
+    }
+    return Duration(milliseconds: totalMs);
+  }
+
+  /// Get the most active listening hour (0-23)
+  int? getPeakListeningHour({DateTime? since}) {
+    final hourCounts = getPlaysByHourOfDay(since: since);
+    if (hourCounts.isEmpty) return null;
+
+    int maxHour = 0;
+    int maxCount = 0;
+    hourCounts.forEach((hour, count) {
+      if (count > maxCount) {
+        maxCount = count;
+        maxHour = hour;
+      }
+    });
+
+    return maxCount > 0 ? maxHour : null;
+  }
+
+  /// Get recent play events
+  List<PlayEvent> getRecentEvents({int limit = 50}) {
+    return _events.take(limit).toList();
+  }
+
+  /// Get play events from the same day in previous months/years (On This Day)
+  /// Returns events from:
+  /// - Same day of the month in any previous month (e.g., Jan 15th shows Dec 15th, Nov 15th, etc.)
+  /// - Prioritizes more recent events
+  List<PlayEvent> getOnThisDayEvents() {
+    final now = DateTime.now();
+    final today = now.day;
+
+    // Find events from the same day of the month in any previous month
+    final matchingEvents = _events.where((event) {
+      // Must be from a previous date (not today)
+      final eventDate = DateTime(event.timestamp.year, event.timestamp.month, event.timestamp.day);
+      final todayDate = DateTime(now.year, now.month, now.day);
+      if (!eventDate.isBefore(todayDate)) return false;
+
+      // Match the same day of month
+      return event.timestamp.day == today;
+    }).toList();
+
+    // Sort by date descending (most recent first) and return unique tracks
+    matchingEvents.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    // Deduplicate by trackId, keeping the most recent occurrence
+    final seenTracks = <String>{};
+    return matchingEvents.where((event) {
+      if (seenTracks.contains(event.trackId)) return false;
+      seenTracks.add(event.trackId);
+      return true;
+    }).toList();
+  }
+
+  /// Get milestone achievements with progress
+  ListeningMilestones getMilestones() {
+    final totalPlays = _events.length;
+    final totalHoursValue = getTotalListeningTime().inMinutes / 60.0;
+    final streak = getStreakInfo();
+    final uniqueArtists = <String>{};
+    final uniqueAlbums = <String>{};
+    final uniqueTracks = <String>{};
+
+    for (final event in _events) {
+      uniqueTracks.add(event.trackId);
+      uniqueArtists.addAll(event.artists);
+      if (event.albumId != null) {
+        uniqueAlbums.add(event.albumId!);
+      }
+    }
+
+    final milestones = <ListeningMilestone>[
+      // Play count milestones - Voyage themed
+      ListeningMilestone(
+        id: 'plays_10',
+        name: 'Setting Sail',
+        description: 'Play 10 tracks',
+        iconType: IconType.plays,
+        targetValue: 10,
+        currentValue: totalPlays,
+      ),
+      ListeningMilestone(
+        id: 'plays_100',
+        name: 'Open Waters',
+        description: 'Play 100 tracks',
+        iconType: IconType.plays,
+        targetValue: 100,
+        currentValue: totalPlays,
+      ),
+      ListeningMilestone(
+        id: 'plays_500',
+        name: 'Seasoned Sailor',
+        description: 'Play 500 tracks',
+        iconType: IconType.plays,
+        targetValue: 500,
+        currentValue: totalPlays,
+      ),
+      ListeningMilestone(
+        id: 'plays_1000',
+        name: 'Fleet Captain',
+        description: 'Play 1,000 tracks',
+        iconType: IconType.plays,
+        targetValue: 1000,
+        currentValue: totalPlays,
+      ),
+      ListeningMilestone(
+        id: 'plays_5000',
+        name: 'Admiral',
+        description: 'Play 5,000 tracks',
+        iconType: IconType.plays,
+        targetValue: 5000,
+        currentValue: totalPlays,
+      ),
+
+      // Hours milestones - Depth themed
+      ListeningMilestone(
+        id: 'hours_1',
+        name: 'First Tide',
+        description: 'Listen for 1 hour',
+        iconType: IconType.hours,
+        targetValue: 1,
+        currentValue: totalHoursValue.floor(),
+      ),
+      ListeningMilestone(
+        id: 'hours_10',
+        name: 'Ocean Current',
+        description: 'Listen for 10 hours',
+        iconType: IconType.hours,
+        targetValue: 10,
+        currentValue: totalHoursValue.floor(),
+      ),
+      ListeningMilestone(
+        id: 'hours_50',
+        name: 'Deep Sea Diver',
+        description: 'Listen for 50 hours',
+        iconType: IconType.hours,
+        targetValue: 50,
+        currentValue: totalHoursValue.floor(),
+      ),
+      ListeningMilestone(
+        id: 'hours_100',
+        name: 'Mariana Depths',
+        description: 'Listen for 100 hours',
+        iconType: IconType.hours,
+        targetValue: 100,
+        currentValue: totalHoursValue.floor(),
+      ),
+
+      // Streak milestones - Wind/Weather themed
+      ListeningMilestone(
+        id: 'streak_7',
+        name: 'Trade Winds',
+        description: '7-day listening streak',
+        iconType: IconType.streak,
+        targetValue: 7,
+        currentValue: streak.longestStreak,
+      ),
+      ListeningMilestone(
+        id: 'streak_30',
+        name: 'Steady Current',
+        description: '30-day listening streak',
+        iconType: IconType.streak,
+        targetValue: 30,
+        currentValue: streak.longestStreak,
+      ),
+      ListeningMilestone(
+        id: 'streak_100',
+        name: 'Eternal Voyage',
+        description: '100-day listening streak',
+        iconType: IconType.streak,
+        targetValue: 100,
+        currentValue: streak.longestStreak,
+      ),
+
+      // Artist milestones - Explorer themed
+      ListeningMilestone(
+        id: 'artists_10',
+        name: 'Port Explorer',
+        description: 'Listen to 10 different artists',
+        iconType: IconType.artists,
+        targetValue: 10,
+        currentValue: uniqueArtists.length,
+      ),
+      ListeningMilestone(
+        id: 'artists_50',
+        name: 'Island Hopper',
+        description: 'Listen to 50 different artists',
+        iconType: IconType.artists,
+        targetValue: 50,
+        currentValue: uniqueArtists.length,
+      ),
+      ListeningMilestone(
+        id: 'artists_100',
+        name: 'World Voyager',
+        description: 'Listen to 100 different artists',
+        iconType: IconType.artists,
+        targetValue: 100,
+        currentValue: uniqueArtists.length,
+      ),
+
+      // Album milestones - Treasure themed
+      ListeningMilestone(
+        id: 'albums_10',
+        name: 'Treasure Hunter',
+        description: 'Listen to tracks from 10 albums',
+        iconType: IconType.albums,
+        targetValue: 10,
+        currentValue: uniqueAlbums.length,
+      ),
+      ListeningMilestone(
+        id: 'albums_50',
+        name: 'Chest Collector',
+        description: 'Listen to tracks from 50 albums',
+        iconType: IconType.albums,
+        targetValue: 50,
+        currentValue: uniqueAlbums.length,
+      ),
+
+      // Track milestones - Shell/Pearl themed
+      ListeningMilestone(
+        id: 'tracks_50',
+        name: 'Shell Seeker',
+        description: 'Discover 50 unique tracks',
+        iconType: IconType.tracks,
+        targetValue: 50,
+        currentValue: uniqueTracks.length,
+      ),
+      ListeningMilestone(
+        id: 'tracks_200',
+        name: 'Pearl Diver',
+        description: 'Discover 200 unique tracks',
+        iconType: IconType.tracks,
+        targetValue: 200,
+        currentValue: uniqueTracks.length,
+      ),
+    ];
+
+    return ListeningMilestones(all: milestones);
+  }
+
+  /// Clear all analytics data
+  Future<void> clearAll() async {
+    _events.clear();
+    await _box?.delete(_eventsKey);
+    await _box?.delete(_streakKey);
+    debugPrint('ListeningAnalyticsService: Cleared all data');
+  }
+}

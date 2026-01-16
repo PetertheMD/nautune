@@ -19,6 +19,7 @@ import 'jellyfin/jellyfin_track.dart';
 import 'providers/demo_mode_provider.dart';
 import 'services/audio_player_service.dart';
 import 'services/bootstrap_service.dart';
+import 'services/listening_analytics_service.dart';
 import 'services/carplay_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/download_service.dart';
@@ -192,6 +193,13 @@ class NautuneAppState extends ChangeNotifier {
   List<JellyfinAlbum>? _mostPlayedAlbums;
   bool _isLoadingLongestTracks = false;
   List<JellyfinTrack>? _longestTracks;
+  bool _isLoadingDiscover = false;
+  List<JellyfinTrack>? _discoverTracks;
+  bool _isLoadingOnThisDay = false;
+  List<JellyfinTrack>? _onThisDayTracks;
+  bool _isLoadingRecommendations = false;
+  List<JellyfinTrack>? _recommendationTracks;
+  String? _recommendationSeedTrackName; // Name of track used for recommendations
   bool _isOfflineMode = false;  // Toggle between online and offline library
   bool _networkAvailable = true;  // Track network connectivity
   bool _handlingUnauthorizedSession = false;
@@ -365,6 +373,13 @@ class NautuneAppState extends ChangeNotifier {
   List<JellyfinAlbum>? get mostPlayedAlbums => _mostPlayedAlbums;
   bool get isLoadingLongestTracks => _isLoadingLongestTracks;
   List<JellyfinTrack>? get longestTracks => _longestTracks;
+  bool get isLoadingDiscover => _isLoadingDiscover;
+  List<JellyfinTrack>? get discoverTracks => _discoverTracks;
+  bool get isLoadingOnThisDay => _isLoadingOnThisDay;
+  List<JellyfinTrack>? get onThisDayTracks => _onThisDayTracks;
+  bool get isLoadingRecommendations => _isLoadingRecommendations;
+  List<JellyfinTrack>? get recommendationTracks => _recommendationTracks;
+  String? get recommendationSeedTrackName => _recommendationSeedTrackName;
   bool get isOfflineMode => _isOfflineMode;
 
   /// Get the appropriate repository based on offline mode.
@@ -1469,12 +1484,12 @@ class NautuneAppState extends ChangeNotifier {
           .timeout(const Duration(seconds: 30), onTimeout: () => debugPrint('⚠️ Genres load timed out')),
       _loadRecentlyPlayed(libraryId, forceRefresh: forceRefresh)
           .timeout(const Duration(seconds: 30), onTimeout: () => debugPrint('⚠️ RecentlyPlayed load timed out')),
-      _loadMostPlayedTracks(libraryId, forceRefresh: forceRefresh)
-          .timeout(const Duration(seconds: 30), onTimeout: () => debugPrint('⚠️ MostPlayedTracks load timed out')),
-      _loadMostPlayedAlbums(libraryId, forceRefresh: forceRefresh)
-          .timeout(const Duration(seconds: 30), onTimeout: () => debugPrint('⚠️ MostPlayedAlbums load timed out')),
-      _loadLongestTracks(libraryId, forceRefresh: forceRefresh)
-          .timeout(const Duration(seconds: 30), onTimeout: () => debugPrint('⚠️ LongestTracks load timed out')),
+      _loadDiscoverTracks(libraryId, forceRefresh: forceRefresh)
+          .timeout(const Duration(seconds: 30), onTimeout: () => debugPrint('⚠️ Discover load timed out')),
+      _loadOnThisDayTracks(libraryId, forceRefresh: forceRefresh)
+          .timeout(const Duration(seconds: 30), onTimeout: () => debugPrint('⚠️ OnThisDay load timed out')),
+      _loadRecommendations(libraryId, forceRefresh: forceRefresh)
+          .timeout(const Duration(seconds: 30), onTimeout: () => debugPrint('⚠️ Recommendations load timed out')),
     ], eagerError: false);
   }
 
@@ -2071,6 +2086,149 @@ class NautuneAppState extends ChangeNotifier {
     }
   }
 
+  Future<void> _loadDiscoverTracks(String libraryId, {bool forceRefresh = false}) async {
+    _isLoadingDiscover = true;
+    notifyListeners();
+
+    if (_isDemoMode) {
+      // In demo mode, shuffle some tracks as "discover"
+      _discoverTracks = _demoTracksFromIds(_demoRecentTrackIds.reversed.take(10).toList());
+      _isLoadingDiscover = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      // Get tracks with less than 3 plays (rarely played = discover)
+      _discoverTracks = await _jellyfinService.getLeastPlayedTracks(
+        libraryId: libraryId,
+        maxPlayCount: 3,
+        limit: 20,
+      );
+    } catch (error) {
+      debugPrint('Failed to load discover tracks: $error');
+      _discoverTracks = null;
+    } finally {
+      _isLoadingDiscover = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadOnThisDayTracks(String libraryId, {bool forceRefresh = false}) async {
+    _isLoadingOnThisDay = true;
+    notifyListeners();
+
+    if (_isDemoMode) {
+      _onThisDayTracks = _demoTracksFromIds(_demoRecentTrackIds.take(5).toList());
+      _isLoadingOnThisDay = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      // Get tracks from local analytics that were played on this day in previous years
+      final analyticsService = ListeningAnalyticsService();
+      final onThisDayEvents = analyticsService.getOnThisDayEvents();
+
+      if (onThisDayEvents.isEmpty) {
+        _onThisDayTracks = [];
+      } else {
+        // Get unique track IDs from the events
+        final trackIds = onThisDayEvents.map((e) => e.trackId).toSet().take(20).toList();
+
+        // Batch fetch all tracks at once for better performance
+        final tracks = await _jellyfinService.loadTracksByIds(trackIds);
+        _onThisDayTracks = tracks;
+      }
+    } catch (error) {
+      debugPrint('Failed to load on this day tracks: $error');
+      _onThisDayTracks = null;
+    } finally {
+      _isLoadingOnThisDay = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshDiscover() async {
+    final libraryId = selectedLibraryId;
+    if (libraryId != null) {
+      await _loadDiscoverTracks(libraryId, forceRefresh: true);
+    }
+  }
+
+  Future<void> refreshOnThisDay() async {
+    final libraryId = selectedLibraryId;
+    if (libraryId != null) {
+      await _loadOnThisDayTracks(libraryId, forceRefresh: true);
+    }
+  }
+
+  Future<void> _loadRecommendations(String libraryId, {bool forceRefresh = false}) async {
+    _isLoadingRecommendations = true;
+    notifyListeners();
+
+    if (_isDemoMode) {
+      _recommendationTracks = _demoTracksFromIds(_demoRecentTrackIds.take(10).toList());
+      _recommendationSeedTrackName = 'Demo Track';
+      _isLoadingRecommendations = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      // Get a seed track from recently played or most played
+      JellyfinTrack? seedTrack;
+
+      // Try recently played first
+      if (_recentlyPlayedTracks != null && _recentlyPlayedTracks!.isNotEmpty) {
+        seedTrack = _recentlyPlayedTracks!.first;
+      } else if (_recentTracks != null && _recentTracks!.isNotEmpty) {
+        seedTrack = _recentTracks!.first;
+      }
+
+      if (seedTrack == null) {
+        // No seed track available, try to get most played
+        final mostPlayed = await _jellyfinService.getMostPlayedTracks(
+          libraryId: libraryId,
+          limit: 1,
+        );
+        if (mostPlayed.isNotEmpty) {
+          seedTrack = mostPlayed.first;
+        }
+      }
+
+      if (seedTrack == null) {
+        _recommendationTracks = [];
+        _recommendationSeedTrackName = null;
+        return;
+      }
+
+      // Get instant mix based on the seed track
+      final recommendations = await _jellyfinService.getInstantMix(
+        itemId: seedTrack.id,
+        limit: 30,
+      );
+
+      // Filter out the seed track itself
+      _recommendationTracks = recommendations.where((t) => t.id != seedTrack!.id).take(20).toList();
+      _recommendationSeedTrackName = seedTrack.name;
+    } catch (error) {
+      debugPrint('Failed to load recommendations: $error');
+      _recommendationTracks = null;
+      _recommendationSeedTrackName = null;
+    } finally {
+      _isLoadingRecommendations = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshRecommendations() async {
+    final libraryId = selectedLibraryId;
+    if (libraryId != null) {
+      await _loadRecommendations(libraryId, forceRefresh: true);
+    }
+  }
+
   void clearLibrarySelection() {
     _session = _session?.copyWith(selectedLibraryId: null, selectedLibraryName: null);
     _albums = null;
@@ -2081,6 +2239,10 @@ class NautuneAppState extends ChangeNotifier {
     _mostPlayedTracks = null;
     _mostPlayedAlbums = null;
     _longestTracks = null;
+    _discoverTracks = null;
+    _onThisDayTracks = null;
+    _recommendationTracks = null;
+    _recommendationSeedTrackName = null;
     notifyListeners();
     if (_session != null) {
       _sessionStore.save(_session!);

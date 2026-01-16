@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../app_state.dart';
+import '../services/lyrics_service.dart';
 import '../services/playback_state_store.dart' show StreamingQuality;
 import '../jellyfin/jellyfin_album.dart';
 import '../jellyfin/jellyfin_artist.dart';
@@ -100,8 +101,10 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
   late TabController _tabController;
   List<_LyricLine>? _lyrics;
   bool _loadingLyrics = false;
+  String? _lyricsSource; // Track where lyrics came from
   late AudioPlayerService _audioService;
   late NautuneAppState _appState;
+  late LyricsService _lyricsService;
   List<Color>? _paletteColors;
 
   // Lyrics scrolling state
@@ -123,6 +126,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     // Get services from Provider
     _appState = Provider.of<NautuneAppState>(context, listen: false);
     _audioService = _appState.audioService;
+    _lyricsService = LyricsService(jellyfinService: _appState.jellyfinService);
 
     // Set up stream listeners only once
     if (_trackSub == null) {
@@ -302,34 +306,73 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     setState(() {
       _loadingLyrics = true;
       _lyrics = null;
+      _lyricsSource = null;
       _currentLyricIndex = -1;
     });
 
     try {
-      final jellyfinService = _appState.jellyfinService;
-      final lyrics = await jellyfinService.getLyrics(track.id);
+      final result = await _lyricsService.getLyrics(track);
 
       List<_LyricLine>? parsedLyrics;
-      if (lyrics != null && lyrics['Lyrics'] != null) {
-        final rawLyrics = lyrics['Lyrics'] as List<dynamic>;
-        parsedLyrics = rawLyrics
-            .map(
-              (line) => _LyricLine(
-                text: line['Text'] as String? ?? '',
-                startTicks: line['Start'] as int?,
-              ),
-            )
+      String? source;
+
+      if (result != null && result.isNotEmpty) {
+        parsedLyrics = result.lines
+            .map((line) => _LyricLine(
+                  text: line.text,
+                  startTicks: line.startTicks,
+                ))
             .toList();
+        source = result.source;
       }
 
       if (mounted) {
         setState(() {
           _lyrics = parsedLyrics;
+          _lyricsSource = source;
           _loadingLyrics = false;
         });
       }
     } catch (e) {
-      debugPrint('⚠️ Failed to fetch lyrics: $e');
+      debugPrint('Failed to fetch lyrics: $e');
+      if (mounted) {
+        setState(() {
+          _loadingLyrics = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshLyrics(JellyfinTrack track) async {
+    setState(() {
+      _loadingLyrics = true;
+    });
+
+    try {
+      final result = await _lyricsService.refreshLyrics(track);
+
+      List<_LyricLine>? parsedLyrics;
+      String? source;
+
+      if (result != null && result.isNotEmpty) {
+        parsedLyrics = result.lines
+            .map((line) => _LyricLine(
+                  text: line.text,
+                  startTicks: line.startTicks,
+                ))
+            .toList();
+        source = result.source;
+      }
+
+      if (mounted) {
+        setState(() {
+          _lyrics = parsedLyrics;
+          _lyricsSource = source;
+          _loadingLyrics = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to refresh lyrics: $e');
       if (mounted) {
         setState(() {
           _loadingLyrics = false;
@@ -892,6 +935,10 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
+              // Guard against too-small constraints (e.g., during window resize)
+              if (constraints.maxHeight < 200) {
+                return const SizedBox.shrink();
+              }
               return Column(
                 children: [
                   // Top section: Artwork and Track Info
@@ -1582,9 +1629,31 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            const SizedBox(height: 24),
+            OutlinedButton.icon(
+              onPressed: () => _refreshLyrics(track),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
+            ),
           ],
         ),
       );
+    }
+
+    // Source indicator for lyrics
+    String? sourceLabel;
+    if (_lyricsSource != null) {
+      switch (_lyricsSource) {
+        case 'jellyfin':
+          sourceLabel = 'From server';
+          break;
+        case 'lrclib':
+          sourceLabel = 'From LRCLIB';
+          break;
+        case 'lyricsovh':
+          sourceLabel = 'From lyrics.ovh';
+          break;
+      }
     }
 
     // Find current lyric based on position
@@ -1620,75 +1689,124 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
       }
     }
 
-    return NotificationListener<UserScrollNotification>(
-      onNotification: (notification) {
-        if (notification.direction != ScrollDirection.idle) {
-          _userIsScrolling = true;
-          _userScrollTimer?.cancel();
-          _userScrollTimer = Timer(const Duration(seconds: 2), () {
-            if (mounted) {
-              // Reset scrolling state after timeout
-              setState(() {
-                _userIsScrolling = false;
+    return Stack(
+      children: [
+        NotificationListener<UserScrollNotification>(
+          onNotification: (notification) {
+            if (notification.direction != ScrollDirection.idle) {
+              _userIsScrolling = true;
+              _userScrollTimer?.cancel();
+              _userScrollTimer = Timer(const Duration(seconds: 2), () {
+                if (mounted) {
+                  // Reset scrolling state after timeout
+                  setState(() {
+                    _userIsScrolling = false;
+                  });
+                }
               });
             }
-          });
-        }
-        return false;
-      },
-      child: SingleChildScrollView(
-        controller: _lyricsScrollController,
-        // Add large padding to allow scrolling top/bottom items to center
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 200),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: List.generate(_lyrics!.length, (index) {
-            final line = _lyrics![index];
-            final isCurrent = index == activeIndex;
-            final isPast = index < activeIndex;
+            return false;
+          },
+          child: SingleChildScrollView(
+            controller: _lyricsScrollController,
+            // Add large padding to allow scrolling top/bottom items to center
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 200),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: List.generate(_lyrics!.length, (index) {
+                final line = _lyrics![index];
+                final isCurrent = index == activeIndex;
+                final isPast = index < activeIndex;
 
-            return GestureDetector(
-              key: line.key, // Assign the GlobalKey here
-              onTap: () {
-                if (line.startTicks != null) {
-                  // Jellyfin ticks are 100ns units
-                  final microseconds = line.startTicks! ~/ 10;
-                  _audioService.seek(Duration(microseconds: microseconds));
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 200),
-                  style: theme.textTheme.titleLarge!.copyWith(
-                    color: isCurrent
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurfaceVariant.withValues(
-                            alpha: isPast ? 0.3 : 0.6,
-                          ),
-                    fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                    fontSize: isCurrent ? 28 : 20,
-                    height: 1.4,
-                    shadows: isCurrent
-                        ? [
-                            Shadow(
-                              color: theme.colorScheme.primary.withValues(
-                                alpha: 0.4,
+                return GestureDetector(
+                  key: line.key, // Assign the GlobalKey here
+                  onTap: () {
+                    if (line.startTicks != null) {
+                      // Jellyfin ticks are 100ns units
+                      final microseconds = line.startTicks! ~/ 10;
+                      _audioService.seek(Duration(microseconds: microseconds));
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 200),
+                      style: theme.textTheme.titleLarge!.copyWith(
+                        color: isCurrent
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant.withValues(
+                                alpha: isPast ? 0.3 : 0.6,
                               ),
-                              blurRadius: 12,
-                              offset: const Offset(0, 2),
-                            ),
-                          ]
-                        : [],
+                        fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                        fontSize: isCurrent ? 28 : 20,
+                        height: 1.4,
+                        shadows: isCurrent
+                            ? [
+                                Shadow(
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : [],
+                      ),
+                      textAlign: TextAlign.center,
+                      child: Text(line.text.isEmpty ? '♫' : line.text),
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                  child: Text(line.text.isEmpty ? '♫' : line.text),
+                );
+              }),
+            ),
+          ),
+        ),
+        // Source indicator and refresh button at bottom
+        if (sourceLabel != null)
+          Positioned(
+            bottom: 16,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.lyrics,
+                      size: 14,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      sourceLabel,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => _refreshLyrics(track),
+                      child: Icon(
+                        Icons.refresh,
+                        size: 16,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            );
-          }),
-        ),
-      ),
+            ),
+          ),
+      ],
     );
   }
 

@@ -89,6 +89,8 @@ class PlaybackState {
     this.autoCleanupDays = 30,
     // Streaming quality
     this.streamingQuality = StreamingQuality.original,
+    // Theme
+    this.themePaletteId = 'purple_ocean',
   });
 
   final String? currentTrackId;
@@ -119,6 +121,8 @@ class PlaybackState {
   final int autoCleanupDays;
   // Streaming quality
   final StreamingQuality streamingQuality;
+  // Theme
+  final String themePaletteId;
 
   bool get hasTrack => currentTrackId != null;
 
@@ -149,6 +153,7 @@ class PlaybackState {
     bool? autoCleanupEnabled,
     int? autoCleanupDays,
     StreamingQuality? streamingQuality,
+    String? themePaletteId,
   }) {
     return PlaybackState(
       currentTrackId: currentTrackId ?? this.currentTrackId,
@@ -177,6 +182,7 @@ class PlaybackState {
       autoCleanupEnabled: autoCleanupEnabled ?? this.autoCleanupEnabled,
       autoCleanupDays: autoCleanupDays ?? this.autoCleanupDays,
       streamingQuality: streamingQuality ?? this.streamingQuality,
+      themePaletteId: themePaletteId ?? this.themePaletteId,
     );
   }
 
@@ -208,6 +214,7 @@ class PlaybackState {
       'autoCleanupEnabled': autoCleanupEnabled,
       'autoCleanupDays': autoCleanupDays,
       'streamingQuality': streamingQuality.name,
+      'themePaletteId': themePaletteId,
     };
   }
 
@@ -251,6 +258,7 @@ class PlaybackState {
       autoCleanupEnabled: json['autoCleanupEnabled'] as bool? ?? false,
       autoCleanupDays: (json['autoCleanupDays'] as num?)?.toInt() ?? 30,
       streamingQuality: StreamingQualityExtension.fromString(json['streamingQuality'] as String?),
+      themePaletteId: json['themePaletteId'] as String? ?? 'purple_ocean',
     );
   }
 
@@ -285,6 +293,7 @@ class PlaybackState {
       autoCleanupEnabled: autoCleanupEnabled,
       autoCleanupDays: autoCleanupDays,
       streamingQuality: streamingQuality,
+      themePaletteId: themePaletteId, // Preserve theme preference
     );
   }
 

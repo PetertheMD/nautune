@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
@@ -11,6 +12,7 @@ import '../app_state.dart';
 import '../jellyfin/jellyfin_track.dart';
 import '../jellyfin/jellyfin_user.dart';
 import '../providers/session_provider.dart';
+import '../services/listening_analytics_service.dart';
 
 /// Computed artist stats from track play history
 class _ComputedArtistStats {
@@ -53,20 +55,180 @@ class _ComputedAlbumStats {
   });
 }
 
-/// Helper for aggregating album play counts
-class _AlbumAggregator {
-  final String? albumId;
-  final String name;
-  final String artistName;
-  final String? imageTag;
-  int playCount = 0;
+/// Input data for isolate stats computation
+class _StatsInput {
+  final List<Map<String, dynamic>> tracksJson;
 
-  _AlbumAggregator({
-    this.albumId,
-    required this.name,
-    required this.artistName,
-    this.imageTag,
+  _StatsInput(this.tracksJson);
+}
+
+/// Result from isolate stats computation
+class _StatsResult {
+  final int totalPlays;
+  final double totalHours;
+  final Map<String, int> genrePlayCounts;
+  final Duration? avgTrackLength;
+  final int? longestTrackIndex;
+  final int? shortestTrackIndex;
+  final int uniqueArtistsCount;
+  final int uniqueAlbumsCount;
+  final int uniqueTracksCount;
+  final double diversityScore;
+  final List<Map<String, dynamic>> topArtists; // name, playCount
+  final List<Map<String, dynamic>> topAlbums; // albumId, name, artistName, playCount, imageTag
+
+  _StatsResult({
+    required this.totalPlays,
+    required this.totalHours,
+    required this.genrePlayCounts,
+    this.avgTrackLength,
+    this.longestTrackIndex,
+    this.shortestTrackIndex,
+    required this.uniqueArtistsCount,
+    required this.uniqueAlbumsCount,
+    required this.uniqueTracksCount,
+    required this.diversityScore,
+    required this.topArtists,
+    required this.topAlbums,
   });
+}
+
+/// Top-level function for isolate computation
+_StatsResult _computeStatsIsolate(_StatsInput input) {
+  final tracks = input.tracksJson;
+
+  // Calculate totals
+  int totalPlays = 0;
+  int totalTicks = 0;
+  for (final track in tracks) {
+    final count = (track['playCount'] as int?) ?? 0;
+    totalPlays += count;
+    final runtime = track['runTimeTicks'] as int?;
+    if (runtime != null) {
+      totalTicks += (runtime * count);
+    }
+  }
+  final totalHours = totalTicks / (10000000 * 3600);
+
+  // Calculate genre breakdown
+  final genreMap = <String, int>{};
+  for (final track in tracks) {
+    final genres = (track['genres'] as List<dynamic>?)?.cast<String>() ?? [];
+    final playCount = (track['playCount'] as int?) ?? 1;
+    for (final genre in genres) {
+      genreMap[genre] = (genreMap[genre] ?? 0) + playCount;
+    }
+  }
+  final sortedGenres = genreMap.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  final topGenres = Map.fromEntries(sortedGenres.take(8));
+
+  // Track length stats
+  Duration? avgLength;
+  int? longestIndex;
+  int? shortestIndex;
+  final tracksWithRuntime = <int>[];
+  for (int i = 0; i < tracks.length; i++) {
+    if (tracks[i]['runTimeTicks'] != null) {
+      tracksWithRuntime.add(i);
+    }
+  }
+  if (tracksWithRuntime.isNotEmpty) {
+    int totalRuntime = 0;
+    int maxRuntime = 0;
+    int minRuntime = 0x7FFFFFFFFFFFFFFF;
+    for (final idx in tracksWithRuntime) {
+      final runtime = tracks[idx]['runTimeTicks'] as int;
+      totalRuntime += runtime;
+      if (runtime > maxRuntime) {
+        maxRuntime = runtime;
+        longestIndex = idx;
+      }
+      if (runtime < minRuntime) {
+        minRuntime = runtime;
+        shortestIndex = idx;
+      }
+    }
+    avgLength = Duration(microseconds: totalRuntime ~/ tracksWithRuntime.length ~/ 10);
+  }
+
+  // Diversity stats
+  final uniqueArtists = <String>{};
+  final uniqueAlbums = <String>{};
+  for (final track in tracks) {
+    final artists = (track['artists'] as List<dynamic>?)?.cast<String>() ?? [];
+    uniqueArtists.addAll(artists);
+    final album = track['album'] as String?;
+    if (album != null) {
+      uniqueAlbums.add(album);
+    }
+  }
+  final uniqueArtistsCount = uniqueArtists.length;
+  final uniqueAlbumsCount = uniqueAlbums.length;
+  final uniqueTracksCount = tracks.length;
+
+  double diversity = 0.0;
+  if (totalPlays > 0 && uniqueTracksCount > 0) {
+    final trackRatio = uniqueTracksCount / totalPlays;
+    final artistRatio = uniqueArtistsCount / uniqueTracksCount;
+    diversity = ((trackRatio + artistRatio) / 2 * 100).clamp(0, 100);
+  }
+
+  // Top artists
+  final artistPlayCounts = <String, int>{};
+  for (final track in tracks) {
+    final playCount = (track['playCount'] as int?) ?? 0;
+    final artists = (track['artists'] as List<dynamic>?)?.cast<String>() ?? [];
+    for (final artist in artists) {
+      artistPlayCounts[artist] = (artistPlayCounts[artist] ?? 0) + playCount;
+    }
+  }
+  final sortedArtists = artistPlayCounts.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  final topArtists = sortedArtists.take(10).map((e) => {
+    'name': e.key,
+    'playCount': e.value,
+  }).toList();
+
+  // Top albums
+  final albumPlayCounts = <String, Map<String, dynamic>>{};
+  for (final track in tracks) {
+    final albumName = track['album'] as String?;
+    if (albumName == null || albumName.isEmpty) continue;
+    final playCount = (track['playCount'] as int?) ?? 0;
+    final albumId = track['albumId'] as String?;
+    final key = albumId ?? albumName;
+
+    if (!albumPlayCounts.containsKey(key)) {
+      final artists = (track['artists'] as List<dynamic>?)?.cast<String>() ?? [];
+      albumPlayCounts[key] = {
+        'albumId': albumId,
+        'name': albumName,
+        'artistName': artists.isNotEmpty ? artists.first : 'Unknown',
+        'imageTag': track['albumPrimaryImageTag'],
+        'playCount': 0,
+      };
+    }
+    albumPlayCounts[key]!['playCount'] = (albumPlayCounts[key]!['playCount'] as int) + playCount;
+  }
+  final sortedAlbums = albumPlayCounts.values.toList()
+    ..sort((a, b) => (b['playCount'] as int).compareTo(a['playCount'] as int));
+  final topAlbums = sortedAlbums.take(10).toList();
+
+  return _StatsResult(
+    totalPlays: totalPlays,
+    totalHours: totalHours,
+    genrePlayCounts: topGenres,
+    avgTrackLength: avgLength,
+    longestTrackIndex: longestIndex,
+    shortestTrackIndex: shortestIndex,
+    uniqueArtistsCount: uniqueArtistsCount,
+    uniqueAlbumsCount: uniqueAlbumsCount,
+    uniqueTracksCount: uniqueTracksCount,
+    diversityScore: diversity,
+    topArtists: topArtists,
+    topAlbums: topAlbums,
+  );
 }
 
 class ProfileScreen extends StatefulWidget {
@@ -101,11 +263,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _uniqueTracksPlayed = 0;
   double _diversityScore = 0.0;
 
+  // Local analytics data
+  ListeningHeatmap? _heatmap;
+  ListeningStreak? _streak;
+  PeriodComparison? _weekComparison;
+  ListeningMilestones? _milestones;
+  int? _peakHour;
+
   @override
   void initState() {
     super.initState();
     _loadUserProfile();
     _loadStats();
+    _loadLocalAnalytics();
+  }
+
+  void _loadLocalAnalytics() {
+    final analytics = ListeningAnalyticsService();
+    if (!analytics.isInitialized) return;
+
+    setState(() {
+      _heatmap = analytics.getListeningHeatmap();
+      _streak = analytics.getStreakInfo();
+      _weekComparison = analytics.getWeekOverWeekComparison();
+      _milestones = analytics.getMilestones();
+      _peakHour = analytics.getPeakListeningHour();
+    });
   }
 
   Future<void> _loadUserProfile() async {
@@ -139,85 +322,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final results = await Future.wait([tracksFuture, recentFuture]);
 
       final tracks = results[0];
-      
-      // Calculate totals
-      int totalPlays = 0;
-      int totalTicks = 0;
-      for (final track in tracks) {
-        final count = track.playCount ?? 0;
-        totalPlays += count;
-        if (track.runTimeTicks != null) {
-          totalTicks += (track.runTimeTicks! * count);
-        }
-      }
 
-      // Convert ticks to hours (1 tick = 100ns)
-      final totalHours = totalTicks / (10000000 * 3600);
+      // Convert tracks to JSON maps for isolate (tracks are not sendable as-is)
+      final tracksJson = tracks.map((t) => {
+        'playCount': t.playCount,
+        'runTimeTicks': t.runTimeTicks,
+        'genres': t.genres,
+        'artists': t.artists,
+        'album': t.album,
+        'albumId': t.albumId,
+        'albumPrimaryImageTag': t.albumPrimaryImageTag,
+      }).toList();
 
-      // Calculate genre breakdown (weighted by play count)
-      final genreMap = <String, int>{};
-      for (final track in tracks) {
-        final genres = track.genres ?? [];
-        final playCount = track.playCount ?? 1;
-        for (final genre in genres) {
-          genreMap[genre] = (genreMap[genre] ?? 0) + playCount;
-        }
-      }
-      // Sort by count descending
-      final sortedGenres = genreMap.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      final topGenres = Map.fromEntries(sortedGenres.take(8));
+      // Run heavy computation in isolate
+      final statsResult = await compute(_computeStatsIsolate, _StatsInput(tracksJson));
 
-      // Calculate track length stats
-      Duration? avgLength;
-      JellyfinTrack? longest;
-      JellyfinTrack? shortest;
-      final tracksWithRuntime = tracks.where((t) => t.runTimeTicks != null).toList();
-      if (tracksWithRuntime.isNotEmpty) {
-        final totalRuntime = tracksWithRuntime.fold<int>(0, (sum, t) => sum + t.runTimeTicks!);
-        avgLength = Duration(microseconds: totalRuntime ~/ tracksWithRuntime.length ~/ 10);
-        tracksWithRuntime.sort((a, b) => (b.runTimeTicks ?? 0).compareTo(a.runTimeTicks ?? 0));
-        longest = tracksWithRuntime.first;
-        shortest = tracksWithRuntime.last;
-      }
-
-      // Calculate diversity stats
-      final uniqueArtists = <String>{};
-      final uniqueAlbums = <String>{};
-      for (final track in tracks) {
-        uniqueArtists.addAll(track.artists);
-        if (track.album != null) {
-          uniqueAlbums.add(track.album!);
-        }
-      }
-      final uniqueArtistsCount = uniqueArtists.length;
-      final uniqueAlbumsCount = uniqueAlbums.length;
-      final uniqueTracksCount = tracks.length;
-
-      // Diversity score: higher = more varied listening habits
-      double diversity = 0.0;
-      if (totalPlays > 0 && uniqueTracksCount > 0) {
-        final trackRatio = uniqueTracksCount / totalPlays;
-        final artistRatio = uniqueArtistsCount / uniqueTracksCount;
-        diversity = ((trackRatio + artistRatio) / 2 * 100).clamp(0, 100);
-      }
-
-      // Calculate top artists from track play counts
-      final artistPlayCounts = <String, int>{};
-      for (final track in tracks) {
-        final playCount = track.playCount ?? 0;
-        for (final artist in track.artists) {
-          artistPlayCounts[artist] = (artistPlayCounts[artist] ?? 0) + playCount;
-        }
-      }
-      final sortedArtists = artistPlayCounts.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      var computedTopArtists = sortedArtists
-          .take(10)
-          .map((e) => _ComputedArtistStats(name: e.key, playCount: e.value))
+      // Convert results back to proper types
+      var computedTopArtists = statsResult.topArtists
+          .map((a) => _ComputedArtistStats(
+                name: a['name'] as String,
+                playCount: a['playCount'] as int,
+              ))
           .toList();
 
-      // Look up artist images in parallel
+      // Look up artist images in parallel (must be on main thread for network)
       try {
         final artistLookups = await Future.wait(
           computedTopArtists.map((artist) =>
@@ -225,7 +353,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               libraryId: libraryId,
               query: artist.name,
             ).then((results) {
-              // Find exact match by name
               final match = results.where((a) =>
                 a.name.toLowerCase() == artist.name.toLowerCase()
               ).firstOrNull;
@@ -244,34 +371,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         debugPrint('Error looking up artist images: $e');
       }
 
-      // Calculate top albums from track play counts
-      final albumPlayCounts = <String, _AlbumAggregator>{};
-      for (final track in tracks) {
-        final albumName = track.album;
-        if (albumName == null || albumName.isEmpty) continue;
-        final playCount = track.playCount ?? 0;
-        final key = track.albumId ?? albumName; // Use albumId if available, else name
-
-        if (!albumPlayCounts.containsKey(key)) {
-          albumPlayCounts[key] = _AlbumAggregator(
-            albumId: track.albumId,
-            name: albumName,
-            artistName: track.artists.isNotEmpty ? track.artists.first : 'Unknown',
-            imageTag: track.albumPrimaryImageTag,
-          );
-        }
-        albumPlayCounts[key]!.playCount += playCount;
-      }
-      final sortedAlbums = albumPlayCounts.values.toList()
-        ..sort((a, b) => b.playCount.compareTo(a.playCount));
-      final computedTopAlbums = sortedAlbums
-          .take(10)
+      final computedTopAlbums = statsResult.topAlbums
           .map((a) => _ComputedAlbumStats(
-                albumId: a.albumId,
-                name: a.name,
-                artistName: a.artistName,
-                playCount: a.playCount,
-                imageTag: a.imageTag,
+                albumId: a['albumId'] as String?,
+                name: a['name'] as String,
+                artistName: a['artistName'] as String,
+                playCount: a['playCount'] as int,
+                imageTag: a['imageTag'] as String?,
               ))
           .toList();
 
@@ -281,16 +387,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _topAlbums = computedTopAlbums;
           _topArtists = computedTopArtists;
           _recentTracks = results[1];
-          _totalPlays = totalPlays;
-          _totalHours = totalHours;
-          _genrePlayCounts = topGenres;
-          _avgTrackLength = avgLength;
-          _longestTrack = longest;
-          _shortestTrack = shortest;
-          _uniqueArtistsPlayed = uniqueArtistsCount;
-          _uniqueAlbumsPlayed = uniqueAlbumsCount;
-          _uniqueTracksPlayed = uniqueTracksCount;
-          _diversityScore = diversity;
+          _totalPlays = statsResult.totalPlays;
+          _totalHours = statsResult.totalHours;
+          _genrePlayCounts = statsResult.genrePlayCounts;
+          _avgTrackLength = statsResult.avgTrackLength;
+          _longestTrack = statsResult.longestTrackIndex != null ? tracks[statsResult.longestTrackIndex!] : null;
+          _shortestTrack = statsResult.shortestTrackIndex != null ? tracks[statsResult.shortestTrackIndex!] : null;
+          _uniqueArtistsPlayed = statsResult.uniqueArtistsCount;
+          _uniqueAlbumsPlayed = statsResult.uniqueAlbumsCount;
+          _uniqueTracksPlayed = statsResult.uniqueTracksCount;
+          _diversityScore = statsResult.diversityScore;
           _statsLoading = false;
         });
 
@@ -476,6 +582,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   // Quick stats cards
                   _buildQuickStatsRow(theme),
                   const SizedBox(height: 24),
+
+                  // Listening Activity section (local analytics)
+                  if (_heatmap != null || _streak != null) ...[
+                    _buildSectionHeader(theme, 'Listening Activity', Icons.insights),
+                    const SizedBox(height: 12),
+                    _buildListeningActivitySection(theme),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Milestones section
+                  if (_milestones != null && _milestones!.all.isNotEmpty) ...[
+                    _buildSectionHeader(theme, 'Milestones', Icons.emoji_events),
+                    const SizedBox(height: 12),
+                    _buildMilestonesSection(theme),
+                    const SizedBox(height: 24),
+                  ],
 
                   // Top Tracks section
                   _buildSectionHeader(theme, 'Top Tracks', Icons.music_note),
@@ -1318,5 +1440,682 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }).toList(),
       ),
     );
+  }
+
+  Widget _buildListeningActivitySection(ThemeData theme) {
+    return Column(
+      children: [
+        // Streak and Week Comparison Row
+        if (_streak != null || _weekComparison != null)
+          Row(
+            children: [
+              if (_streak != null)
+                Expanded(child: _buildStreakCard(theme)),
+              if (_streak != null && _weekComparison != null)
+                const SizedBox(width: 12),
+              if (_weekComparison != null)
+                Expanded(child: _buildWeekComparisonCard(theme)),
+            ],
+          ),
+
+        if ((_streak != null || _weekComparison != null) && _heatmap != null)
+          const SizedBox(height: 16),
+
+        // Listening Heatmap
+        if (_heatmap != null)
+          _buildListeningHeatmap(theme),
+      ],
+    );
+  }
+
+  Widget _buildStreakCard(ThemeData theme) {
+    final streak = _streak!;
+    final isActive = streak.currentStreak > 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isActive
+              ? [
+                  Colors.orange.withValues(alpha: 0.2),
+                  Colors.deepOrange.withValues(alpha: 0.1),
+                ]
+              : [
+                  theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                  theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+                ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isActive
+              ? Colors.orange.withValues(alpha: 0.3)
+              : theme.colorScheme.outline.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isActive ? Icons.local_fire_department : Icons.local_fire_department_outlined,
+                color: isActive ? Colors.orange : theme.colorScheme.onSurfaceVariant,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Streak',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${streak.currentStreak}',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: isActive ? Colors.orange : theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  streak.currentStreak == 1 ? 'day' : 'days',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (streak.longestStreak > streak.currentStreak) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Best: ${streak.longestStreak} days',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+          if (streak.listenedToday) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Today',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeekComparisonCard(ThemeData theme) {
+    final comparison = _weekComparison!;
+    final playsChange = comparison.playsChangePercent;
+    final isUp = playsChange > 0;
+    final isDown = playsChange < 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.compare_arrows,
+                color: theme.colorScheme.primary,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'This Week',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${comparison.currentPeriodPlays}',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  'plays',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(
+                isUp ? Icons.trending_up : (isDown ? Icons.trending_down : Icons.trending_flat),
+                color: isUp ? Colors.green : (isDown ? Colors.red : theme.colorScheme.onSurfaceVariant),
+                size: 16,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                isUp
+                    ? '+${playsChange.toStringAsFixed(0)}%'
+                    : '${playsChange.toStringAsFixed(0)}%',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: isUp ? Colors.green : (isDown ? Colors.red : theme.colorScheme.onSurfaceVariant),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                ' vs last week',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListeningHeatmap(ThemeData theme) {
+    final heatmap = _heatmap!;
+    final dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.grid_on, color: theme.colorScheme.primary, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'When You Listen',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const Spacer(),
+              if (_peakHour != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Peak: ${_formatHour(_peakHour!)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Hour labels (0, 6, 12, 18)
+          Row(
+            children: [
+              const SizedBox(width: 24), // Space for day labels
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('12am', style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 10,
+                    )),
+                    Text('6am', style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 10,
+                    )),
+                    Text('12pm', style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 10,
+                    )),
+                    Text('6pm', style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 10,
+                    )),
+                    Text('11pm', style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 10,
+                    )),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Heatmap grid
+          ...List.generate(7, (dayIndex) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    child: Text(
+                      dayLabels[dayIndex],
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Row(
+                      children: List.generate(24, (hourIndex) {
+                        final intensity = heatmap.getIntensity(dayIndex, hourIndex);
+                        final count = heatmap.getCount(dayIndex, hourIndex);
+
+                        return Expanded(
+                          child: Tooltip(
+                            message: '$count plays',
+                            child: Container(
+                              height: 16,
+                              margin: const EdgeInsets.symmetric(horizontal: 0.5),
+                              decoration: BoxDecoration(
+                                color: intensity > 0
+                                    ? theme.colorScheme.primary.withValues(
+                                        alpha: 0.2 + (intensity * 0.8),
+                                      )
+                                    : theme.colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          const SizedBox(height: 12),
+
+          // Legend
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Less',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 10,
+                ),
+              ),
+              const SizedBox(width: 8),
+              ...List.generate(5, (index) {
+                final intensity = index / 4;
+                return Container(
+                  width: 16,
+                  height: 16,
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: BoxDecoration(
+                    color: intensity > 0
+                        ? theme.colorScheme.primary.withValues(
+                            alpha: 0.2 + (intensity * 0.8),
+                          )
+                        : theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                );
+              }),
+              const SizedBox(width: 8),
+              Text(
+                'More',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatHour(int hour) {
+    if (hour == 0) return '12am';
+    if (hour == 12) return '12pm';
+    if (hour < 12) return '${hour}am';
+    return '${hour - 12}pm';
+  }
+
+  Widget _buildMilestonesSection(ThemeData theme) {
+    final milestones = _milestones!;
+    final unlocked = milestones.unlocked;
+    final nextToUnlock = milestones.nextToUnlock;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Progress summary
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.amber.withValues(alpha: 0.2),
+                Colors.orange.withValues(alpha: 0.1),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.amber.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    '${milestones.unlockedCount}',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${milestones.unlockedCount} of ${milestones.totalCount} Unlocked',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: milestones.unlockedCount / milestones.totalCount,
+                        backgroundColor: Colors.amber.withValues(alpha: 0.2),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.amber),
+                        minHeight: 8,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Next milestone to unlock
+        if (nextToUnlock != null) ...[
+          const SizedBox(height: 16),
+          _buildNextMilestoneCard(theme, nextToUnlock),
+        ],
+
+        // Unlocked badges grid
+        if (unlocked.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text(
+            'Earned Badges',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: unlocked.map((m) => _buildMilestoneBadge(theme, m)).toList(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildNextMilestoneCard(ThemeData theme, ListeningMilestone milestone) {
+    final icon = _getMilestoneIcon(milestone.iconType);
+    final color = _getMilestoneColor(milestone.iconType);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: color.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color.withValues(alpha: 0.5), size: 24),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Next: ',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      milestone.name,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  milestone.description,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: milestone.progress,
+                          backgroundColor: color.withValues(alpha: 0.1),
+                          valueColor: AlwaysStoppedAnimation<Color>(color),
+                          minHeight: 6,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      '${milestone.currentValue}/${milestone.targetValue}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMilestoneBadge(ThemeData theme, ListeningMilestone milestone) {
+    final icon = _getMilestoneIcon(milestone.iconType);
+    final color = _getMilestoneColor(milestone.iconType);
+
+    return Tooltip(
+      message: milestone.description,
+      child: Container(
+        width: 72,
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color.withValues(alpha: 0.2),
+              color.withValues(alpha: 0.1),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: color.withValues(alpha: 0.4),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              milestone.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: 9,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getMilestoneIcon(IconType type) {
+    switch (type) {
+      case IconType.plays:
+        return Icons.sailing; // Nautical - sailing/voyage
+      case IconType.hours:
+        return Icons.waves; // Ocean depths
+      case IconType.streak:
+        return Icons.air; // Trade winds
+      case IconType.artists:
+        return Icons.explore; // Explorer/compass
+      case IconType.albums:
+        return Icons.diamond; // Treasure
+      case IconType.tracks:
+        return Icons.auto_awesome; // Pearls/shells sparkle
+    }
+  }
+
+  Color _getMilestoneColor(IconType type) {
+    switch (type) {
+      case IconType.plays:
+        return const Color(0xFF409CFF); // Ocean blue (Nautune theme)
+      case IconType.hours:
+        return const Color(0xFF7A3DF1); // Deep purple (Nautune theme)
+      case IconType.streak:
+        return Colors.orange; // Warm sunset
+      case IconType.artists:
+        return const Color(0xFF10B981); // Emerald sea
+      case IconType.albums:
+        return const Color(0xFFFFD700); // Gold treasure
+      case IconType.tracks:
+        return const Color(0xFFEC4899); // Pearl pink
+    }
   }
 }

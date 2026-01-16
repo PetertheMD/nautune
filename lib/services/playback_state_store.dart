@@ -132,6 +132,7 @@ class PlaybackStateStore {
     bool? autoCleanupEnabled,
     int? autoCleanupDays,
     StreamingQuality? streamingQuality,
+    String? themePaletteId,
   }) async {
     await update((state) {
       final mergedOffsets = Map<String, double>.from(state.scrollOffsets);
@@ -153,6 +154,7 @@ class PlaybackStateStore {
         autoCleanupEnabled: autoCleanupEnabled ?? state.autoCleanupEnabled,
         autoCleanupDays: autoCleanupDays ?? state.autoCleanupDays,
         streamingQuality: streamingQuality ?? state.streamingQuality,
+        themePaletteId: themePaletteId ?? state.themePaletteId,
       );
     });
   }

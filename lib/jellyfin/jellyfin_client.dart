@@ -894,6 +894,80 @@ class JellyfinClient {
     return items.whereType<Map<String, dynamic>>().toList();
   }
 
+  /// Fetch least played (discovery) items from Jellyfin
+  Future<List<Map<String, dynamic>>> fetchLeastPlayed(
+    JellyfinCredentials credentials, {
+    required String libraryId,
+    String itemType = 'Audio',
+    int maxPlayCount = 3,
+    int limit = 50,
+  }) async {
+    final queryParams = <String, String>{
+      'UserId': credentials.userId,
+      'ParentId': libraryId,
+      'IncludeItemTypes': itemType,
+      'SortBy': 'Random', // Randomize to discover different tracks each time
+      'Recursive': 'true',
+      'Limit': limit.toString(),
+      'Fields': 'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,MediaStreams,UserData,Genres',
+      'EnableImageTypes': 'Primary,Thumb',
+      'EnableUserData': 'true',
+    };
+
+    final uri = _buildUri('/Users/${credentials.userId}/Items', queryParams);
+    final response = await _robustClient.get(
+      uri,
+      headers: _defaultHeaders(credentials),
+    );
+
+    if (response.statusCode != 200) {
+      throw JellyfinRequestException(
+        'Unable to fetch least played: ${response.statusCode}',
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>?;
+    final items = data?['Items'] as List<dynamic>? ?? const [];
+
+    // Filter by play count client-side (Jellyfin doesn't have a MaxPlayCount filter)
+    return items.whereType<Map<String, dynamic>>().where((item) {
+      final userData = item['UserData'] as Map<String, dynamic>?;
+      final playCount = userData?['PlayCount'] as int? ?? 0;
+      return playCount < maxPlayCount;
+    }).toList();
+  }
+
+  /// Fetch a single item by ID
+  Future<Map<String, dynamic>?> fetchItem(
+    JellyfinCredentials credentials, {
+    required String itemId,
+  }) async {
+    final queryParams = <String, String>{
+      'UserId': credentials.userId,
+      'Fields': 'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,MediaStreams,UserData,Genres',
+      'EnableImageTypes': 'Primary,Thumb',
+      'EnableUserData': 'true',
+    };
+
+    final uri = _buildUri('/Users/${credentials.userId}/Items/$itemId', queryParams);
+    final response = await _robustClient.get(
+      uri,
+      headers: _defaultHeaders(credentials),
+    );
+
+    if (response.statusCode == 404) {
+      return null;
+    }
+
+    if (response.statusCode != 200) {
+      throw JellyfinRequestException(
+        'Unable to fetch item: ${response.statusCode}',
+      );
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>?;
+  }
+
   Future<List<JellyfinTrack>> fetchRecentlyAddedTracks({
     required JellyfinCredentials credentials,
     required String libraryId,

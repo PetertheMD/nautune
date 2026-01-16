@@ -1064,6 +1064,55 @@ class JellyfinService {
     )).toList();
   }
 
+  /// Get least played tracks for discovery
+  Future<List<JellyfinTrack>> getLeastPlayedTracks({
+    required String libraryId,
+    int maxPlayCount = 3,
+    int limit = 50,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    final tracksJson = await client.fetchLeastPlayed(
+      session.credentials,
+      libraryId: libraryId,
+      itemType: 'Audio',
+      maxPlayCount: maxPlayCount,
+      limit: limit,
+    );
+
+    return tracksJson.map((json) => JellyfinTrack.fromJson(
+      json,
+      serverUrl: session.serverUrl,
+      token: session.credentials.accessToken,
+      userId: session.credentials.userId,
+    )).toList();
+  }
+
+  /// Get a single track by ID
+  Future<JellyfinTrack?> getTrack(String trackId) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    final json = await client.fetchItem(
+      session.credentials,
+      itemId: trackId,
+    );
+
+    if (json == null) return null;
+
+    return JellyfinTrack.fromJson(
+      json,
+      serverUrl: session.serverUrl,
+      token: session.credentials.accessToken,
+      userId: session.credentials.userId,
+    );
+  }
+
   /// Get most played albums for a library
   Future<List<JellyfinAlbum>> getMostPlayedAlbums({
     required String libraryId,

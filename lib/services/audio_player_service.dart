@@ -14,6 +14,9 @@ import 'audio_cache_service.dart';
 import 'audio_handler.dart';
 import 'download_service.dart';
 import 'haptic_service.dart';
+import 'image_prewarm_service.dart';
+import 'listening_analytics_service.dart';
+import 'lyrics_service.dart';
 import 'playback_reporting_service.dart';
 import 'playback_state_store.dart';
 import '../models/playback_state.dart';
@@ -76,6 +79,13 @@ class AudioPlayerService {
 
   // Audio cache service for pre-caching album tracks
   final AudioCacheService _audioCacheService = AudioCacheService.instance;
+
+  // Image pre-warm service for pre-caching album art
+  ImagePrewarmService? _imagePrewarmService;
+
+  // Lyrics service for pre-fetching lyrics
+  LyricsService? _lyricsService;
+  bool _lyricsPrefetched = false;
 
   // Crossfade support
   AudioPlayer? _crossfadePlayer;
@@ -220,6 +230,8 @@ class AudioPlayerService {
 
   void setJellyfinService(JellyfinService service) {
     _jellyfinService = service;
+    _imagePrewarmService = ImagePrewarmService(jellyfinService: service);
+    _lyricsService = LyricsService(jellyfinService: service);
     _loadPlayStats();
     if (_pendingState != null && !_hasRestored) {
       unawaited(applyStoredState(_pendingState!));
@@ -423,6 +435,8 @@ class AudioPlayerService {
       _checkCrossfadeTrigger(position);
       // Check if we should pre-load next track
       _checkPreloadTrigger(position);
+      // Pre-fetch lyrics for next track at ~50% playback
+      _checkLyricsPrefetch(position);
     });
 
     // Duration updates
@@ -556,6 +570,9 @@ class AudioPlayerService {
           if (nextTrack.duration != null) {
             _durationController.add(nextTrack.duration);
           }
+
+          // Pre-warm album art for upcoming tracks
+          _imagePrewarmService?.prewarmQueueImages(_queue, _currentIndex);
 
           // Clear pre-load state
           _preloadedTrack = null;
@@ -750,10 +767,14 @@ class AudioPlayerService {
 
     _currentTrack = track;
     _currentTrackController.add(track);
+    _lyricsPrefetched = false; // Reset lyrics prefetch flag for new track
 
     // Track play count
     _playStats.incrementPlayCount(track.id);
     unawaited(_savePlayStats());
+
+    // Record to listening analytics for time-based stats
+    unawaited(ListeningAnalyticsService().recordPlay(track));
 
     // Immediately update duration from metadata to prevent UI lag
     if (track.duration != null) {
@@ -789,6 +810,9 @@ class AudioPlayerService {
 
     // Clear any pre-loaded track since queue changed
     _clearPreload();
+
+    // Pre-warm album art for upcoming tracks in queue
+    _imagePrewarmService?.prewarmQueueImages(_queue, _currentIndex);
 
     // Update audio handler with current track metadata immediately
     // This is critical for Lock Screen to update BEFORE audio starts
@@ -1651,6 +1675,26 @@ class AudioPlayerService {
 
     // Pre-load the next track
     await _preloadNextTrack(nextTrack);
+  }
+
+  /// Pre-fetch lyrics for the next track at ~50% playback
+  void _checkLyricsPrefetch(Duration position) async {
+    if (_lyricsPrefetched || _currentTrack == null || _lyricsService == null) return;
+
+    final duration = await _player.getDuration();
+    if (duration == null || duration.inMilliseconds == 0) return;
+
+    // Pre-fetch lyrics at 50% playback
+    final prefetchThreshold = duration * 0.5;
+    if (position < prefetchThreshold) return;
+
+    // Get next track
+    final nextTrack = _getNextTrack();
+    if (nextTrack == null) return;
+
+    _lyricsPrefetched = true;
+    debugPrint('Prefetching lyrics for next track: ${nextTrack.name}');
+    _lyricsService!.prefetchLyrics(nextTrack);
   }
 
   /// Pre-load the next track into _nextPlayer for instant playback
