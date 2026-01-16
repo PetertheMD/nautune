@@ -101,13 +101,8 @@ class _JellyfinWaveformState extends State<JellyfinWaveform> {
     final theme = Theme.of(context);
 
     if (_waveformImage == null) {
-      // Fallback: simple synthetic waveform
-      return CustomPaint(
-        painter: _SimpleWaveformPainter(
-          color: theme.colorScheme.secondary.withValues(alpha: 0.3),
-          progress: widget.progress,
-        ),
-      );
+      // No fallback bars - bioluminescent visualizer overlays on top anyway
+      return const SizedBox.shrink();
     }
 
     return CustomPaint(
@@ -169,44 +164,3 @@ class _WaveformImagePainter extends CustomPainter {
   }
 }
 
-class _SimpleWaveformPainter extends CustomPainter {
-  _SimpleWaveformPainter({
-    required this.color,
-    required this.progress,
-  });
-
-  final Color color;
-  final double progress;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.isEmpty) return;
-    
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    final barCount = 60;
-    final barWidth = size.width / barCount;
-
-    for (int i = 0; i < barCount; i++) {
-      final height = size.height * (0.3 + (i % 3) * 0.2);
-      final x = i * barWidth;
-      final rect = Rect.fromLTWH(
-        x,
-        (size.height - height) / 2,
-        barWidth * 0.7,
-        height,
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(2)),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_SimpleWaveformPainter oldDelegate) {
-    return oldDelegate.color != color || oldDelegate.progress != progress;
-  }
-}

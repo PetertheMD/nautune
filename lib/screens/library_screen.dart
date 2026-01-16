@@ -15,6 +15,7 @@ import '../jellyfin/jellyfin_playlist.dart';
 import '../jellyfin/jellyfin_track.dart';
 import '../models/download_item.dart';
 import '../repositories/music_repository.dart';
+import '../services/smart_playlist_service.dart';
 import '../widgets/add_to_playlist_dialog.dart';
 import '../widgets/jellyfin_image.dart';
 import '../widgets/now_playing_bar.dart';
@@ -1732,7 +1733,7 @@ class _OnThisDayShelf extends StatelessWidget {
   }
 }
 
-class _PlaylistsTab extends StatelessWidget {
+class _PlaylistsTab extends StatefulWidget {
   const _PlaylistsTab({
     required this.playlists,
     required this.isLoading,
@@ -1748,6 +1749,81 @@ class _PlaylistsTab extends StatelessWidget {
   final ScrollController scrollController;
   final VoidCallback onRefresh;
   final NautuneAppState appState;
+
+  @override
+  State<_PlaylistsTab> createState() => _PlaylistsTabState();
+}
+
+class _PlaylistsTabState extends State<_PlaylistsTab> {
+  Mood? _loadingMood;
+
+  // Convenience getters
+  List<JellyfinPlaylist>? get playlists => widget.playlists;
+  bool get isLoading => widget.isLoading;
+  Object? get error => widget.error;
+  ScrollController get scrollController => widget.scrollController;
+  VoidCallback get onRefresh => widget.onRefresh;
+  NautuneAppState get appState => widget.appState;
+
+  Future<void> _playMoodMix(Mood mood) async {
+    if (_loadingMood != null) return; // Already loading
+
+    setState(() => _loadingMood = mood);
+
+    try {
+      final libraryId = appState.selectedLibraryId;
+      if (libraryId == null) {
+        throw StateError('No library selected');
+      }
+
+      final service = SmartPlaylistService(
+        jellyfinService: appState.jellyfinService,
+        libraryId: libraryId,
+      );
+
+      final tracks = await service.generateMoodMix(mood, limit: 50);
+
+      if (tracks.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No ${mood.displayName.toLowerCase()} tracks found'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        // Play the mood mix
+        appState.audioService.playTrack(
+          tracks.first,
+          queueContext: tracks,
+          fromShuffle: true,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Playing ${mood.displayName} Mix - ${tracks.length} tracks'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Smart Mix error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate mix: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingMood = null);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1795,10 +1871,12 @@ class _PlaylistsTab extends StatelessWidget {
         itemBuilder: (context, index) {
           // Add header buttons as first items
           if (index == 0) {
+            final theme = Theme.of(context);
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.only(bottom: 16),
                   child: ElevatedButton.icon(
                     onPressed: () async {
                       await _showCreatePlaylistDialog(context);
@@ -1807,6 +1885,50 @@ class _PlaylistsTab extends StatelessWidget {
                     label: const Text('Create New Playlist'),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.all(16),
+                    ),
+                  ),
+                ),
+                // Smart Mix Section
+                const Divider(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Smart Mix',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Generate a playlist based on mood',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // 2x2 Mood Grid
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.6,
+                  children: Mood.values.map((mood) => _buildMoodCard(mood, theme)).toList(),
+                ),
+                const SizedBox(height: 16),
+                const Divider(),
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, bottom: 8),
+                  child: Text(
+                    'Your Playlists',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -1872,6 +1994,91 @@ class _PlaylistsTab extends StatelessWidget {
         },
       ),
     );
+  }
+
+  Widget _buildMoodCard(Mood mood, ThemeData theme) {
+    final isLoading = _loadingMood == mood;
+    final gradientColors = _getMoodGradient(mood, theme);
+
+    return Material(
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: isLoading ? null : () => _playMoodMix(mood),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: gradientColors,
+            ),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      mood.displayName,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  if (isLoading)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                mood.subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.8),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Color> _getMoodGradient(Mood mood, ThemeData theme) {
+    switch (mood) {
+      case Mood.chill:
+        return [
+          const Color(0xFF1A237E), // Deep blue
+          const Color(0xFF4FC3F7), // Light blue
+        ];
+      case Mood.energetic:
+        return [
+          const Color(0xFFE65100), // Deep orange
+          const Color(0xFFFFD54F), // Amber
+        ];
+      case Mood.melancholy:
+        return [
+          const Color(0xFF4A148C), // Deep purple
+          const Color(0xFF9575CD), // Light purple
+        ];
+      case Mood.upbeat:
+        return [
+          const Color(0xFFC2185B), // Pink
+          const Color(0xFFFFAB91), // Light coral
+        ];
+    }
   }
 
   Future<void> _showCreatePlaylistDialog(BuildContext context) async {

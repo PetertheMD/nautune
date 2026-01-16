@@ -27,6 +27,7 @@ import 'services/local_cache_service.dart';
 import 'services/playback_reporting_service.dart';
 import 'services/playback_state_store.dart';
 import 'services/playlist_sync_queue.dart';
+import 'services/power_mode_service.dart';
 import 'services/tray_service.dart';
 
 // Import SessionProvider - this is new
@@ -135,6 +136,10 @@ class NautuneAppState extends ChangeNotifier {
   bool _gaplessPlaybackEnabled = true;
   int _cacheTtlMinutes = 2; // User-configurable cache TTL
   StreamingQuality _streamingQuality = StreamingQuality.original; // Default to lossless
+  bool _visualizerEnabled = true; // Bioluminescent visualizer toggle
+  bool _visualizerEnabledByUser = true; // User's explicit preference (for Low Power Mode restore)
+  bool _visualizerSuppressedByLowPower = false; // Temporarily disabled by iOS Low Power Mode
+  StreamSubscription? _powerModeSub;
   SortOption _albumSortBy = SortOption.name;
   SortOrder _albumSortOrder = SortOrder.ascending;
   SortOption _artistSortBy = SortOption.name;
@@ -397,6 +402,7 @@ class NautuneAppState extends ChangeNotifier {
   bool get gaplessPlaybackEnabled => _gaplessPlaybackEnabled;
   int get cacheTtlMinutes => _cacheTtlMinutes;
   StreamingQuality get streamingQuality => _streamingQuality;
+  bool get visualizerEnabled => _visualizerEnabled;
   Duration get cacheTtl => Duration(minutes: _cacheTtlMinutes);
   SortOption get albumSortBy => _albumSortBy;
   SortOrder get albumSortOrder => _albumSortOrder;
@@ -679,6 +685,48 @@ class NautuneAppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set visualizer enabled/disabled (for battery savings)
+  void setVisualizerEnabled(bool enabled) {
+    // Track user's explicit preference for Low Power Mode restore
+    _visualizerEnabledByUser = enabled;
+
+    // Only update actual state if not in Low Power Mode
+    if (!PowerModeService.instance.isLowPowerMode) {
+      if (_visualizerEnabled == enabled) return;
+      _visualizerEnabled = enabled;
+      notifyListeners();
+    }
+
+    unawaited(_playbackStateStore.saveUiState(
+      visualizerEnabled: enabled,
+    ));
+  }
+
+  /// Initialize Low Power Mode listener (iOS only)
+  void _initPowerModeListener() {
+    _powerModeSub = PowerModeService.instance.lowPowerModeStream.listen((isLowPower) {
+      if (isLowPower) {
+        // Entering Low Power Mode - save current state and disable visualizer
+        if (_visualizerEnabled) {
+          _visualizerSuppressedByLowPower = true;
+          _visualizerEnabled = false;
+          notifyListeners();
+          debugPrint('🔋 Visualizer disabled (Low Power Mode)');
+        }
+      } else {
+        // Exiting Low Power Mode - restore if it was suppressed and user had it ON
+        if (_visualizerSuppressedByLowPower && _visualizerEnabledByUser) {
+          _visualizerEnabled = true;
+          _visualizerSuppressedByLowPower = false;
+          notifyListeners();
+          debugPrint('🔋 Visualizer restored (Low Power Mode off)');
+        } else {
+          _visualizerSuppressedByLowPower = false;
+        }
+      }
+    });
+  }
+
   /// Set album sort options and reload
   Future<void> setAlbumSort(SortOption sortBy, SortOrder sortOrder) async {
     if (_albumSortBy == sortBy && _albumSortOrder == sortOrder) return;
@@ -788,6 +836,10 @@ class NautuneAppState extends ChangeNotifier {
   Future<void> initialize() async {
     debugPrint('Nautune initialization started');
     await _ensureConnectivityMonitoring();
+
+    // Initialize iOS Low Power Mode detection
+    await PowerModeService.instance.initialize();
+    _initPowerModeListener();
     final storedPlaybackState = await _playbackStateStore.load();
     if (storedPlaybackState != null) {
       _showVolumeBar = storedPlaybackState.showVolumeBar;
@@ -798,6 +850,8 @@ class NautuneAppState extends ChangeNotifier {
       _restoredLibraryTabIndex = storedPlaybackState.libraryTabIndex;
       _gaplessPlaybackEnabled = storedPlaybackState.gaplessPlaybackEnabled;
       _streamingQuality = storedPlaybackState.streamingQuality;
+      _visualizerEnabled = storedPlaybackState.visualizerEnabled;
+      _visualizerEnabledByUser = storedPlaybackState.visualizerEnabled;
       _libraryScrollOffsets =
           Map<String, double>.from(storedPlaybackState.scrollOffsets);
       await _audioPlayerService.hydrateFromPersistence(storedPlaybackState);
@@ -2337,6 +2391,7 @@ class NautuneAppState extends ChangeNotifier {
     _connectivitySubscription?.cancel();
     _trayTrackSubscription?.cancel();
     _trayPlayingSubscription?.cancel();
+    _powerModeSub?.cancel();
     _demoModeProvider?.removeListener(_onDemoModeChanged);
     _sessionProvider?.removeListener(_onSessionChanged);
     super.dispose();

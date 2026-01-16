@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:audio_video_progress_bar/audio_video_progress_bar.dart';
+import 'package:provider/provider.dart';
 
 import '../jellyfin/jellyfin_track.dart';
 import '../screens/full_player_screen.dart';
@@ -7,6 +8,7 @@ import '../screens/queue_screen.dart';
 import '../services/audio_player_service.dart';
 import '../services/haptic_service.dart';
 import '../app_state.dart';
+import 'bioluminescent_visualizer.dart';
 import 'jellyfin_waveform.dart';
 
 /// Compact control surface that mirrors the full player while staying unobtrusive.
@@ -301,6 +303,9 @@ class _WaveformDisplayState extends State<_WaveformDisplay> {
     final borderRadius = BorderRadius.circular(12);
     final primaryTint = const Color(0xFFCCB8FF);
     final secondaryTint = const Color(0xFF5F3FAE);
+    final visualizerEnabled = context.select<NautuneAppState, bool>(
+      (state) => state.visualizerEnabled,
+    );
 
     return SizedBox(
       height: 40,
@@ -329,6 +334,14 @@ class _WaveformDisplayState extends State<_WaveformDisplay> {
                       height: 40,
                     ),
                   ),
+                  // Bioluminescent waves overlay (conditionally shown)
+                  if (visualizerEnabled)
+                    Positioned.fill(
+                      child: BioluminescentVisualizer(
+                        audioService: widget.audioService,
+                        opacity: 0.5,
+                      ),
+                    ),
                   Positioned.fill(
                     child: DecoratedBox(
                       decoration: BoxDecoration(

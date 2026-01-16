@@ -45,6 +45,22 @@ class PlayerSnapshot {
   });
 }
 
+/// Frequency bands extracted from visualizer for reactive effects.
+/// Bass, mid, and treble are normalized 0.0-1.0 values.
+class FrequencyBands {
+  final double bass;
+  final double mid;
+  final double treble;
+
+  const FrequencyBands({
+    required this.bass,
+    required this.mid,
+    required this.treble,
+  });
+
+  static const zero = FrequencyBands(bass: 0, mid: 0, treble: 0);
+}
+
 class AudioPlayerService {
   static const int _visualizerBarCount = 24;
 
@@ -59,6 +75,13 @@ class AudioPlayerService {
   PlayStatsAggregate _playStats = PlayStatsAggregate();
   Duration _accumulatedTime = Duration.zero;
   double _volume = 1.0;
+  double _lastVolume = 1.0;      // For detecting volume changes
+  double _volumePulse = 0.0;     // Decays when volume changes (creates pulse effect)
+
+  // Track-reactive visualizer parameters (from ReplayGain + genre)
+  double _trackIntensity = 0.5;   // From ReplayGain (0.3-1.0)
+  double _bassEmphasis = 0.5;     // From genre (0.2-0.8)
+  double _animationSpeed = 1.0;   // From genre (0.5-2.0)
 
   PlayStatsAggregate get playStats => _playStats;
   
@@ -87,6 +110,14 @@ class AudioPlayerService {
   LyricsService? _lyricsService;
   bool _lyricsPrefetched = false;
 
+  // Sleep timer support
+  Timer? _sleepTimer;
+  Duration _sleepTimeRemaining = Duration.zero;
+  int _sleepTracksRemaining = 0;
+  bool _isSleepTimerByTracks = false;
+  final _sleepTimerController = BehaviorSubject<Duration>.seeded(Duration.zero);
+  double _preSleepVolume = 1.0; // Store volume before fade
+
   // Crossfade support
   AudioPlayer? _crossfadePlayer;
   bool _crossfadeEnabled = false;
@@ -113,6 +144,7 @@ class AudioPlayerService {
   final StreamController<double> _volumeController = StreamController<double>.broadcast();
   final StreamController<bool> _shuffleController = StreamController<bool>.broadcast();
   final StreamController<List<double>> _visualizerController = StreamController<List<double>>.broadcast();
+  final _frequencyBandsController = BehaviorSubject<FrequencyBands>.seeded(FrequencyBands.zero);
   StreamSubscription<AudioInterruptionEvent>? _interruptionSubscription;
   StreamSubscription<void>? _becomingNoisySubscription;
 
@@ -259,7 +291,9 @@ class AudioPlayerService {
   Stream<double> get volumeStream => _volumeController.stream;
   Stream<bool> get shuffleStream => _shuffleController.stream;
   Stream<List<double>> get visualizerStream => _visualizerController.stream;
-  
+  Stream<Duration> get sleepTimerStream => _sleepTimerController.stream;
+  Stream<FrequencyBands> get frequencyBandsStream => _frequencyBandsController.stream;
+
   /// A stream that combines position, buffered position, and duration into a single snapshot.
   /// This is the "Silver Bullet" for smooth progress bars.
   Stream<PositionData> get positionDataStream =>
@@ -295,7 +329,10 @@ class AudioPlayerService {
   RepeatMode get repeatMode => _repeatMode;
   double get volume => _volume;
   bool get shuffleEnabled => _isShuffleEnabled;
-  
+  bool get isSleepTimerActive => _sleepTimer != null || _sleepTracksRemaining > 0;
+  Duration get sleepTimeRemaining => _sleepTimeRemaining;
+  int get sleepTracksRemaining => _sleepTracksRemaining;
+
   /// Updates the current track (e.g., for favorite status changes)
   void updateCurrentTrack(JellyfinTrack track) {
     debugPrint('🔄 AudioService: Updating current track to: ${track.name}, isFavorite=${track.isFavorite}');
@@ -490,6 +527,19 @@ class AudioPlayerService {
   }
   
   Future<void> _gaplessTransition() async {
+    // Check track-based sleep timer FIRST
+    if (_isSleepTimerByTracks && _sleepTracksRemaining > 0) {
+      _sleepTracksRemaining--;
+      debugPrint('😴 Sleep timer: $_sleepTracksRemaining tracks remaining');
+      _sleepTimerController.add(Duration(seconds: -_sleepTracksRemaining));
+
+      if (_sleepTracksRemaining <= 0) {
+        debugPrint('😴 Sleep timer complete - stopping playback');
+        _fadeOutAndStop();
+        return; // Don't transition to next track
+      }
+    }
+
     // Handle repeat one mode
     if (_repeatMode == RepeatMode.one && _currentTrack != null) {
       debugPrint('🔁 Repeating current track');
@@ -560,7 +610,8 @@ class AudioPlayerService {
           _currentIndex++;
           _currentTrack = nextTrack;
           _currentTrackController.add(_currentTrack);
-          
+          _analyzeTrackForVisualizer(nextTrack); // Configure visualizer for track
+
           // 7. Explicitly emit playing state since the listener may not fire
           //    if player was already playing when attached
           _playingController.add(true);
@@ -768,6 +819,7 @@ class AudioPlayerService {
     _currentTrack = track;
     _currentTrackController.add(track);
     _lyricsPrefetched = false; // Reset lyrics prefetch flag for new track
+    _analyzeTrackForVisualizer(track); // Configure visualizer for track
 
     // Track play count
     _playStats.incrementPlayCount(track.id);
@@ -1419,21 +1471,107 @@ class AudioPlayerService {
     }
   }
   
+  /// Analyze track metadata (ReplayGain + genres) to configure visualizer
+  void _analyzeTrackForVisualizer(JellyfinTrack? track) {
+    if (track == null) {
+      _trackIntensity = 0.5;
+      _bassEmphasis = 0.5;
+      _animationSpeed = 1.0;
+      return;
+    }
+
+    // ReplayGain loudness: negative = louder track
+    // Range typically -20dB to +10dB, we map to intensity 0.3-1.0
+    final gain = track.normalizationGain ?? 0.0;
+    _trackIntensity = (0.65 - (gain / 40)).clamp(0.3, 1.0);
+    // e.g., -6.5dB → 0.65 + 0.16 = 0.81 (high intensity)
+    // e.g., +5dB → 0.65 - 0.125 = 0.52 (moderate)
+
+    // Genre-based animation style
+    final genres = track.genres?.map((g) => g.toLowerCase()).toList() ?? [];
+
+    // Bass-heavy genres
+    const bassyGenres = ['edm', 'electronic', 'rock', 'metal', 'hip-hop', 'hip hop',
+                         'dubstep', 'drum and bass', 'house', 'techno', 'punk', 'rap'];
+    // Smooth genres
+    const smoothGenres = ['classical', 'jazz', 'ambient', 'folk', 'acoustic',
+                          'piano', 'orchestral', 'new age', 'chill', 'lounge'];
+
+    final isBassy = genres.any((g) => bassyGenres.any((b) => g.contains(b)));
+    final isSmooth = genres.any((g) => smoothGenres.any((s) => g.contains(s)));
+
+    if (isBassy) {
+      _bassEmphasis = 0.8;      // Strong bass response
+      _animationSpeed = 1.5;    // Faster, more energetic
+    } else if (isSmooth) {
+      _bassEmphasis = 0.25;     // Gentle bass
+      _animationSpeed = 0.6;    // Slower, flowing
+    } else {
+      _bassEmphasis = 0.5;      // Default
+      _animationSpeed = 1.0;
+    }
+
+    debugPrint('🎨 Visualizer: intensity=${_trackIntensity.toStringAsFixed(2)}, '
+        'bassEmphasis=$_bassEmphasis, speed=$_animationSpeed '
+        '(gain: ${gain.toStringAsFixed(1)}dB, genres: ${genres.take(3).join(", ")})');
+  }
+
   void _emitVisualizerFrame(Duration position) {
-    if (!_visualizerController.hasListener) return;
-    final t = position.inMilliseconds / 120.0;
+    final hasVisualizerListeners = _visualizerController.hasListener;
+    final hasFrequencyListeners = _frequencyBandsController.hasListener;
+    if (!hasVisualizerListeners && !hasFrequencyListeners) return;
+
+    // Time variable scaled by track's animation speed
+    final t = (position.inMilliseconds / 120.0) * _animationSpeed;
+
+    // Detect volume change and create pulse effect
+    if ((_volume - _lastVolume).abs() > 0.01) {
+      _volumePulse = 1.0; // Trigger pulse on volume change
+      _lastVolume = _volume;
+    }
+    _volumePulse *= 0.95; // Decay pulse
+
+    // Amplitude driven by track intensity (from ReplayGain)
+    final baseAmplitude = 0.15 + (_trackIntensity * 0.35);
+    final volumeMultiplier = baseAmplitude + (_volume * 0.5) + (_volumePulse * 0.2);
+
     final bars = List<double>.generate(_visualizerBarCount, (index) {
-      final wave = (sin(t + index * 0.45) + 1) * 0.5;
-      final ripple = (sin((t * 0.6) + index) + 1) * 0.25;
-      final value = ((wave * 0.7) + (ripple * 0.3)) * _volume;
+      // Different frequencies for bass/mid/treble regions
+      final freq = index < 8 ? 0.3 : (index < 16 ? 0.7 : 1.2);
+      final wave = (sin(t * freq + index * 0.45) + 1) * 0.5;
+      final ripple = (sin((t * freq * 0.6) + index) + 1) * 0.25;
+
+      // Bass region (0-7) gets genre-based emphasis
+      final bassBoost = index < 8 ? _bassEmphasis * 0.4 : 0.0;
+      final value = ((wave * 0.7) + (ripple * 0.3) + bassBoost) * volumeMultiplier;
       return value.clamp(0.0, 1.0);
     });
-    _visualizerController.add(bars);
+
+    if (hasVisualizerListeners) {
+      _visualizerController.add(bars);
+    }
+
+    // Extract frequency bands with genre emphasis
+    if (hasFrequencyListeners) {
+      final rawBass = bars.sublist(0, 8).reduce((a, b) => a + b) / 8;
+      final bass = (rawBass + _bassEmphasis * 0.2).clamp(0.0, 1.0);
+      final mid = bars.sublist(8, 16).reduce((a, b) => a + b) / 8;
+      final treble = bars.sublist(16, 24).reduce((a, b) => a + b) / 8;
+      _frequencyBandsController.add(FrequencyBands(
+        bass: bass,
+        mid: mid.clamp(0.0, 1.0),
+        treble: treble.clamp(0.0, 1.0),
+      ));
+    }
   }
 
   void _emitIdleVisualizer() {
-    if (!_visualizerController.hasListener) return;
-    _visualizerController.add(List<double>.filled(_visualizerBarCount, 0));
+    if (_visualizerController.hasListener) {
+      _visualizerController.add(List<double>.filled(_visualizerBarCount, 0));
+    }
+    if (_frequencyBandsController.hasListener) {
+      _frequencyBandsController.add(FrequencyBands.zero);
+    }
   }
 
   void _startPositionSaving() {
@@ -1839,9 +1977,91 @@ class AudioPlayerService {
     await _audioCacheService.cacheAlbumTracks(tracks);
   }
 
+  // ========== SLEEP TIMER METHODS ==========
+
+  /// Start sleep timer with duration (time-based)
+  void startSleepTimer(Duration duration) {
+    cancelSleepTimer();
+    _isSleepTimerByTracks = false;
+    _sleepTimeRemaining = duration;
+    _preSleepVolume = _volume;
+    _sleepTimerController.add(_sleepTimeRemaining);
+
+    debugPrint('😴 Sleep timer started: ${duration.inMinutes} minutes');
+
+    _sleepTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _sleepTimeRemaining -= const Duration(seconds: 1);
+      _sleepTimerController.add(_sleepTimeRemaining);
+
+      // Start fade-out in last 30 seconds
+      if (_sleepTimeRemaining.inSeconds <= 30 && _sleepTimeRemaining.inSeconds > 0) {
+        final fadeProgress = _sleepTimeRemaining.inSeconds / 30.0;
+        final fadedVolume = _preSleepVolume * fadeProgress;
+        _player.setVolume(fadedVolume.clamp(0.0, 1.0));
+      }
+
+      // Timer complete
+      if (_sleepTimeRemaining.inSeconds <= 0) {
+        debugPrint('😴 Sleep timer complete - stopping playback');
+        _fadeOutAndStop();
+      }
+    });
+  }
+
+  /// Start sleep timer by track count
+  void startSleepTimerByTracks(int trackCount) {
+    cancelSleepTimer();
+    _isSleepTimerByTracks = true;
+    _sleepTracksRemaining = trackCount;
+    _preSleepVolume = _volume;
+    // Broadcast a sentinel value indicating track-based timer
+    _sleepTimerController.add(Duration(seconds: -_sleepTracksRemaining));
+
+    debugPrint('😴 Sleep timer started: $trackCount tracks remaining');
+  }
+
+  /// Cancel sleep timer
+  void cancelSleepTimer() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepTimeRemaining = Duration.zero;
+    _sleepTracksRemaining = 0;
+    _isSleepTimerByTracks = false;
+    _sleepTimerController.add(Duration.zero);
+
+    // Restore volume if we were fading
+    if (_preSleepVolume != _volume) {
+      setVolume(_preSleepVolume);
+    }
+
+    debugPrint('😴 Sleep timer cancelled');
+  }
+
+  /// Fade out volume and stop playback
+  void _fadeOutAndStop() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepTimeRemaining = Duration.zero;
+    _sleepTracksRemaining = 0;
+    _isSleepTimerByTracks = false;
+    _sleepTimerController.add(Duration.zero);
+
+    // Final fade to zero and pause
+    _player.setVolume(0.0);
+    pause();
+
+    // Restore volume for next session
+    Future.delayed(const Duration(milliseconds: 500), () {
+      setVolume(_preSleepVolume);
+    });
+
+    debugPrint('😴 Sleep timer: Playback stopped, volume restored to $_preSleepVolume');
+  }
+
   void dispose() {
     _positionSaveTimer?.cancel();
     _crossfadeTimer?.cancel();
+    _sleepTimer?.cancel();
     _interruptionSubscription?.cancel();
     _becomingNoisySubscription?.cancel();
     _detachListeners();
@@ -1859,6 +2079,8 @@ class AudioPlayerService {
     _volumeController.close();
     _shuffleController.close();
     _visualizerController.close();
+    _sleepTimerController.close();
+    _frequencyBandsController.close();
   }
 }
 

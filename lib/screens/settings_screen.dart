@@ -43,6 +43,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildAppearanceSection(BuildContext context) {
     final theme = Theme.of(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final appState = Provider.of<NautuneAppState>(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -63,6 +64,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: Text(themeProvider.palette.name),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => _showThemePicker(context),
+        ),
+        ListTile(
+          leading: Icon(Icons.waves, color: theme.colorScheme.primary),
+          title: const Text('Animated Visualizer'),
+          subtitle: Text(
+            appState.visualizerEnabled
+                ? 'Bioluminescent waves enabled'
+                : 'Disabled for battery savings'
+          ),
+          trailing: Switch(
+            value: appState.visualizerEnabled,
+            onChanged: (value) {
+              appState.setVisualizerEnabled(value);
+            },
+          ),
         ),
       ],
     );
@@ -945,7 +961,7 @@ class _ThemePickerSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Padding(
+    return SingleChildScrollView(
       padding: EdgeInsets.only(
         top: 16,
         left: 16,

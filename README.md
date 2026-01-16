@@ -2,7 +2,25 @@
 
 **Nautune** (Poseidon Music Player) is a high-performance, visually stunning music client for Jellyfin. Built for speed, offline reliability, and an immersive listening experience.
 
-## 🚀 Latest Updates (v4.0.0)
+## 🚀 Latest Updates (v4.4.0)
+
+### 🎵 Real-Time FFT Audio Visualizer
+- **True Audio-Reactive Waves**: Visualizer now follows ACTUAL audio frequencies, not just metadata
+- **Linux**: PulseAudio system loopback captures real audio output via `parec`
+- **iOS**: AVAudioEngine + Accelerate vDSP FFT taps into app audio
+- **Bass SLAM**: Waves explode on bass drops with 30x boost
+- **Treble Shimmer**: High frequencies create sparkle effects with 80x boost
+- **Musical Smoothing**: Fast attack (0.6) / slow decay (0.12) for natural feel
+- **Low Latency**: 20ms audio capture for instant response
+
+### 🌊 Bioluminescent Visualizer
+- **Track-Reactive Animation**: Visualizer intensity and speed adapt to each track's loudness (ReplayGain) and genre
+- **Genre-Aware Styles**: EDM/rock tracks get energetic, bass-heavy waves; classical/jazz get smooth, flowing animation
+- **iOS Low Power Mode**: Visualizer automatically disables when Low Power Mode is on, restores when off
+- **Performance Optimized**: Reduced GPU work while maintaining full visual quality
+- **Bass Pulse Rings**: Expanding circles on heavy bass hits
+- **Sub-Bass Rumble**: Low frequency wobble effect
+- **Floating Particles**: 15 bioluminescent orbs that pulse with the beat
 
 ### 🎨 Theme System
 - **6 Beautiful Palettes**: Purple Ocean (default), Light Lavender, OLED Peach, Apricot Garden, Raspberry Sunset, Emerald Rose
@@ -47,6 +65,8 @@
 
 
 ## ✨ Key Features
+- **Real-Time FFT Visualizer**: True audio-reactive waves using PulseAudio (Linux) and AVAudioEngine (iOS)
+- **Bioluminescent Waves**: Track-reactive animation that adapts to loudness and genre
 - **Smart Lyrics**: Multi-source lyrics with sync, caching, and pre-fetching
 - **Theme Palettes**: 6 stunning themes including OLED dark and light mode
 - **Milestone Badges**: 20 nautical achievements to unlock as you listen
@@ -58,17 +78,28 @@
 - **CarPlay Support**: Take your Jellyfin library on the road with CarPlay interface
 - **Personalized Home**: Discover, On This Day, and For You recommendation shelves
 
+## 🔊 FFT Visualizer Platform Support
+
+| Platform | FFT Method | Status |
+|----------|-----------|--------|
+| Linux | PulseAudio `parec` loopback | ✅ Real FFT |
+| iOS | AVAudioEngine + vDSP | ✅ Real FFT |
+| macOS | Metadata fallback | 🔄 Fallback |
+| Android | Metadata fallback | 🔄 Fallback |
+| Windows | Metadata fallback | 🔄 Fallback |
+
 ## 🛠 Technical Foundation
 - **Framework**: Flutter (Dart)
-- **Local Storage**: Hive (NoSQL) for high-speed metadata caching.
-- **Audio Engine**: Audioplayers with custom platform-specific optimizations.
-- **Image Processing**: Material Color Utilities for vibrant palette generation.
+- **Local Storage**: Hive (NoSQL) for high-speed metadata caching
+- **Audio Engine**: Audioplayers with custom platform-specific optimizations
+- **FFT Processing**: Custom Cooley-Tukey implementation (Linux), Apple Accelerate vDSP (iOS)
+- **Image Processing**: Material Color Utilities for vibrant palette generation
 
 ## 📂 File Structure (Linux)
 Nautune follows a clean data structure on Linux for easy backups and management:
-- `~/Documents/nautune/`: Primary application data.
-- `~/Documents/nautune/downloads/`: High-quality offline audio files.
-- `~/Documents/nautune/downloads/artwork/`: Cached album and artist imagery.
+- `~/Documents/nautune/`: Primary application data
+- `~/Documents/nautune/downloads/`: High-quality offline audio files
+- `~/Documents/nautune/downloads/artwork/`: Cached album and artist imagery
 
 ---
 *Nautune - Rule the waves of your music library.*

@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_windows
+  battery_plus
   connectivity_plus
   flutter_secure_storage_windows
   screen_retriever_windows

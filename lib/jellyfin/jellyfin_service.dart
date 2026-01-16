@@ -1204,6 +1204,24 @@ class JellyfinService {
     );
   }
 
+  /// Get all tracks from the library with genre information for smart playlists
+  /// Returns a shuffled list of tracks with their genres
+  Future<List<JellyfinTrack>> getAllTracks({
+    required String libraryId,
+    int limit = 5000,
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    return await client.fetchAllTracks(
+      credentials: session.credentials,
+      libraryId: libraryId,
+      limit: limit,
+    );
+  }
+
   /// Fetch lyrics for a track
   /// Returns structured lyrics data if available, null otherwise
   Future<Map<String, dynamic>?> getLyrics(String itemId) async {

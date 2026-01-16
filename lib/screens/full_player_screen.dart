@@ -20,6 +20,7 @@ import '../jellyfin/jellyfin_artist.dart';
 import '../jellyfin/jellyfin_track.dart';
 import '../services/audio_player_service.dart';
 import '../widgets/add_to_playlist_dialog.dart';
+import '../widgets/bioluminescent_visualizer.dart';
 import '../widgets/jellyfin_image.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
@@ -300,6 +301,157 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
         Navigator.of(context).pushNamed('/mini');
       }
     }
+  }
+
+  void _showSleepTimerSheet() {
+    final theme = Theme.of(context);
+    showModalBottomSheet(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: StreamBuilder<Duration>(
+          stream: _audioService.sleepTimerStream,
+          builder: (context, snapshot) {
+            final remaining = snapshot.data ?? Duration.zero;
+            final isActive = remaining != Duration.zero;
+            final isTrackMode = remaining.isNegative;
+            final tracksRemaining = isTrackMode ? -remaining.inSeconds : 0;
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.nightlight_round,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Sleep Timer',
+                        style: theme.textTheme.titleLarge,
+                      ),
+                      const Spacer(),
+                      if (isActive)
+                        TextButton(
+                          onPressed: () {
+                            _audioService.cancelSleepTimer();
+                            Navigator.pop(sheetContext);
+                          },
+                          child: const Text('Cancel'),
+                        ),
+                    ],
+                  ),
+                ),
+                if (isActive) ...[
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.timer,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isTrackMode
+                              ? '$tracksRemaining track${tracksRemaining == 1 ? '' : 's'} remaining'
+                              : '${remaining.inMinutes}:${(remaining.inSeconds % 60).toString().padLeft(2, '0')} remaining',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  const Divider(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text(
+                      'Stop after time',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      _buildTimerChip(sheetContext, '15 min', const Duration(minutes: 15)),
+                      _buildTimerChip(sheetContext, '30 min', const Duration(minutes: 30)),
+                      _buildTimerChip(sheetContext, '45 min', const Duration(minutes: 45)),
+                      _buildTimerChip(sheetContext, '60 min', const Duration(minutes: 60)),
+                      _buildTimerChip(sheetContext, '90 min', const Duration(minutes: 90)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text(
+                      'Stop after tracks',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      _buildTrackChip(sheetContext, '1 track', 1),
+                      _buildTrackChip(sheetContext, '3 tracks', 3),
+                      _buildTrackChip(sheetContext, '5 tracks', 5),
+                      _buildTrackChip(sheetContext, '10 tracks', 10),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimerChip(BuildContext sheetContext, String label, Duration duration) {
+    return ActionChip(
+      label: Text(label),
+      onPressed: () {
+        _audioService.startSleepTimer(duration);
+        Navigator.pop(sheetContext);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sleep timer set for $label'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTrackChip(BuildContext sheetContext, String label, int tracks) {
+    return ActionChip(
+      label: Text(label),
+      onPressed: () {
+        _audioService.startSleepTimerByTracks(tracks);
+        Navigator.pop(sheetContext);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sleep timer set for $label'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _fetchLyrics(JellyfinTrack track) async {
@@ -632,6 +784,41 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                 tooltip: 'Mini Player',
                                 onPressed: _switchToMiniPlayer,
                               ),
+                            // Sleep Timer Button
+                            StreamBuilder<Duration>(
+                              stream: _audioService.sleepTimerStream,
+                              builder: (context, snapshot) {
+                                final remaining = snapshot.data ?? Duration.zero;
+                                final isActive = remaining != Duration.zero;
+                                return Stack(
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.nightlight_round,
+                                        color: isActive
+                                            ? theme.colorScheme.primary
+                                            : null,
+                                      ),
+                                      tooltip: 'Sleep Timer',
+                                      onPressed: _showSleepTimerSheet,
+                                    ),
+                                    if (isActive)
+                                      Positioned(
+                                        right: 4,
+                                        top: 4,
+                                        child: Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme.primary,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
                             IconButton(
                               icon: const Icon(Icons.more_vert),
                               onPressed: () {
@@ -1301,12 +1488,23 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                     ),
                   ),
 
-                  // Bottom section: Controls (pinned to bottom)
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
+                  // Bottom section: Controls with bioluminescent visualizer
+                  Stack(
                     children: [
-                      // Progress Slider
-                      StreamBuilder<PositionData>(
+                      // Bioluminescent waves behind controls (conditionally shown)
+                      if (_appState.visualizerEnabled)
+                        Positioned.fill(
+                          child: BioluminescentVisualizer(
+                            audioService: _audioService,
+                            opacity: 0.4,
+                          ),
+                        ),
+                      // Controls on top
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Progress Slider
+                          StreamBuilder<PositionData>(
                         stream: _audioService.positionDataStream,
                         builder: (context, snapshot) {
                           final positionData =
@@ -1581,6 +1779,8 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                           ),
                         ],
                       ),
+                    ],
+                  ),
                     ],
                   ),
                 ],
