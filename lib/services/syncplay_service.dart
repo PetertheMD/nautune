@@ -138,46 +138,54 @@ class SyncPlayService extends ChangeNotifier {
     _lastGroupId = groupId;
     _wasCaption = isCaptain;
 
-    await _client.joinGroup(
-      credentials: _credentials,
-      groupId: groupId,
-    );
-
-    // Refresh groups to get current participants after joining
-    await refreshGroups();
-
+    // Connect WebSocket FIRST to receive join broadcasts
     await _connectWebSocket();
 
-    // Initialize session state
-    final group = _availableGroups.firstWhere(
-      (g) => g.groupId == groupId,
-      orElse: () => SyncPlayGroup(
+    // Initialize session early so handlers work
+    _currentSession = SyncPlaySession(
+      group: SyncPlayGroup(
         groupId: groupId,
         groupName: 'Collaborative Playlist',
         participants: [],
         state: SyncPlayState.idle,
-      ),
-    );
-
-    _currentSession = SyncPlaySession(
-      group: group.copyWith(
-        participants: [
-          ...group.participants,
-          SyncPlayParticipant(
-            oderId: _deviceId,
-            userId: _userId,
-            username: _username,
-            userImageTag: _userImageTag,
-            isGroupLeader: isCaptain,
-          ),
-        ],
       ),
       queue: [],
       currentTrackIndex: -1,
       positionTicks: 0,
       role: isCaptain ? SyncPlayRole.captain : SyncPlayRole.sailor,
     );
+    _notifySessionChanged();
 
+    // NOW join the group (WebSocket already listening)
+    await _client.joinGroup(
+      credentials: _credentials,
+      groupId: groupId,
+    );
+
+    // Fetch full group state after join
+    await refreshGroups();
+
+    // Update session with fetched group info
+    final group = _availableGroups.firstWhere(
+      (g) => g.groupId == groupId,
+      orElse: () => _currentSession!.group,
+    );
+
+    _currentSession = _currentSession!.copyWith(
+      group: group.copyWith(
+        participants: [
+          ...group.participants,
+          if (!group.participants.any((p) => p.userId == _userId))
+            SyncPlayParticipant(
+              oderId: _deviceId,
+              userId: _userId,
+              username: _username,
+              userImageTag: _userImageTag,
+              isGroupLeader: isCaptain,
+            ),
+        ],
+      ),
+    );
     _notifySessionChanged();
     _startPingTimer();
   }
@@ -687,6 +695,10 @@ class SyncPlayService extends ChangeNotifier {
         _handleGroupLeft(message);
         break;
 
+      case SyncPlayMessageType.groupJoined:
+        _handleGroupJoined(message);
+        break;
+
       case SyncPlayMessageType.playlistItemAdded:
         _handlePlaylistItemAdded(message);
         break;
@@ -705,81 +717,93 @@ class SyncPlayService extends ChangeNotifier {
   }
 
   void _handleGroupStateUpdate(SyncPlayMessage message) {
-    if (_currentSession == null) return;
-
     final group = message.groupState;
-    if (group != null) {
-      // Preserve our local participants list if server didn't send any
-      // (server often sends state updates without participant info)
-      final participants = group.participants.isNotEmpty
-          ? group.participants
-          : _currentSession!.group.participants;
+    if (group == null) return;
 
-      // Also ensure we're in the participants list (we might have been dropped)
-      final selfInList = participants.any((p) => p.userId == _userId);
-      final updatedParticipants = selfInList
-          ? participants
-          : [
-              ...participants,
-              SyncPlayParticipant(
-                oderId: _deviceId,
-                userId: _userId,
-                username: _username,
-                userImageTag: _userImageTag,
-                isGroupLeader: _currentSession!.isCaptain,
-              ),
-            ];
-
-      // Check if the message contains queue data (sent on join)
-      final playQueue = message.playQueue;
-      List<SyncPlayTrack>? updatedQueue;
-      int? updatedTrackIndex;
-
-      if (playQueue != null) {
-        final items = playQueue['Items'] as List<dynamic>?;
-        if (items != null && items.isNotEmpty) {
-          updatedQueue = items
-              .whereType<Map<String, dynamic>>()
-              .map((item) => SyncPlayTrack.fromJson(
-                    item,
-                    serverUrl: _serverUrl,
-                    token: _credentials.accessToken,
-                    userId: _userId,
-                  ))
-              .toList();
-          updatedTrackIndex = playQueue['PlayingItemIndex'] as int?;
-          debugPrint('✅ Synced ${updatedQueue.length} tracks from server queue');
-        }
-      }
-
-      // Preserve groupId and groupName if server sends empty/null ones
-      // (server often sends state updates without group identity info)
-      // Check for empty, all zeros (null GUID), or shorter than valid UUID
-      final isInvalidGroupId = group.groupId.isEmpty ||
-          group.groupId == '00000000000000000000000000000000' ||
-          group.groupId == '00000000-0000-0000-0000-000000000000' ||
-          group.groupId.length < 32;
-      final preservedGroupId = isInvalidGroupId
-          ? _currentSession!.group.groupId
-          : group.groupId;
-      final preservedGroupName = group.groupName.isNotEmpty && group.groupName != 'Collaborative Playlist'
-          ? group.groupName
-          : _currentSession!.group.groupName;
-
-      _currentSession = _currentSession!.copyWith(
-        group: group.copyWith(
-          groupId: preservedGroupId,
-          groupName: preservedGroupName,
-          participants: updatedParticipants,
-        ),
-        isPaused: message.isPaused,
-        positionTicks: message.positionTicks ?? _currentSession!.positionTicks,
-        currentTrackIndex: updatedTrackIndex ?? message.playingItemIndex ?? _currentSession!.currentTrackIndex,
-        queue: updatedQueue ?? _currentSession!.queue,
-        lastSyncTime: DateTime.now(),
+    // If session not initialized yet, initialize it from this message
+    if (_currentSession == null) {
+      debugPrint('SyncPlay: Initializing session from group state update');
+      _currentSession = SyncPlaySession(
+        group: group,
+        queue: [],
+        currentTrackIndex: -1,
+        positionTicks: message.positionTicks ?? 0,
+        role: _wasCaption ? SyncPlayRole.captain : SyncPlayRole.sailor,
       );
       _notifySessionChanged();
+      // Continue to process the rest of the message
     }
+
+    // Preserve our local participants list if server didn't send any
+    // (server often sends state updates without participant info)
+    final participants = group.participants.isNotEmpty
+        ? group.participants
+        : _currentSession!.group.participants;
+
+    // Also ensure we're in the participants list (we might have been dropped)
+    final selfInList = participants.any((p) => p.userId == _userId);
+    final updatedParticipants = selfInList
+        ? participants
+        : [
+            ...participants,
+            SyncPlayParticipant(
+              oderId: _deviceId,
+              userId: _userId,
+              username: _username,
+              userImageTag: _userImageTag,
+              isGroupLeader: _currentSession!.isCaptain,
+            ),
+          ];
+
+    // Check if the message contains queue data (sent on join)
+    final playQueue = message.playQueue;
+    List<SyncPlayTrack>? updatedQueue;
+    int? updatedTrackIndex;
+
+    if (playQueue != null) {
+      final items = playQueue['Items'] as List<dynamic>?;
+      if (items != null && items.isNotEmpty) {
+        updatedQueue = items
+            .whereType<Map<String, dynamic>>()
+            .map((item) => SyncPlayTrack.fromJson(
+                  item,
+                  serverUrl: _serverUrl,
+                  token: _credentials.accessToken,
+                  userId: _userId,
+                ))
+            .toList();
+        updatedTrackIndex = playQueue['PlayingItemIndex'] as int?;
+        debugPrint('✅ Synced ${updatedQueue.length} tracks from server queue');
+      }
+    }
+
+    // Preserve groupId and groupName if server sends empty/null ones
+    // (server often sends state updates without group identity info)
+    // Check for empty, all zeros (null GUID), or shorter than valid UUID
+    final isInvalidGroupId = group.groupId.isEmpty ||
+        group.groupId == '00000000000000000000000000000000' ||
+        group.groupId == '00000000-0000-0000-0000-000000000000' ||
+        group.groupId.length < 32;
+    final preservedGroupId = isInvalidGroupId
+        ? _currentSession!.group.groupId
+        : group.groupId;
+    final preservedGroupName = group.groupName.isNotEmpty && group.groupName != 'Collaborative Playlist'
+        ? group.groupName
+        : _currentSession!.group.groupName;
+
+    _currentSession = _currentSession!.copyWith(
+      group: group.copyWith(
+        groupId: preservedGroupId,
+        groupName: preservedGroupName,
+        participants: updatedParticipants,
+      ),
+      isPaused: message.isPaused,
+      positionTicks: message.positionTicks ?? _currentSession!.positionTicks,
+      currentTrackIndex: updatedTrackIndex ?? message.playingItemIndex ?? _currentSession!.currentTrackIndex,
+      queue: updatedQueue ?? _currentSession!.queue,
+      lastSyncTime: DateTime.now(),
+    );
+    _notifySessionChanged();
   }
 
   void _handleUserJoined(SyncPlayMessage message) {
@@ -981,6 +1005,56 @@ class SyncPlayService extends ChangeNotifier {
       _notifySessionChanged();
     }
     // If already rejoining, let that process continue
+  }
+
+  void _handleGroupJoined(SyncPlayMessage message) {
+    debugPrint('SyncPlay: Group joined confirmation received');
+
+    // The groupJoined message often contains full group state
+    final groupState = message.groupState;
+    if (groupState != null) {
+      // If session not initialized yet, initialize it from this message
+      if (_currentSession == null) {
+        debugPrint('SyncPlay: Initializing session from groupJoined message');
+        _currentSession = SyncPlaySession(
+          group: groupState,
+          queue: [],
+          currentTrackIndex: -1,
+          positionTicks: message.positionTicks ?? 0,
+          role: _wasCaption ? SyncPlayRole.captain : SyncPlayRole.sailor,
+        );
+      } else {
+        _currentSession = _currentSession!.copyWith(
+          group: groupState,
+        );
+      }
+      _notifySessionChanged();
+    }
+
+    // Check if the message contains queue data
+    final playQueue = message.playQueue;
+    if (playQueue != null && _currentSession != null) {
+      final items = playQueue['Items'] as List<dynamic>?;
+      if (items != null && items.isNotEmpty) {
+        final updatedQueue = items
+            .whereType<Map<String, dynamic>>()
+            .map((item) => SyncPlayTrack.fromJson(
+                  item,
+                  serverUrl: _serverUrl,
+                  token: _credentials.accessToken,
+                  userId: _userId,
+                ))
+            .toList();
+        final trackIndex = playQueue['PlayingItemIndex'] as int?;
+
+        _currentSession = _currentSession!.copyWith(
+          queue: updatedQueue,
+          currentTrackIndex: trackIndex ?? _currentSession!.currentTrackIndex,
+        );
+        _notifySessionChanged();
+        debugPrint('✅ Synced ${updatedQueue.length} tracks from groupJoined message');
+      }
+    }
   }
 
   // ============ Ping Timer ============
