@@ -544,14 +544,23 @@ class _JoinCollabDialogState extends State<JoinCollabDialog> {
 
     // Try to parse as a link first, fall back to raw group ID
     final groupId = DeepLinkService.parseJoinLink(input) ?? input;
+    debugPrint('🔗 Joining collab playlist with groupId: $groupId');
 
     setState(() => _isJoining = true);
 
     try {
       final provider = context.read<SyncPlayProvider>();
       await provider.joinCollabPlaylist(groupId);
+      debugPrint('🔗 Successfully joined collab playlist');
 
       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Joined collaborative playlist!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
         Navigator.of(context).pop();
         // Navigate to the collab playlist screen
         Navigator.of(context).push(
@@ -561,6 +570,7 @@ class _JoinCollabDialogState extends State<JoinCollabDialog> {
         );
       }
     } catch (e) {
+      debugPrint('🔗 Failed to join collab playlist: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
