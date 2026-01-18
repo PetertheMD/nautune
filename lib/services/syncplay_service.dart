@@ -565,13 +565,16 @@ class SyncPlayService extends ChangeNotifier {
     _wasConnected = true;
   }
 
+  int _rejoinAttempts = 0;
+  static const int _maxRejoinAttempts = 5;
+
   /// Attempt to rejoin the last group after WebSocket reconnection
   Future<void> _attemptAutoRejoin() async {
     if (_isRejoining || _lastGroupId == null) return;
 
     _isRejoining = true;
     try {
-      debugPrint('Auto-rejoining group: $_lastGroupId (captain: $_wasCaption)');
+      debugPrint('Auto-rejoining group: $_lastGroupId (captain: $_wasCaption) attempt ${_rejoinAttempts + 1}');
 
       // Try to rejoin the group
       await _client.joinGroup(
@@ -584,7 +587,7 @@ class SyncPlayService extends ChangeNotifier {
         _currentSession = SyncPlaySession(
           group: SyncPlayGroup(
             groupId: _lastGroupId!,
-            groupName: 'Collaborative Playlist',
+            groupName: _currentSession?.group.groupName ?? 'Collaborative Playlist',
             participants: [
               SyncPlayParticipant(
                 oderId: _deviceId,
@@ -596,22 +599,45 @@ class SyncPlayService extends ChangeNotifier {
             ],
             state: SyncPlayState.idle,
           ),
-          queue: [],
-          currentTrackIndex: -1,
-          positionTicks: 0,
+          queue: _currentSession?.queue ?? [],
+          currentTrackIndex: _currentSession?.currentTrackIndex ?? -1,
+          positionTicks: _currentSession?.positionTicks ?? 0,
           role: _wasCaption ? SyncPlayRole.captain : SyncPlayRole.sailor,
         );
         _notifySessionChanged();
       }
 
+      _rejoinAttempts = 0; // Reset on success
       debugPrint('✅ Auto-rejoined SyncPlay group successfully');
     } catch (e) {
       debugPrint('Failed to auto-rejoin SyncPlay group: $e');
-      // Group may no longer exist - clear stored info
-      _lastGroupId = null;
-      _wasCaption = false;
+      _rejoinAttempts++;
+
+      if (_rejoinAttempts < _maxRejoinAttempts) {
+        // Retry with exponential backoff
+        final delay = Duration(seconds: 1 << _rejoinAttempts);
+        debugPrint('Will retry rejoin in ${delay.inSeconds}s (attempt ${_rejoinAttempts + 1}/$_maxRejoinAttempts)');
+        _isRejoining = false;
+        Future.delayed(delay, () {
+          if (_lastGroupId != null && !_isRejoining) {
+            _attemptAutoRejoin();
+          }
+        });
+        return;
+      } else {
+        // Max attempts reached - group likely no longer exists
+        debugPrint('Max rejoin attempts reached, group may no longer exist');
+        _lastGroupId = null;
+        _wasCaption = false;
+        _rejoinAttempts = 0;
+        _currentSession = null;
+        _trackAttributions.clear();
+        _notifySessionChanged();
+      }
     } finally {
-      _isRejoining = false;
+      if (_rejoinAttempts == 0 || _rejoinAttempts >= _maxRejoinAttempts) {
+        _isRejoining = false;
+      }
     }
   }
 
@@ -726,8 +752,26 @@ class SyncPlayService extends ChangeNotifier {
         }
       }
 
+      // Preserve groupId and groupName if server sends empty/null ones
+      // (server often sends state updates without group identity info)
+      // Check for empty, all zeros (null GUID), or shorter than valid UUID
+      final isInvalidGroupId = group.groupId.isEmpty ||
+          group.groupId == '00000000000000000000000000000000' ||
+          group.groupId == '00000000-0000-0000-0000-000000000000' ||
+          group.groupId.length < 32;
+      final preservedGroupId = isInvalidGroupId
+          ? _currentSession!.group.groupId
+          : group.groupId;
+      final preservedGroupName = group.groupName.isNotEmpty && group.groupName != 'Collaborative Playlist'
+          ? group.groupName
+          : _currentSession!.group.groupName;
+
       _currentSession = _currentSession!.copyWith(
-        group: group.copyWith(participants: updatedParticipants),
+        group: group.copyWith(
+          groupId: preservedGroupId,
+          groupName: preservedGroupName,
+          participants: updatedParticipants,
+        ),
         isPaused: message.isPaused,
         positionTicks: message.positionTicks ?? _currentSession!.positionTicks,
         currentTrackIndex: updatedTrackIndex ?? message.playingItemIndex ?? _currentSession!.currentTrackIndex,
@@ -910,16 +954,33 @@ class SyncPlayService extends ChangeNotifier {
   }
 
   void _handleGroupLeft(SyncPlayMessage message) {
-    // We were removed from the group - try to rejoin if we have stored session
+    // We were removed from the group - check why
+    final reason = message.data['Reason'] as String?;
+    debugPrint('GroupLeft received, reason: $reason');
+
+    // If captain explicitly stopped the group, don't try to rejoin
+    if (reason == 'GroupDestroyed' || reason == 'LibraryAccessDenied') {
+      debugPrint('Group was destroyed or access denied, clearing session');
+      _lastGroupId = null;
+      _wasCaption = false;
+      _currentSession = null;
+      _trackAttributions.clear();
+      _notifySessionChanged();
+      return;
+    }
+
+    // Otherwise try to rejoin (network issue, temporary disconnect, etc.)
     if (_lastGroupId != null && !_isRejoining) {
       debugPrint('GroupLeft received, attempting auto-rejoin...');
+      _rejoinAttempts = 0; // Reset attempts for fresh rejoin cycle
       _attemptAutoRejoin();
-    } else {
-      // No stored session or already rejoining - just clear
+    } else if (!_isRejoining) {
+      // No stored session - clear
       _currentSession = null;
       _trackAttributions.clear();
       _notifySessionChanged();
     }
+    // If already rejoining, let that process continue
   }
 
   // ============ Ping Timer ============

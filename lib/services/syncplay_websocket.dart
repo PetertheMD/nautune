@@ -141,8 +141,8 @@ class SyncPlayWebSocket {
   bool _isConnecting = false;
   bool _isDisposed = false;
   int _reconnectAttempts = 0;
-  static const int _maxReconnectAttempts = 5;
-  static const Duration _keepAliveInterval = Duration(seconds: 30);
+  static const int _maxReconnectAttempts = 10;
+  static const Duration _keepAliveInterval = Duration(seconds: 20);
 
   // Message stream
   final _messageController = StreamController<SyncPlayMessage>.broadcast();
