@@ -62,19 +62,24 @@ class DeepLinkService {
   }
 
   void _handleUri(Uri uri) {
-    debugPrint('DeepLinkService: Received link: $uri');
+    debugPrint('🔗 DeepLinkService: Received link: $uri');
+    debugPrint('🔗 DeepLinkService: scheme=${uri.scheme}, host=${uri.host}, path=${uri.path}');
+    debugPrint('🔗 DeepLinkService: pathSegments=${uri.pathSegments}');
 
     final groupId = _parseGroupId(uri);
+    debugPrint('🔗 DeepLinkService: Parsed groupId=$groupId');
+
     if (groupId != null) {
       // Store as pending in case no listeners are attached yet (iOS cold start race)
       // The stream listener might not be set up when this fires
       _pendingJoinGroupId = groupId;
+      debugPrint('🔗 DeepLinkService: Adding groupId to stream, hasListeners=${_syncPlayJoinController.hasListener}');
       _syncPlayJoinController.add(groupId);
-      debugPrint('DeepLinkService: SyncPlay join request for group: $groupId');
+      debugPrint('🔗 DeepLinkService: SyncPlay join request emitted for group: $groupId');
       return;
     }
 
-    debugPrint('DeepLinkService: Unhandled link scheme: ${uri.scheme}');
+    debugPrint('🔗 DeepLinkService: Unhandled link - could not parse groupId');
   }
 
   String? _parseGroupId(Uri uri) {

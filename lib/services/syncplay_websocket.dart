@@ -8,29 +8,27 @@ import '../jellyfin/jellyfin_credentials.dart';
 import '../models/syncplay_models.dart';
 
 /// WebSocket message types from Jellyfin SyncPlay
+///
+/// Jellyfin sends two main message types:
+/// - SyncPlayGroupUpdate: Contains Data.Type field with GroupUpdateType values
+/// - SyncPlayCommand: Contains Data.Command field with SendCommandType values
 enum SyncPlayMessageType {
-  // Session events
-  groupJoined,
-  groupLeft,
-  groupStateUpdate,
-  userJoined,
-  userLeft,
+  // Group update types (from Data.Type in SyncPlayGroupUpdate messages)
+  groupJoined,      // GroupJoined - sent when you successfully join a group
+  groupLeft,        // GroupLeft - sent when you leave or are removed from group
+  groupStateUpdate, // StateUpdate - sent for playback state changes
+  userJoined,       // UserJoined - sent when another user joins
+  userLeft,         // UserLeft - sent when another user leaves
+  playQueueUpdate,  // PlayQueue - sent when queue changes
+  notInGroup,       // NotInGroup - error: not in a group
+  groupDoesNotExist, // GroupDoesNotExist - error: group doesn't exist
+  libraryAccessDenied, // LibraryAccessDenied - error: no access
 
-  // Playback commands
-  playPause,
-  seek,
-  setPlaylistItem,
-
-  // Queue changes
-  queueUpdate,
-  playlistItemAdded,
-  playlistItemRemoved,
-  playlistItemMoved,
-
-  // Sync events
-  syncPlayReady,
-  syncPlayBuffering,
-  syncPlayPing,
+  // Playback commands (from Data.Command in SyncPlayCommand messages)
+  unpause,          // Unpause command
+  pause,            // Pause command
+  stop,             // Stop command
+  seek,             // Seek command
 
   // Keep-alive
   forceKeepAlive,
@@ -39,46 +37,70 @@ enum SyncPlayMessageType {
   // Unknown
   unknown;
 
-  static SyncPlayMessageType fromString(String? value) {
-    switch (value) {
-      case 'SyncPlayGroupJoined':
-        return SyncPlayMessageType.groupJoined;
-      case 'SyncPlayGroupLeft':
-        return SyncPlayMessageType.groupLeft;
-      case 'SyncPlayGroupState':
-      case 'SyncPlayGroupUpdate':
-        return SyncPlayMessageType.groupStateUpdate;
-      case 'SyncPlayUserJoined':
-        return SyncPlayMessageType.userJoined;
-      case 'SyncPlayUserLeft':
-        return SyncPlayMessageType.userLeft;
-      case 'SyncPlayPlayPause':
-        return SyncPlayMessageType.playPause;
-      case 'SyncPlaySeek':
-        return SyncPlayMessageType.seek;
-      case 'SyncPlaySetPlaylistItem':
-        return SyncPlayMessageType.setPlaylistItem;
-      case 'SyncPlayQueueUpdate':
-        return SyncPlayMessageType.queueUpdate;
-      case 'SyncPlayPlaylistItemAdded':
-        return SyncPlayMessageType.playlistItemAdded;
-      case 'SyncPlayPlaylistItemRemoved':
-        return SyncPlayMessageType.playlistItemRemoved;
-      case 'SyncPlayPlaylistItemMoved':
-        return SyncPlayMessageType.playlistItemMoved;
-      case 'SyncPlayReady':
-        return SyncPlayMessageType.syncPlayReady;
-      case 'SyncPlayBuffering':
-        return SyncPlayMessageType.syncPlayBuffering;
-      case 'SyncPlayPing':
-        return SyncPlayMessageType.syncPlayPing;
-      case 'ForceKeepAlive':
-        return SyncPlayMessageType.forceKeepAlive;
-      case 'KeepAlive':
-        return SyncPlayMessageType.keepAlive;
-      default:
-        return SyncPlayMessageType.unknown;
+  /// Parse from Jellyfin WebSocket message
+  ///
+  /// Jellyfin uses two-level structure:
+  /// - MessageType: "SyncPlayGroupUpdate" or "SyncPlayCommand"
+  /// - Data.Type or Data.Command: The actual sub-type
+  static SyncPlayMessageType fromJson(Map<String, dynamic> json) {
+    final messageType = json['MessageType'] as String?;
+    final data = json['Data'];
+
+    // Handle keep-alive messages
+    if (messageType == 'ForceKeepAlive') return SyncPlayMessageType.forceKeepAlive;
+    if (messageType == 'KeepAlive') return SyncPlayMessageType.keepAlive;
+
+    // Handle SyncPlayGroupUpdate messages - look at Data.Type
+    if (messageType == 'SyncPlayGroupUpdate') {
+      if (data is Map<String, dynamic>) {
+        final updateType = data['Type'] as String?;
+        switch (updateType) {
+          case 'UserJoined':
+            return SyncPlayMessageType.userJoined;
+          case 'UserLeft':
+            return SyncPlayMessageType.userLeft;
+          case 'GroupJoined':
+            return SyncPlayMessageType.groupJoined;
+          case 'GroupLeft':
+            return SyncPlayMessageType.groupLeft;
+          case 'StateUpdate':
+            return SyncPlayMessageType.groupStateUpdate;
+          case 'PlayQueue':
+            return SyncPlayMessageType.playQueueUpdate;
+          case 'NotInGroup':
+            return SyncPlayMessageType.notInGroup;
+          case 'GroupDoesNotExist':
+            return SyncPlayMessageType.groupDoesNotExist;
+          case 'LibraryAccessDenied':
+            return SyncPlayMessageType.libraryAccessDenied;
+          default:
+            debugPrint('SyncPlayWebSocket: Unknown GroupUpdate Type: $updateType');
+            return SyncPlayMessageType.unknown;
+        }
+      }
     }
+
+    // Handle SyncPlayCommand messages - look at Data.Command
+    if (messageType == 'SyncPlayCommand') {
+      if (data is Map<String, dynamic>) {
+        final command = data['Command'] as String?;
+        switch (command) {
+          case 'Unpause':
+            return SyncPlayMessageType.unpause;
+          case 'Pause':
+            return SyncPlayMessageType.pause;
+          case 'Stop':
+            return SyncPlayMessageType.stop;
+          case 'Seek':
+            return SyncPlayMessageType.seek;
+          default:
+            debugPrint('SyncPlayWebSocket: Unknown SyncPlayCommand: $command');
+            return SyncPlayMessageType.unknown;
+        }
+      }
+    }
+
+    return SyncPlayMessageType.unknown;
   }
 }
 
@@ -87,15 +109,20 @@ class SyncPlayMessage {
   const SyncPlayMessage({
     required this.type,
     required this.data,
+    required this.rawJson,
     this.messageId,
+    this.groupId,
   });
 
   final SyncPlayMessageType type;
   final Map<String, dynamic> data;
+  final Map<String, dynamic> rawJson;
   final String? messageId;
+  final String? groupId;
 
   factory SyncPlayMessage.fromJson(Map<String, dynamic> json) {
-    final messageType = json['MessageType'] as String?;
+    // Parse the type using the new two-level parser
+    final type = SyncPlayMessageType.fromJson(json);
 
     // Handle case where Data might not be a Map (can be int, String, List, etc.)
     final messageData = json['Data'];
@@ -109,15 +136,20 @@ class SyncPlayMessage {
       data = <String, dynamic>{};
     }
 
+    // Extract GroupId if present (SyncPlayGroupUpdate messages have it at Data.GroupId)
+    final groupId = data['GroupId'] as String?;
+
     return SyncPlayMessage(
-      type: SyncPlayMessageType.fromString(messageType),
+      type: type,
       data: data,
+      rawJson: json,
       messageId: json['MessageId'] as String?,
+      groupId: groupId,
     );
   }
 
   @override
-  String toString() => 'SyncPlayMessage(type: $type, data: $data)';
+  String toString() => 'SyncPlayMessage(type: $type, groupId: $groupId)';
 }
 
 /// Handles WebSocket connection to Jellyfin for real-time SyncPlay updates
@@ -233,6 +265,13 @@ class SyncPlayWebSocket {
     try {
       final jsonStr = message is String ? message : utf8.decode(message as List<int>);
       final json = jsonDecode(jsonStr) as Map<String, dynamic>;
+
+      // Debug: log raw MessageType to see what server sends
+      final rawType = json['MessageType'] as String?;
+      if (rawType != null && rawType.contains('SyncPlay')) {
+        debugPrint('SyncPlayWebSocket: RAW MessageType: $rawType');
+      }
+
       final syncPlayMessage = SyncPlayMessage.fromJson(json);
 
       // Handle keep-alive internally
@@ -362,52 +401,126 @@ class SyncPlayWebSocket {
 }
 
 /// Extension to extract typed data from SyncPlay messages
+///
+/// Jellyfin SyncPlayGroupUpdate messages have nested structure:
+/// - data['GroupId']: The group ID
+/// - data['Type']: The update type (UserJoined, StateUpdate, etc.)
+/// - data['Data']: The actual payload (nested)
 extension SyncPlayMessageExtensions on SyncPlayMessage {
-  /// Extract group state from the message data
+  /// Get the nested Data payload (for SyncPlayGroupUpdate messages)
+  Map<String, dynamic>? get nestedData {
+    final nested = data['Data'];
+    if (nested is Map<String, dynamic>) return nested;
+    if (nested is Map) return nested.map((k, v) => MapEntry(k.toString(), v));
+    return null;
+  }
+
+  /// Extract group info from GroupJoined messages
+  /// The nested Data contains GroupInfoDto
   SyncPlayGroup? get groupState {
-    if (type == SyncPlayMessageType.groupStateUpdate ||
-        type == SyncPlayMessageType.groupJoined) {
-      try {
-        return SyncPlayGroup.fromJson(data);
-      } catch (_) {
-        return null;
+    if (type == SyncPlayMessageType.groupJoined) {
+      final nested = nestedData;
+      if (nested != null) {
+        try {
+          return SyncPlayGroup.fromJson(nested);
+        } catch (e) {
+          debugPrint('SyncPlayMessage: Failed to parse groupState: $e');
+        }
       }
+    }
+    // For StateUpdate, the nested Data is GroupStateUpdate (different structure)
+    if (type == SyncPlayMessageType.groupStateUpdate) {
+      final nested = nestedData;
+      if (nested != null) {
+        try {
+          // GroupStateUpdate has State, PositionTicks, etc. - create minimal group
+          return SyncPlayGroup(
+            groupId: groupId ?? '',
+            groupName: '',
+            participants: [],
+            state: _parseState(nested['State'] as String?),
+          );
+        } catch (e) {
+          debugPrint('SyncPlayMessage: Failed to parse state update: $e');
+        }
+      }
+    }
+    return null;
+  }
+
+  SyncPlayState _parseState(String? state) {
+    switch (state) {
+      case 'Playing':
+        return SyncPlayState.playing;
+      case 'Paused':
+        return SyncPlayState.paused;
+      case 'Waiting':
+        return SyncPlayState.waiting;
+      default:
+        return SyncPlayState.idle;
+    }
+  }
+
+  /// Extract user ID from UserJoined/UserLeft messages
+  /// The nested Data is just a string (user ID)
+  String? get joinedUserId {
+    if (type == SyncPlayMessageType.userJoined ||
+        type == SyncPlayMessageType.userLeft) {
+      final nested = data['Data'];
+      if (nested is String) return nested;
     }
     return null;
   }
 
   /// Extract participant from user joined/left messages
+  /// Note: Jellyfin only sends user ID, not full participant info
   SyncPlayParticipant? get participant {
-    if (type == SyncPlayMessageType.userJoined ||
-        type == SyncPlayMessageType.userLeft) {
-      try {
-        return SyncPlayParticipant.fromJson(data);
-      } catch (_) {
-        return null;
-      }
+    final userId = joinedUserId;
+    if (userId != null) {
+      return SyncPlayParticipant(
+        oderId: '', // Not provided by server
+        userId: userId,
+        username: userId, // Will need to fetch from sessions
+        isGroupLeader: false,
+      );
     }
     return null;
   }
 
-  /// Extract position ticks from seek/play messages
+  /// Extract position ticks from StateUpdate messages
   int? get positionTicks {
+    // First check nested data (for StateUpdate)
+    final nested = nestedData;
+    if (nested != null) {
+      return nested['PositionTicks'] as int?;
+    }
+    // Fall back to top-level data (for SyncPlayCommand)
     return data['PositionTicks'] as int?;
   }
 
-  /// Extract whether playback is paused
+  /// Extract whether playback is paused from StateUpdate
   bool get isPaused {
+    final nested = nestedData;
+    if (nested != null) {
+      return nested['IsPaused'] as bool? ?? false;
+    }
     return data['IsPaused'] as bool? ?? false;
   }
 
   /// Extract playlist item ID from queue operations
   String? get playlistItemId {
+    final nested = nestedData;
+    if (nested != null) {
+      return nested['PlaylistItemId'] as String?;
+    }
     return data['PlaylistItemId'] as String?;
   }
 
   /// Extract item IDs from queue update
   /// Handles various formats: strings, integers, or objects with Id/ItemId fields
   List<String>? get itemIds {
-    final items = data['Items'] as List<dynamic>?;
+    final nested = nestedData ?? data;
+    final items = nested['Items'] as List<dynamic>?;
     if (items == null) return null;
 
     return items.map((item) {
@@ -425,23 +538,36 @@ extension SyncPlayMessageExtensions on SyncPlayMessage {
 
   /// Extract the new index for move operations
   int? get newIndex {
+    final nested = nestedData;
+    if (nested != null) {
+      return nested['NewIndex'] as int?;
+    }
     return data['NewIndex'] as int?;
   }
 
   /// Extract the playing item index
   int? get playingItemIndex {
+    final nested = nestedData;
+    if (nested != null) {
+      return nested['PlayingItemIndex'] as int?;
+    }
     return data['PlayingItemIndex'] as int?;
   }
 
-  /// Extract the play queue data from group state updates
+  /// Extract the play queue data from PlayQueue updates
   /// Returns the queue items and playing index if present
   Map<String, dynamic>? get playQueue {
-    // Check for PlayQueue in the data (Jellyfin sends this on join)
-    final playQueue = data['PlayQueue'] as Map<String, dynamic>?;
+    // For PlayQueue type, the nested Data IS the queue
+    if (type == SyncPlayMessageType.playQueueUpdate) {
+      return nestedData;
+    }
+
+    // Also check for PlayQueue in various locations
+    final nested = nestedData ?? data;
+    final playQueue = nested['PlayQueue'] as Map<String, dynamic>?;
     if (playQueue != null) return playQueue;
 
-    // Also check for PlayingQueue (alternative format)
-    final playingQueue = data['PlayingQueue'] as Map<String, dynamic>?;
+    final playingQueue = nested['PlayingQueue'] as Map<String, dynamic>?;
     if (playingQueue != null) return playingQueue;
 
     return null;

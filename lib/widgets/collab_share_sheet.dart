@@ -32,7 +32,6 @@ class CollabShareSheet extends StatelessWidget {
     return Consumer<SyncPlayProvider>(
       builder: (context, provider, _) {
         final shareLink = provider.shareLink;
-        final shareUrl = provider.shareUrl;
         final groupId = provider.groupId;
         final groupName = provider.groupName ?? 'Collaborative Playlist';
 
@@ -187,13 +186,13 @@ class CollabShareSheet extends StatelessWidget {
                 ),
               const SizedBox(height: 24),
 
-              // Action buttons
+              // Action buttons - use shareLink (nautune:// scheme) which works on iOS
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: shareUrl != null
-                          ? () => _copyToClipboard(context, shareUrl)
+                      onPressed: shareLink != null
+                          ? () => _copyToClipboard(context, shareLink)
                           : null,
                       icon: const Icon(Icons.link),
                       label: const Text('Copy Link'),
@@ -202,8 +201,8 @@ class CollabShareSheet extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: shareUrl != null
-                          ? () => _shareLink(context, shareUrl, groupName)
+                      onPressed: shareLink != null
+                          ? () => _shareLink(context, shareLink, groupName)
                           : null,
                       icon: const Icon(Icons.share),
                       label: const Text('Share'),

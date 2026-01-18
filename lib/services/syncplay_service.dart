@@ -94,10 +94,7 @@ class SyncPlayService extends ChangeNotifier {
         groupName: name,
       );
 
-      // After creating, we automatically join as leader
-      await _connectWebSocket();
-
-      // Fetch groups to find our new group
+      // Fetch groups to find our new group (REST call, no WebSocket needed yet)
       await refreshGroups();
 
       // Find the group we just created and join it
@@ -660,9 +657,10 @@ class SyncPlayService extends ChangeNotifier {
   }
 
   void _handleWebSocketMessage(SyncPlayMessage message) {
-    debugPrint('SyncPlay message: ${message.type}');
+    debugPrint('SyncPlay message: ${message.type} (groupId: ${message.groupId})');
 
     switch (message.type) {
+      // Group update types
       case SyncPlayMessageType.groupStateUpdate:
         _handleGroupStateUpdate(message);
         break;
@@ -675,43 +673,51 @@ class SyncPlayService extends ChangeNotifier {
         _handleUserLeft(message);
         break;
 
-      case SyncPlayMessageType.playPause:
-        _handlePlayPause(message);
-        break;
-
-      case SyncPlayMessageType.seek:
-        _handleSeek(message);
-        break;
-
-      case SyncPlayMessageType.queueUpdate:
-        _handleQueueUpdate(message);
-        break;
-
-      case SyncPlayMessageType.setPlaylistItem:
-        _handleSetPlaylistItem(message);
+      case SyncPlayMessageType.groupJoined:
+        _handleGroupJoined(message);
         break;
 
       case SyncPlayMessageType.groupLeft:
         _handleGroupLeft(message);
         break;
 
-      case SyncPlayMessageType.groupJoined:
-        _handleGroupJoined(message);
+      case SyncPlayMessageType.playQueueUpdate:
+        _handleQueueUpdate(message);
         break;
 
-      case SyncPlayMessageType.playlistItemAdded:
-        _handlePlaylistItemAdded(message);
+      case SyncPlayMessageType.notInGroup:
+        debugPrint('SyncPlay: Not in group error');
         break;
 
-      case SyncPlayMessageType.playlistItemRemoved:
-        _handlePlaylistItemRemoved(message);
+      case SyncPlayMessageType.groupDoesNotExist:
+        debugPrint('SyncPlay: Group does not exist');
+        _handleGroupLeft(message); // Treat as leaving
         break;
 
-      case SyncPlayMessageType.playlistItemMoved:
-        _handlePlaylistItemMoved(message);
+      case SyncPlayMessageType.libraryAccessDenied:
+        debugPrint('SyncPlay: Library access denied');
+        _handleGroupLeft(message); // Treat as leaving
+        break;
+
+      // Playback commands
+      case SyncPlayMessageType.unpause:
+        _handleUnpause(message);
+        break;
+
+      case SyncPlayMessageType.pause:
+        _handlePause(message);
+        break;
+
+      case SyncPlayMessageType.stop:
+        _handleStop(message);
+        break;
+
+      case SyncPlayMessageType.seek:
+        _handleSeek(message);
         break;
 
       default:
+        debugPrint('SyncPlay: Unhandled message type: ${message.type}');
         break;
     }
   }
@@ -807,26 +813,45 @@ class SyncPlayService extends ChangeNotifier {
   }
 
   void _handleUserJoined(SyncPlayMessage message) {
+    debugPrint('SyncPlay: User joined - userId: ${message.joinedUserId}');
+
     if (_currentSession == null) return;
 
-    final participant = message.participant;
-    if (participant != null) {
-      final participants = [..._currentSession!.group.participants, participant];
-      _currentSession = _currentSession!.copyWith(
-        group: _currentSession!.group.copyWith(participants: participants),
+    final userId = message.joinedUserId;
+    if (userId != null && userId != _userId) {
+      // Jellyfin only sends user ID, create minimal participant
+      // and refresh group to get full details
+      final participant = SyncPlayParticipant(
+        oderId: '',
+        userId: userId,
+        username: userId, // Will be updated after refresh
+        isGroupLeader: false,
       );
-      _notifySessionChanged();
-      _participantsController.add(participants);
+
+      // Add if not already in list
+      if (!_currentSession!.group.participants.any((p) => p.userId == userId)) {
+        final participants = [..._currentSession!.group.participants, participant];
+        _currentSession = _currentSession!.copyWith(
+          group: _currentSession!.group.copyWith(participants: participants),
+        );
+        _notifySessionChanged();
+        _participantsController.add(participants);
+      }
+
+      // Refresh to get full participant info
+      refreshGroups();
     }
   }
 
   void _handleUserLeft(SyncPlayMessage message) {
+    debugPrint('SyncPlay: User left - userId: ${message.joinedUserId}');
+
     if (_currentSession == null) return;
 
-    final participant = message.participant;
-    if (participant != null) {
+    final userId = message.joinedUserId;
+    if (userId != null) {
       final participants = _currentSession!.group.participants
-          .where((p) => p.userId != participant.userId)
+          .where((p) => p.userId != userId)
           .toList();
       _currentSession = _currentSession!.copyWith(
         group: _currentSession!.group.copyWith(participants: participants),
@@ -836,12 +861,38 @@ class SyncPlayService extends ChangeNotifier {
     }
   }
 
-  void _handlePlayPause(SyncPlayMessage message) {
+  void _handleUnpause(SyncPlayMessage message) {
     if (_currentSession == null) return;
 
+    debugPrint('SyncPlay: Unpause command received');
     _currentSession = _currentSession!.copyWith(
-      isPaused: message.isPaused,
+      isPaused: false,
       positionTicks: message.positionTicks ?? _currentSession!.positionTicks,
+      lastSyncTime: DateTime.now(),
+    );
+    _notifySessionChanged();
+  }
+
+  void _handlePause(SyncPlayMessage message) {
+    if (_currentSession == null) return;
+
+    debugPrint('SyncPlay: Pause command received');
+    _currentSession = _currentSession!.copyWith(
+      isPaused: true,
+      positionTicks: message.positionTicks ?? _currentSession!.positionTicks,
+      lastSyncTime: DateTime.now(),
+    );
+    _notifySessionChanged();
+  }
+
+  void _handleStop(SyncPlayMessage message) {
+    if (_currentSession == null) return;
+
+    debugPrint('SyncPlay: Stop command received');
+    _currentSession = _currentSession!.copyWith(
+      isPaused: true,
+      positionTicks: 0,
+      currentTrackIndex: -1,
       lastSyncTime: DateTime.now(),
     );
     _notifySessionChanged();
@@ -851,6 +902,7 @@ class SyncPlayService extends ChangeNotifier {
     if (_currentSession == null) return;
 
     final positionTicks = message.positionTicks;
+    debugPrint('SyncPlay: Seek command received - position: $positionTicks');
     if (positionTicks != null) {
       _currentSession = _currentSession!.copyWith(
         positionTicks: positionTicks,
@@ -887,94 +939,6 @@ class SyncPlayService extends ChangeNotifier {
       }
     }
     _notifySessionChanged();
-  }
-
-  void _handlePlaylistItemAdded(SyncPlayMessage message) {
-    if (_currentSession == null) return;
-
-    // The message should contain the new item data
-    final itemData = message.data['Item'] as Map<String, dynamic>?;
-    if (itemData != null) {
-      final newTrack = SyncPlayTrack.fromJson(
-        itemData,
-        serverUrl: _serverUrl,
-        token: _credentials.accessToken,
-        userId: _userId,
-      );
-
-      _currentSession = _currentSession!.copyWith(
-        queue: [..._currentSession!.queue, newTrack],
-      );
-      debugPrint('✅ Track added to queue: ${newTrack.track.name}');
-      _notifySessionChanged();
-    }
-  }
-
-  void _handlePlaylistItemRemoved(SyncPlayMessage message) {
-    if (_currentSession == null) return;
-
-    final playlistItemIds = message.data['PlaylistItemIds'] as List<dynamic>?;
-    if (playlistItemIds != null && playlistItemIds.isNotEmpty) {
-      final idsToRemove = playlistItemIds.map((id) => id.toString()).toSet();
-
-      _currentSession = _currentSession!.copyWith(
-        queue: _currentSession!.queue
-            .where((t) => !idsToRemove.contains(t.playlistItemId))
-            .toList(),
-      );
-      debugPrint('✅ Removed ${idsToRemove.length} tracks from queue');
-      _notifySessionChanged();
-    }
-  }
-
-  void _handlePlaylistItemMoved(SyncPlayMessage message) {
-    if (_currentSession == null) return;
-
-    final playlistItemId = message.playlistItemId;
-    final newIndex = message.newIndex;
-
-    if (playlistItemId != null && newIndex != null) {
-      final queue = List<SyncPlayTrack>.from(_currentSession!.queue);
-      final oldIndex = queue.indexWhere((t) => t.playlistItemId == playlistItemId);
-
-      if (oldIndex >= 0 && newIndex >= 0 && newIndex < queue.length) {
-        final item = queue.removeAt(oldIndex);
-        queue.insert(newIndex, item);
-
-        _currentSession = _currentSession!.copyWith(queue: queue);
-        debugPrint('✅ Moved track from $oldIndex to $newIndex');
-        _notifySessionChanged();
-      }
-    }
-  }
-
-  void _handleSetPlaylistItem(SyncPlayMessage message) {
-    if (_currentSession == null) return;
-
-    final playlistItemId = message.playlistItemId;
-    final playingIndex = message.playingItemIndex;
-
-    if (playingIndex != null) {
-      _currentSession = _currentSession!.copyWith(
-        currentTrackIndex: playingIndex,
-        positionTicks: 0,
-        lastSyncTime: DateTime.now(),
-      );
-      _notifySessionChanged();
-    } else if (playlistItemId != null) {
-      // Find index by playlist item ID
-      final index = _currentSession!.queue.indexWhere(
-        (t) => t.playlistItemId == playlistItemId,
-      );
-      if (index >= 0) {
-        _currentSession = _currentSession!.copyWith(
-          currentTrackIndex: index,
-          positionTicks: 0,
-          lastSyncTime: DateTime.now(),
-        );
-        _notifySessionChanged();
-      }
-    }
   }
 
   void _handleGroupLeft(SyncPlayMessage message) {
