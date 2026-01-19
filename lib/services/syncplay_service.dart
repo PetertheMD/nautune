@@ -202,7 +202,8 @@ class SyncPlayService extends ChangeNotifier {
       group: group.copyWith(
         participants: [
           ...group.participants,
-          if (!group.participants.any((p) => p.userId == _userId))
+          // Check both userId and deviceId for multi-device support
+          if (!group.participants.any((p) => p.userId == _userId && p.oderId == _deviceId))
             SyncPlayParticipant(
               oderId: _deviceId,
               userId: _userId,
@@ -789,7 +790,8 @@ class SyncPlayService extends ChangeNotifier {
         : _currentSession!.group.participants;
 
     // Also ensure we're in the participants list (we might have been dropped)
-    final selfInList = participants.any((p) => p.userId == _userId);
+    // Check both userId and deviceId for multi-device support
+    final selfInList = participants.any((p) => p.userId == _userId && p.oderId == _deviceId);
     final updatedParticipants = selfInList
         ? participants
         : [

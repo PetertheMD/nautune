@@ -502,7 +502,15 @@ extension SyncPlayMessageExtensions on SyncPlayMessage {
   bool get isPaused {
     final nested = nestedData;
     if (nested != null) {
-      return nested['IsPaused'] as bool? ?? false;
+      // First check explicit IsPaused field
+      final explicitPaused = nested['IsPaused'] as bool?;
+      if (explicitPaused != null) return explicitPaused;
+
+      // Derive from State field if IsPaused not provided
+      final state = nested['State'] as String?;
+      if (state != null) {
+        return state == 'Paused' || state == 'Idle' || state == 'Waiting';
+      }
     }
     return data['IsPaused'] as bool? ?? false;
   }
