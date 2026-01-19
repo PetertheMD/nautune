@@ -342,24 +342,31 @@ class SyncPlayService extends ChangeNotifier {
         mode: mode,
       );
 
-      // Optimistically update local queue
-      final wasEmpty = _currentSession!.queue.isEmpty;
-      final newTracks = tracks.map((track) => SyncPlayTrack(
-        track: track,
-        addedByUserId: _userId,
-        addedByUsername: _username,
-        addedByImageTag: _userImageTag,
-        playlistItemId: track.id, // Will be updated by server
-      )).toList();
+      // Optimistically update local queue (only if server hasn't already added via WebSocket)
+      // Check which tracks are NOT already in the queue by itemId
+      final existingItemIds = _currentSession!.queue.map((t) => t.track.id).toSet();
+      final tracksToAdd = tracks.where((t) => !existingItemIds.contains(t.id)).toList();
 
-      _currentSession = _currentSession!.copyWith(
-        queue: [..._currentSession!.queue, ...newTracks],
-        // Set first track as current if queue was empty
-        currentTrackIndex: wasEmpty ? 0 : _currentSession!.currentTrackIndex,
-      );
-      _notifySessionChanged();
+      if (tracksToAdd.isNotEmpty) {
+        final wasEmpty = _currentSession!.queue.isEmpty;
+        final newTracks = tracksToAdd.map((track) => SyncPlayTrack(
+          track: track,
+          addedByUserId: _userId,
+          addedByUsername: _username,
+          addedByImageTag: _userImageTag,
+          playlistItemId: track.id, // Will be updated by server
+        )).toList();
 
-      debugPrint('✅ Added ${tracks.length} tracks to SyncPlay queue');
+        _currentSession = _currentSession!.copyWith(
+          queue: [..._currentSession!.queue, ...newTracks],
+          // Set first track as current if queue was empty
+          currentTrackIndex: wasEmpty ? 0 : _currentSession!.currentTrackIndex,
+        );
+        _notifySessionChanged();
+        debugPrint('✅ Added ${tracksToAdd.length} tracks to SyncPlay queue (optimistic)');
+      } else {
+        debugPrint('✅ Tracks already in queue via server update, skipping optimistic add');
+      }
     } catch (e) {
       debugPrint('Failed to add tracks to queue: $e');
       rethrow;
