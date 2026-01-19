@@ -68,17 +68,17 @@ class JustWaveformBackend {
   WaveformData _convertWaveform(Waveform waveform) {
     final amplitudes = <double>[];
 
-    // Extract amplitudes from waveform data
-    // just_waveform stores min/max pairs per sample
+    // Check if 16-bit (flag 1) or 8-bit (flag 0)
+    final is16Bit = (waveform.flags & 1) != 0;
+    final normalizer = is16Bit ? 32768.0 : 128.0;
+
     for (int i = 0; i < waveform.length; i++) {
       final min = waveform.getPixelMin(i);
       final max = waveform.getPixelMax(i);
 
-      // Use the absolute max as amplitude (normalized to 0-1)
-      // The values are typically in range -128 to 127 for 8-bit or larger for 16-bit
       final absMin = min.abs();
       final absMax = max.abs();
-      final amplitude = (absMin > absMax ? absMin : absMax) / 128.0;
+      final amplitude = (absMin > absMax ? absMin : absMax) / normalizer;
       amplitudes.add(amplitude.clamp(0.0, 1.0));
     }
 
