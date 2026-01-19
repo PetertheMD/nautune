@@ -765,6 +765,9 @@ class SyncPlayService extends ChangeNotifier {
     final group = message.groupState;
     if (group == null) return;
 
+    // Store previous pause state BEFORE updating (for detecting state changes)
+    final wasPaused = _currentSession?.isPaused ?? true;
+
     // If session not initialized yet, initialize it from this message
     if (_currentSession == null) {
       debugPrint('SyncPlay: Initializing session from group state update');
@@ -849,6 +852,27 @@ class SyncPlayService extends ChangeNotifier {
       lastSyncTime: DateTime.now(),
     );
     _notifySessionChanged();
+
+    // Emit playback command if pause state changed (for sailors receiving groupStateUpdate)
+    final nowPaused = _currentSession!.isPaused;
+    if (wasPaused != nowPaused) {
+      debugPrint('SyncPlay: isPaused changed from $wasPaused to $nowPaused');
+
+      if (nowPaused) {
+        // Changed to paused
+        _playbackCommandController.add(SyncPlayCommand(
+          type: SyncPlayCommandType.pause,
+          positionTicks: _currentSession!.positionTicks,
+        ));
+      } else {
+        // Changed to playing
+        _playbackCommandController.add(SyncPlayCommand(
+          type: SyncPlayCommandType.play,
+          positionTicks: _currentSession!.positionTicks,
+          trackIndex: _currentSession!.currentTrackIndex,
+        ));
+      }
+    }
   }
 
   void _handleUserJoined(SyncPlayMessage message) {
@@ -877,8 +901,27 @@ class SyncPlayService extends ChangeNotifier {
         _participantsController.add(participants);
       }
 
-      // Refresh to get full participant info
-      refreshGroups();
+      // Refresh to get full participant info including imageTag
+      final currentGroupId = _currentSession?.group.groupId;
+      refreshGroups().then((_) {
+        // Find our group and update participants with full data (including imageTag)
+        if (_currentSession != null && currentGroupId != null) {
+          final updatedGroup = _availableGroups.firstWhere(
+            (g) => g.groupId == currentGroupId,
+            orElse: () => _currentSession!.group,
+          );
+
+          if (updatedGroup.participants.isNotEmpty) {
+            _currentSession = _currentSession?.copyWith(
+              group: _currentSession!.group.copyWith(
+                participants: updatedGroup.participants,
+              ),
+            );
+            _notifySessionChanged();
+            debugPrint('SyncPlay: Updated participants with full profile data');
+          }
+        }
+      });
     }
   }
 
