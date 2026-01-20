@@ -48,6 +48,7 @@ Future<void> _migrateHiveFiles() async {
     'nautune_playlists',
     'nautune_sync_queue',
     'nautune_search_history',
+    'nautune_analytics',
   ];
 
   // Check if any files already exist in the new location
@@ -403,6 +404,8 @@ class _NautuneAppState extends State<NautuneApp> with WidgetsBindingObserver, Wi
         // Use unawaited but the save is synchronous enough for iOS
         debugPrint('📱 App lifecycle: $state - saving playback state');
         unawaited(_savePlaybackState());
+        // Also ensure analytics data is persisted
+        unawaited(ListeningAnalyticsService().saveAnalytics());
         break;
         
       case AppLifecycleState.resumed:

@@ -306,6 +306,21 @@ class ListeningAnalyticsService {
     }
   }
 
+  /// Save all analytics data to persistent storage
+  /// Call this when the app is pausing to ensure data isn't lost
+  Future<void> saveAnalytics() async {
+    if (!_initialized) return;
+    try {
+      await Future.wait([
+        _saveEvents(),
+        _saveRelaxModeStats(),
+      ]);
+      debugPrint('ListeningAnalyticsService: Analytics saved');
+    } catch (e) {
+      debugPrint('ListeningAnalyticsService: Error saving analytics: $e');
+    }
+  }
+
   Future<void> _loadRelaxModeStats() async {
     final raw = _box?.get(_relaxModeKey);
     if (raw == null) {
