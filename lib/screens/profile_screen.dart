@@ -13,6 +13,8 @@ import '../jellyfin/jellyfin_track.dart';
 import '../jellyfin/jellyfin_user.dart';
 import '../providers/session_provider.dart';
 import '../services/listening_analytics_service.dart';
+import '../services/rewind_service.dart';
+import 'rewind_screen.dart';
 
 /// Computed artist stats from track play history
 class _ComputedArtistStats {
@@ -594,6 +596,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildHeroRing(theme),
                   const SizedBox(height: 24),
 
+                  // Rewind Banner (if data available)
+                  _buildRewindBanner(theme),
+
                   // 2. Key Metrics - Plays, Artists, Albums (3 cards)
                   _buildKeyMetricsRow(theme),
                   const SizedBox(height: 12),
@@ -831,6 +836,98 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRewindBanner(ThemeData theme) {
+    final rewindService = RewindService();
+    // Rewind always defaults to previous year (like Spotify Wrapped)
+    final previousYear = DateTime.now().year - 1;
+    final hasPreviousYearData = rewindService.hasEnoughData(previousYear);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => RewindScreen(initialYear: previousYear),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  theme.colorScheme.primary.withValues(alpha: 0.3),
+                  theme.colorScheme.tertiary.withValues(alpha: 0.2),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.4),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primary,
+                        theme.colorScheme.tertiary,
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.replay,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hasPreviousYearData
+                            ? 'Your $previousYear Rewind is Ready!'
+                            : 'Your $previousYear Rewind',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        hasPreviousYearData
+                            ? 'See your top artists, albums & listening personality'
+                            : 'Not enough listening data from $previousYear',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  color: theme.colorScheme.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

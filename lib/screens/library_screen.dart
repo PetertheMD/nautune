@@ -16,8 +16,10 @@ import '../jellyfin/jellyfin_playlist.dart';
 import '../jellyfin/jellyfin_track.dart';
 import '../models/download_item.dart';
 import '../repositories/music_repository.dart';
+import '../services/listenbrainz_service.dart';
 import '../services/share_service.dart';
 import '../services/smart_playlist_service.dart';
+import '../models/listenbrainz_config.dart';
 import '../widgets/add_to_playlist_dialog.dart';
 import '../widgets/jellyfin_image.dart';
 import '../widgets/now_playing_bar.dart';
@@ -1690,6 +1692,174 @@ class _RecommendationsShelf extends StatelessWidget {
   }
 }
 
+/// ListenBrainz Discovery shelf - shows personalized recommendations from ListenBrainz
+class _ListenBrainzDiscoveryShelf extends StatefulWidget {
+  const _ListenBrainzDiscoveryShelf({
+    required this.appState,
+  });
+
+  final NautuneAppState appState;
+
+  @override
+  State<_ListenBrainzDiscoveryShelf> createState() => _ListenBrainzDiscoveryShelfState();
+}
+
+class _ListenBrainzDiscoveryShelfState extends State<_ListenBrainzDiscoveryShelf> {
+  List<ListenBrainzRecommendation>? _recommendations;
+  List<JellyfinTrack>? _matchedTracks;
+  bool _isLoading = false;
+  bool _hasChecked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecommendations();
+  }
+
+  Future<void> _loadRecommendations() async {
+    final listenBrainz = ListenBrainzService();
+    // Only show if user has connected and enabled scrobbling
+    if (!listenBrainz.isConfigured || !listenBrainz.isScrobblingEnabled) {
+      setState(() => _hasChecked = true);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Fetch recommendations from ListenBrainz
+      final recs = await listenBrainz.getRecommendations(count: 25);
+      if (!mounted) return;
+
+      if (recs.isEmpty) {
+        setState(() {
+          _recommendations = [];
+          _matchedTracks = [];
+          _isLoading = false;
+          _hasChecked = true;
+        });
+        return;
+      }
+
+      // Match to Jellyfin library
+      final libraryId = widget.appState.selectedLibraryId;
+      if (libraryId != null) {
+        final matched = await listenBrainz.matchRecommendationsToLibrary(
+          recs,
+          widget.appState.jellyfinService,
+          libraryId: libraryId,
+        );
+
+        if (!mounted) return;
+
+        // Get tracks that are in library
+        final inLibraryRecs = matched.where((r) => r.isInLibrary).toList();
+        final tracks = <JellyfinTrack>[];
+
+        for (final rec in inLibraryRecs.take(10)) {
+          if (rec.jellyfinTrackId != null) {
+            try {
+              final track = await widget.appState.jellyfinService.getTrack(rec.jellyfinTrackId!);
+              if (track != null) {
+                tracks.add(track);
+              }
+            } catch (e) {
+              // Skip failed track fetches
+            }
+          }
+        }
+
+        if (!mounted) return;
+
+        setState(() {
+          _recommendations = matched;
+          _matchedTracks = tracks;
+          _isLoading = false;
+          _hasChecked = true;
+        });
+      } else {
+        setState(() {
+          _recommendations = recs;
+          _isLoading = false;
+          _hasChecked = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('ListenBrainz discovery error: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _hasChecked = true;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final listenBrainz = ListenBrainzService();
+
+    // Don't show if not connected or scrobbling is disabled
+    if ((!listenBrainz.isConfigured || !listenBrainz.isScrobblingEnabled) && _hasChecked) {
+      return const SizedBox.shrink();
+    }
+
+    // Don't show if no recommendations
+    if (_hasChecked && (_matchedTracks == null || _matchedTracks!.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+
+    final hasData = _matchedTracks != null && _matchedTracks!.isNotEmpty;
+    final inLibraryCount = _recommendations?.where((r) => r.isInLibrary).length ?? 0;
+    final totalCount = _recommendations?.length ?? 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ShelfHeader(
+          title: 'ListenBrainz Mix',
+          subtitle: '$inLibraryCount of $totalCount in your library',
+          onRefresh: _loadRecommendations,
+          isLoading: _isLoading,
+        ),
+        SizedBox(
+          height: 140,
+          child: !hasData && _isLoading
+              ? const SkeletonTrackShelf()
+              : hasData
+                  ? ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _matchedTracks!.length,
+                      separatorBuilder: (context, _) => const SizedBox(width: 12),
+                      itemBuilder: (context, index) {
+                        final track = _matchedTracks![index];
+                        return _TrackChip(
+                          track: track,
+                          onTap: () {
+                            widget.appState.audioPlayerService.playTrack(
+                              track,
+                              queueContext: _matchedTracks!,
+                            );
+                          },
+                        );
+                      },
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'Getting recommendations from ListenBrainz...',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+}
+
 class _OnThisDayShelf extends StatelessWidget {
   const _OnThisDayShelf({
     required this.tracks,
@@ -3256,8 +3426,12 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
             },
             onRefresh: () => widget.appState.refreshRecommendations(),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
         ],
+        // ListenBrainz Discovery - only show if connected
+        _ListenBrainzDiscoveryShelf(
+          appState: widget.appState,
+        ),
       ],
     );
   }

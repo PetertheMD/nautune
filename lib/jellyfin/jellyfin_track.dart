@@ -28,6 +28,7 @@ class JellyfinTrack {
     this.bitDepth,
     this.channels,
     this.genres,
+    this.providerIds,
   });
 
   final String id;
@@ -58,6 +59,7 @@ class JellyfinTrack {
   final int? bitDepth; // Bit depth (16, 24, 32)
   final int? channels; // Number of audio channels (1=mono, 2=stereo, 6=5.1, etc.)
   final List<String>? genres; // Track genres for stats
+  final Map<String, String>? providerIds; // External IDs (MusicBrainzTrack, MusicBrainzArtist, etc.)
 
   factory JellyfinTrack.fromJson(Map<String, dynamic> json, {String? serverUrl, String? token, String? userId}) {
     final rawArtists = json['Artists'];
@@ -138,6 +140,19 @@ class JellyfinTrack {
     final rawGenres = json['Genres'];
     final genresList = (rawGenres is List) ? rawGenres.whereType<String>().toList() : null;
 
+    // Parse provider IDs (MusicBrainz, etc.)
+    Map<String, String>? providerIds;
+    final rawProviderIds = json['ProviderIds'];
+    if (rawProviderIds is Map) {
+      providerIds = {};
+      rawProviderIds.forEach((key, value) {
+        if (key is String && value is String) {
+          providerIds![key] = value;
+        }
+      });
+      if (providerIds.isEmpty) providerIds = null;
+    }
+
     return JellyfinTrack(
       id: json['Id'] is String ? json['Id'] as String : '',
       name: json['Name'] is String ? json['Name'] as String : '',
@@ -165,6 +180,7 @@ class JellyfinTrack {
       bitDepth: bitDepth,
       channels: channels,
       genres: genresList,
+      providerIds: providerIds,
     );
   }
 
@@ -195,6 +211,7 @@ class JellyfinTrack {
     int? bitDepth,
     int? channels,
     List<String>? genres,
+    Map<String, String>? providerIds,
   }) {
     return JellyfinTrack(
       id: id ?? this.id,
@@ -223,6 +240,7 @@ class JellyfinTrack {
       bitDepth: bitDepth ?? this.bitDepth,
       channels: channels ?? this.channels,
       genres: genres ?? this.genres,
+      providerIds: providerIds ?? this.providerIds,
     );
   }
 

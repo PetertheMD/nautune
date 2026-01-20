@@ -697,4 +697,11 @@ class LibraryDataProvider extends ChangeNotifier {
     // Optionally refresh favorites list
     await loadFavorites(forceRefresh: true);
   }
+
+  @override
+  void dispose() {
+    // Clear all library data on dispose
+    clearAllData();
+    super.dispose();
+  }
 }

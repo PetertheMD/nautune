@@ -1864,11 +1864,14 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                   Stack(
                     children: [
                       // Bioluminescent waves behind controls (disabled for Sailors - no audio)
+                      // Wrapped in RepaintBoundary to isolate repaints from parent layout
                       if (_appState.visualizerEnabled && !widget.sailorMode)
                         Positioned.fill(
-                          child: BioluminescentVisualizer(
-                            audioService: _audioService,
-                            opacity: 0.4,
+                          child: RepaintBoundary(
+                            child: BioluminescentVisualizer(
+                              audioService: _audioService,
+                              opacity: 0.4,
+                            ),
                           ),
                         ),
                       // Controls on top

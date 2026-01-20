@@ -68,14 +68,29 @@ class JustWaveformBackend {
   WaveformData _convertWaveform(Waveform waveform) {
     final amplitudes = <double>[];
 
-    // Check if 16-bit (flag 1) or 8-bit (flag 0)
-    final is16Bit = (waveform.flags & 1) != 0;
-    final normalizer = is16Bit ? 32768.0 : 128.0;
-
+    // First pass: find the actual max value to detect bit depth
+    int maxAbsValue = 0;
     for (int i = 0; i < waveform.length; i++) {
       final min = waveform.getPixelMin(i);
       final max = waveform.getPixelMax(i);
+      final absMin = min.abs();
+      final absMax = max.abs();
+      if (absMin > maxAbsValue) maxAbsValue = absMin;
+      if (absMax > maxAbsValue) maxAbsValue = absMax;
+    }
 
+    // Use fixed normalizers to match Linux FFmpeg backend behavior
+    // Check flag first, validate against actual data for robustness
+    final flagSays16Bit = (waveform.flags & 1) != 0;
+    final actuallyLooksLike16Bit = maxAbsValue > 128;
+
+    // Trust 16-bit if either indicator suggests it (handles quiet 16-bit files)
+    final normalizer = (flagSays16Bit || actuallyLooksLike16Bit) ? 32768.0 : 128.0;
+
+    // Second pass: normalize amplitudes
+    for (int i = 0; i < waveform.length; i++) {
+      final min = waveform.getPixelMin(i);
+      final max = waveform.getPixelMax(i);
       final absMin = min.abs();
       final absMax = max.abs();
       final amplitude = (absMin > absMax ? absMin : absMax) / normalizer;

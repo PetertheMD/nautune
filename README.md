@@ -4,9 +4,11 @@
 
 ## ✨ Key Features
 
+- **Your Rewind**: Spotify Wrapped-style yearly listening reports with shareable exports
+- **ListenBrainz Integration**: Scrobble your plays and get personalized music recommendations
 - **Collaborative Playlists**: Real-time SyncPlay sessions - listen together with friends via QR code or share link
 - **Custom Color Theme**: Create your own theme with primary/secondary color picker
-- **10-Band Equalizer**: Full graphic EQ with 12 presets (Rock, Pop, Jazz, Classical, and more)
+- **10-Band Equalizer** (Linux): Full graphic EQ with 12 presets (Rock, Pop, Jazz, Classical, and more)
 - **Real-Time FFT Visualizer**: True audio-reactive waves using PulseAudio (Linux) and MTAudioProcessingTap (iOS)
 - **Bioluminescent Waves**: Track-reactive animation that adapts to loudness and genre
 - **Smart Pre-Cache**: Configurable pre-caching of upcoming tracks (3, 5, or 10) with WiFi-only option
@@ -24,6 +26,19 @@
 ---
 
 ## 📋 Changelog
+
+### v5.4.0 - Rewind & ListenBrainz
+- **Your Rewind**: Spotify Wrapped-style yearly listening stats with swipeable card presentation
+- **Rewind Cards**: Total time, top artists, albums, tracks, genres, and listening personality
+- **Listening Personality**: Discover your archetype (Explorer, Night Owl, Loyalist, Eclectic, etc.)
+- **Year Selector**: View stats for any year or all-time
+- **Shareable Exports**: Export Rewind cards as images for social media sharing
+- **ListenBrainz Scrobbling**: Automatically log your plays to ListenBrainz
+- **Smart Scrobble**: Tracks scrobbled after 50% or 4 minutes of playback
+- **Now Playing**: ListenBrainz shows your currently playing track
+- **Personalized Recommendations**: Get music recommendations based on your listening history
+- **MusicBrainz ID Matching**: Recommendations matched to your Jellyfin library via MBIDs
+- **Offline Queue**: Scrobbles queued when offline, synced when back online
 
 ### v5.3.1 - Relax Mode
 - **Ambient Sound Mixer**: Mix rain, thunder, and campfire sounds with vertical sliders
@@ -69,7 +84,7 @@
 - **Lyrics Source in Menu**: Moved lyrics source indicator to three-dot menu for cleaner UI
 
 ### v4.7.0 - Equalizer & Smart Cache
-- **10-Band Graphic Equalizer**: Full EQ control from 32Hz to 16kHz with 12 presets
+- **10-Band Graphic Equalizer** (Linux): Full EQ control from 32Hz to 16kHz with 12 presets
 - **Smart Pre-Cache**: Configurable track count (Off, 3, 5, 10) with WiFi-only option
 - **Track Sharing**: Share downloaded tracks via AirDrop (iOS) or file manager (Linux)
 - **iOS Files Integration**: Downloads folder visible in Files app
@@ -92,11 +107,60 @@
 | iOS (downloaded) | MTAudioProcessingTap + vDSP | ✅ Instant |
 | iOS (streaming) | Cache then tap | ✅ After cache |
 
+---
+
+## 🎵 ListenBrainz Setup Guide
+
+ListenBrainz is a free, open-source music listening tracker. Connect your account to scrobble plays and get personalized music recommendations.
+
+### Step 1: Create a ListenBrainz Account
+
+1. Go to [listenbrainz.org](https://listenbrainz.org)
+2. Click **Sign In / Register** in the top right
+3. Create a free account (you can use your MusicBrainz account if you have one)
+
+### Step 2: Get Your User Token
+
+1. Log in to [listenbrainz.org](https://listenbrainz.org)
+2. Click your username in the top right corner
+3. Select **Settings** from the dropdown
+4. Or go directly to [listenbrainz.org/settings/](https://listenbrainz.org/settings/)
+5. Find the **User Token** section
+6. Your token looks like: `1a2b3c4d-5e6f-7g8h-9i0j-k1l2m3n4o5p6`
+7. Click **Copy to clipboard**
+
+### Step 3: Connect in Nautune
+
+1. Open Nautune and go to **Settings**
+2. Tap **ListenBrainz** under "Your Music"
+3. Tap **Connect Account**
+4. Enter your ListenBrainz **username**
+5. Paste your **User Token**
+6. Tap **Connect**
+
+### That's It!
+
+Once connected:
+- Tracks automatically scrobble after playing for 50% or 4 minutes
+- View your listening history at [listenbrainz.org/user/YOUR_USERNAME](https://listenbrainz.org)
+- Recommendations appear based on your listening patterns
+- Scrobbles work offline and sync when you're back online
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "Invalid token" error | Re-copy your token from ListenBrainz settings |
+| Scrobbles not appearing | Check that scrobbling is enabled in Settings > ListenBrainz |
+| Offline scrobbles | They'll sync automatically when you're back online |
+
+---
+
 ## 🛠 Technical Foundation
 - **Framework**: Flutter (Dart)
 - **Local Storage**: Hive (NoSQL) for high-speed metadata caching
 - **Audio Engine**: Audioplayers with custom platform-specific optimizations
-- **Equalizer**: PulseAudio LADSPA (Linux), AVAudioEngine (iOS)
+- **Equalizer**: PulseAudio LADSPA (Linux only)
 - **FFT Processing**: Custom Cooley-Tukey (Linux), Apple Accelerate vDSP (iOS)
 - **Image Processing**: Material Color Utilities for vibrant palette generation
 

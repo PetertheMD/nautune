@@ -1230,6 +1230,289 @@ class ListeningAnalyticsService {
     debugPrint('ListeningAnalyticsService: Cleared all data');
   }
 
+  // ============ Year-Based Methods for Rewind ============
+
+  /// Get all events for a specific year, or all events if year is null
+  List<PlayEvent> getEventsForYear(int? year) {
+    if (year == null) return List.from(_events);
+    return _events.where((e) => e.timestamp.year == year).toList();
+  }
+
+  /// Get list of years that have listening data
+  List<int> getAvailableYears() {
+    final years = <int>{};
+    for (final event in _events) {
+      years.add(event.timestamp.year);
+    }
+    final sortedYears = years.toList()..sort((a, b) => b.compareTo(a));
+    return sortedYears;
+  }
+
+  /// Get total plays for a specific year (null = all time)
+  int getTotalPlaysForYear(int? year) {
+    return getEventsForYear(year).length;
+  }
+
+  /// Get total listening time for a specific year (null = all time)
+  Duration getTotalListeningTimeForYear(int? year) {
+    final events = getEventsForYear(year);
+    int totalMs = 0;
+    for (final event in events) {
+      totalMs += event.durationMs;
+    }
+    return Duration(milliseconds: totalMs);
+  }
+
+  /// Get top artists for a specific year with play counts
+  List<Map<String, dynamic>> getTopArtistsForYear(int? year, {int limit = 5}) {
+    final events = getEventsForYear(year);
+    final artistCounts = <String, int>{};
+
+    for (final event in events) {
+      for (final artist in event.artists) {
+        artistCounts[artist] = (artistCounts[artist] ?? 0) + 1;
+      }
+    }
+
+    final sorted = artistCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return sorted.take(limit).map((e) => {
+      'name': e.key,
+      'playCount': e.value,
+    }).toList();
+  }
+
+  /// Get top albums for a specific year with play counts
+  List<Map<String, dynamic>> getTopAlbumsForYear(int? year, {int limit = 5}) {
+    final events = getEventsForYear(year);
+    final albumCounts = <String, Map<String, dynamic>>{};
+
+    for (final event in events) {
+      if (event.albumId == null && event.albumName == null) continue;
+      final key = event.albumId ?? event.albumName ?? '';
+      if (key.isEmpty) continue;
+
+      if (!albumCounts.containsKey(key)) {
+        albumCounts[key] = {
+          'albumId': event.albumId,
+          'name': event.albumName ?? 'Unknown Album',
+          'artistName': event.artists.isNotEmpty ? event.artists.first : 'Unknown Artist',
+          'playCount': 0,
+        };
+      }
+      albumCounts[key]!['playCount'] = (albumCounts[key]!['playCount'] as int) + 1;
+    }
+
+    final sorted = albumCounts.values.toList()
+      ..sort((a, b) => (b['playCount'] as int).compareTo(a['playCount'] as int));
+
+    return sorted.take(limit).toList();
+  }
+
+  /// Get top tracks for a specific year with play counts
+  List<Map<String, dynamic>> getTopTracksForYear(int? year, {int limit = 5}) {
+    final events = getEventsForYear(year);
+    final trackCounts = <String, Map<String, dynamic>>{};
+
+    for (final event in events) {
+      if (!trackCounts.containsKey(event.trackId)) {
+        trackCounts[event.trackId] = {
+          'trackId': event.trackId,
+          'name': event.trackName,
+          'artistName': event.artists.isNotEmpty ? event.artists.first : 'Unknown Artist',
+          'albumName': event.albumName,
+          'albumId': event.albumId,
+          'playCount': 0,
+        };
+      }
+      trackCounts[event.trackId]!['playCount'] = (trackCounts[event.trackId]!['playCount'] as int) + 1;
+    }
+
+    final sorted = trackCounts.values.toList()
+      ..sort((a, b) => (b['playCount'] as int).compareTo(a['playCount'] as int));
+
+    return sorted.take(limit).toList();
+  }
+
+  /// Get top genre for a specific year
+  String? getTopGenreForYear(int? year) {
+    final events = getEventsForYear(year);
+    final genreCounts = <String, int>{};
+
+    for (final event in events) {
+      for (final genre in event.genres) {
+        genreCounts[genre] = (genreCounts[genre] ?? 0) + 1;
+      }
+    }
+
+    if (genreCounts.isEmpty) return null;
+
+    final sorted = genreCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return sorted.first.key;
+  }
+
+  /// Get all genres for a specific year with play counts
+  Map<String, int> getGenresForYear(int? year) {
+    final events = getEventsForYear(year);
+    final genreCounts = <String, int>{};
+
+    for (final event in events) {
+      for (final genre in event.genres) {
+        genreCounts[genre] = (genreCounts[genre] ?? 0) + 1;
+      }
+    }
+
+    return genreCounts;
+  }
+
+  /// Get peak listening month (1-12) for a specific year
+  int? getPeakMonthForYear(int year) {
+    final events = getEventsForYear(year);
+    if (events.isEmpty) return null;
+
+    final monthCounts = <int, int>{};
+    for (final event in events) {
+      final month = event.timestamp.month;
+      monthCounts[month] = (monthCounts[month] ?? 0) + 1;
+    }
+
+    final sorted = monthCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return sorted.first.key;
+  }
+
+  /// Get longest listening streak for a specific year
+  int getLongestStreakForYear(int year) {
+    final events = getEventsForYear(year);
+    if (events.isEmpty) return 0;
+
+    final listeningDays = <DateTime>{};
+    for (final event in events) {
+      final day = DateTime(event.timestamp.year, event.timestamp.month, event.timestamp.day);
+      listeningDays.add(day);
+    }
+
+    final sortedDays = listeningDays.toList()..sort();
+
+    int longestStreak = 0;
+    int currentStreak = 1;
+    DateTime? prevDay;
+
+    for (final day in sortedDays) {
+      if (prevDay != null) {
+        final diff = day.difference(prevDay).inDays;
+        if (diff == 1) {
+          currentStreak++;
+        } else {
+          if (currentStreak > longestStreak) {
+            longestStreak = currentStreak;
+          }
+          currentStreak = 1;
+        }
+      }
+      prevDay = day;
+    }
+    if (currentStreak > longestStreak) {
+      longestStreak = currentStreak;
+    }
+
+    return longestStreak;
+  }
+
+  /// Get unique artists count for a specific year
+  int getUniqueArtistsForYear(int? year) {
+    final events = getEventsForYear(year);
+    final artists = <String>{};
+    for (final event in events) {
+      artists.addAll(event.artists);
+    }
+    return artists.length;
+  }
+
+  /// Get unique tracks count for a specific year
+  int getUniqueTracksForYear(int? year) {
+    final events = getEventsForYear(year);
+    final tracks = <String>{};
+    for (final event in events) {
+      tracks.add(event.trackId);
+    }
+    return tracks.length;
+  }
+
+  /// Get unique albums count for a specific year
+  int getUniqueAlbumsForYear(int? year) {
+    final events = getEventsForYear(year);
+    final albums = <String>{};
+    for (final event in events) {
+      if (event.albumId != null) {
+        albums.add(event.albumId!);
+      }
+    }
+    return albums.length;
+  }
+
+  /// Get listening time by month for a year (for chart display)
+  Map<int, Duration> getListeningTimeByMonth(int year) {
+    final events = getEventsForYear(year);
+    final monthlyTime = <int, int>{};
+
+    for (int month = 1; month <= 12; month++) {
+      monthlyTime[month] = 0;
+    }
+
+    for (final event in events) {
+      final month = event.timestamp.month;
+      monthlyTime[month] = monthlyTime[month]! + event.durationMs;
+    }
+
+    return monthlyTime.map((k, v) => MapEntry(k, Duration(milliseconds: v)));
+  }
+
+  /// Get plays by day of week for a year
+  Map<int, int> getPlaysByDayOfWeekForYear(int? year) {
+    final events = getEventsForYear(year);
+    final counts = <int, int>{};
+    for (int i = 0; i < 7; i++) {
+      counts[i] = 0;
+    }
+    for (final event in events) {
+      final day = event.timestamp.weekday - 1; // 0-6
+      counts[day] = counts[day]! + 1;
+    }
+    return counts;
+  }
+
+  /// Get plays by hour for a year
+  Map<int, int> getPlaysByHourForYear(int? year) {
+    final events = getEventsForYear(year);
+    final counts = <int, int>{};
+    for (int i = 0; i < 24; i++) {
+      counts[i] = 0;
+    }
+    for (final event in events) {
+      final hour = event.timestamp.hour;
+      counts[hour] = counts[hour]! + 1;
+    }
+    return counts;
+  }
+
+  /// Calculate discovery rate for a year
+  double getDiscoveryRateForYear(int? year) {
+    final events = getEventsForYear(year);
+    if (events.isEmpty) return 0.0;
+
+    final uniqueTracks = <String>{};
+    for (final event in events) {
+      uniqueTracks.add(event.trackId);
+    }
+
+    return (uniqueTracks.length / events.length) * 100;
+  }
+
   // ============ Server Sync Methods ============
 
   /// Get all unsynced play events

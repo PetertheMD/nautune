@@ -147,7 +147,7 @@ class _EqualizerWidgetState extends State<EqualizerWidget> {
           ),
           const SizedBox(height: 4),
           Text(
-            'EQ is supported on Linux and iOS',
+            'EQ is supported on Linux only',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
             ),
@@ -237,10 +237,15 @@ class _EqualizerWidgetState extends State<EqualizerWidget> {
   }
 
   Widget _buildEQSliders(ThemeData theme) {
+    // Cache colors to avoid repeated lookups
+    final surfaceColor = theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3);
+    final labelColor = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6);
+    final labelStyle = theme.textTheme.labelSmall?.copyWith(color: labelColor);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        color: surfaceColor,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -250,31 +255,29 @@ class _EqualizerWidgetState extends State<EqualizerWidget> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const SizedBox(width: 8),
-              Text(
-                '+12',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                ),
-              ),
+              Text('+12', style: labelStyle),
               const Spacer(),
-              Text(
-                'dB',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                ),
-              ),
+              Text('dB', style: labelStyle),
               const SizedBox(width: 8),
             ],
           ),
 
-          // Sliders
-          SizedBox(
-            height: 180,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: List.generate(10, (index) {
-                return _buildBandSlider(theme, index);
-              }),
+          // Sliders - wrapped in RepaintBoundary to isolate rebuilds
+          RepaintBoundary(
+            child: SizedBox(
+              height: 180,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(10, (index) {
+                  return _EQBandSlider(
+                    key: ValueKey('eq_band_$index'),
+                    index: index,
+                    gain: _gains[index],
+                    theme: theme,
+                    onChanged: _onBandChanged,
+                  );
+                }),
+              ),
             ),
           ),
 
@@ -283,12 +286,7 @@ class _EqualizerWidgetState extends State<EqualizerWidget> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const SizedBox(width: 8),
-              Text(
-                '-12',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                ),
-              ),
+              Text('-12', style: labelStyle),
               const Spacer(),
             ],
           ),
@@ -317,11 +315,33 @@ class _EqualizerWidgetState extends State<EqualizerWidget> {
     );
   }
 
-  Widget _buildBandSlider(ThemeData theme, int index) {
-    final gain = _gains[index];
+}
+
+/// Optimized individual EQ band slider widget.
+/// Extracted to a separate stateless widget for better Flutter diffing.
+class _EQBandSlider extends StatelessWidget {
+  const _EQBandSlider({
+    super.key,
+    required this.index,
+    required this.gain,
+    required this.theme,
+    required this.onChanged,
+  });
+
+  final int index;
+  final double gain;
+  final ThemeData theme;
+  final void Function(int, double) onChanged;
+
+  // Cached slider shapes (const, shared across all instances)
+  static const _thumbShape = RoundSliderThumbShape(enabledThumbRadius: 8);
+  static const _overlayShape = RoundSliderOverlayShape(overlayRadius: 16);
+
+  @override
+  Widget build(BuildContext context) {
     final normalizedValue = (gain + 12) / 24; // Convert -12..+12 to 0..1
 
-    // Theme-aware colors
+    // Theme-aware colors (computed once per build)
     final activeColor = gain > 0
         ? theme.colorScheme.primary
         : theme.colorScheme.secondary;
@@ -329,6 +349,7 @@ class _EqualizerWidgetState extends State<EqualizerWidget> {
     final thumbColor = gain != 0
         ? theme.colorScheme.primary
         : theme.colorScheme.onSurfaceVariant;
+    final overlayColor = theme.colorScheme.primary.withValues(alpha: 0.12);
 
     return SizedBox(
       width: 32,
@@ -343,19 +364,15 @@ class _EqualizerWidgetState extends State<EqualizerWidget> {
                   activeTrackColor: activeColor,
                   inactiveTrackColor: inactiveColor,
                   thumbColor: thumbColor,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 8,
-                  ),
-                  overlayShape: const RoundSliderOverlayShape(
-                    overlayRadius: 16,
-                  ),
-                  overlayColor: theme.colorScheme.primary.withValues(alpha: 0.12),
+                  thumbShape: _thumbShape,
+                  overlayShape: _overlayShape,
+                  overlayColor: overlayColor,
                 ),
                 child: Slider(
                   value: normalizedValue,
                   onChanged: (value) {
                     final newGain = (value * 24) - 12; // Convert 0..1 to -12..+12
-                    _onBandChanged(index, newGain);
+                    onChanged(index, newGain);
                   },
                 ),
               ),

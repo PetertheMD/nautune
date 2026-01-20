@@ -380,6 +380,15 @@ class _NautuneAppState extends State<NautuneApp> with WidgetsBindingObserver, Wi
     if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
       windowManager.removeListener(this);
     }
+
+    // Dispose services to prevent memory leaks
+    widget.appState.audioPlayerService.dispose();
+    widget.appState.dispose();
+
+    // Dispose providers that may have resources
+    widget.connectivityProvider.dispose();
+    widget.syncPlayProvider.dispose();
+
     super.dispose();
   }
 

@@ -181,4 +181,10 @@ class SyncStatusProvider extends ChangeNotifier {
     _activeSyncOperations = 0;
     notifyListeners();
   }
+
+  @override
+  void dispose() {
+    reset();
+    super.dispose();
+  }
 }

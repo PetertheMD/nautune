@@ -10,8 +10,12 @@ import '../providers/theme_provider.dart';
 import '../providers/ui_state_provider.dart';
 import '../services/audio_cache_service.dart';
 import '../services/download_service.dart';
+import '../services/listenbrainz_service.dart';
+import '../services/rewind_service.dart';
 import '../theme/nautune_theme.dart';
 import '../widgets/equalizer_widget.dart';
+import 'listenbrainz_settings_screen.dart';
+import 'rewind_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -84,6 +88,109 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildYourMusicSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final rewindService = RewindService();
+    final previousYear = DateTime.now().year - 1;
+    final hasPreviousYearData = rewindService.hasEnoughData(previousYear);
+    final listenBrainz = ListenBrainzService();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeader(icon: Icons.auto_awesome, title: 'Your Music'),
+        Card(
+          margin: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            children: [
+              // Rewind entry - always shows previous year (like Spotify Wrapped)
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primary,
+                        theme.colorScheme.tertiary,
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.replay, color: Colors.white, size: 20),
+                ),
+                title: Text('Your $previousYear Rewind'),
+                subtitle: Text(
+                  hasPreviousYearData
+                      ? 'View your $previousYear listening stats'
+                      : 'Not enough listening data from $previousYear',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => RewindScreen(
+                        initialYear: previousYear,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              // ListenBrainz entry
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.music_note,
+                    color: theme.colorScheme.onPrimaryContainer,
+                    size: 20,
+                  ),
+                ),
+                title: const Text('ListenBrainz'),
+                subtitle: Text(
+                  listenBrainz.isConfigured
+                      ? 'Connected as ${listenBrainz.username}'
+                      : 'Connect to scrobble & discover music',
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (listenBrainz.isConfigured)
+                      Container(
+                        width: 8,
+                        height: 8,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: listenBrainz.isScrobblingEnabled
+                              ? Colors.green
+                              : Colors.orange,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    const Icon(Icons.chevron_right),
+                  ],
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ListenBrainzSettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   void _showThemePicker(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
 
@@ -131,6 +238,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         children: [
+          // Your Music section with Rewind and ListenBrainz
+          _buildYourMusicSection(context),
+
           const _SectionHeader(icon: Icons.dns, title: 'Server'),
           Card(
             margin: const EdgeInsets.only(bottom: 16),

@@ -238,4 +238,10 @@ class UIStateProvider extends ChangeNotifier {
     ));
     notifyListeners();
   }
+
+  @override
+  void dispose() {
+    _scrollOffsets.clear();
+    super.dispose();
+  }
 }

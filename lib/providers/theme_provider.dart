@@ -163,4 +163,12 @@ class ThemeProvider extends ChangeNotifier {
 
   /// Get all available palettes including custom placeholder
   List<NautuneColorPalette> get availablePalettes => NautunePalettes.all;
+
+  @override
+  void dispose() {
+    _customPrimaryColor = null;
+    _customSecondaryColor = null;
+    _customAccentColor = null;
+    super.dispose();
+  }
 }

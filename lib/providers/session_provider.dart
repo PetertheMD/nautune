@@ -233,4 +233,10 @@ class SessionProvider extends ChangeNotifier {
     notifyListeners();
     await logout();
   }
+
+  @override
+  void dispose() {
+    _session = null;
+    super.dispose();
+  }
 }

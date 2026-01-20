@@ -473,27 +473,25 @@ class _WaveformStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return StreamBuilder<Duration?>(
-      stream: audioService.durationStream,
-      builder: (context, durationSnapshot) {
-        final duration = durationSnapshot.data ?? Duration.zero;
-        return StreamBuilder<Duration>(
-          stream: audioService.positionStream,
-          builder: (context, positionSnapshot) {
-            final position = positionSnapshot.data ?? Duration.zero;
-            final progress = duration.inMilliseconds > 0
-                ? position.inMilliseconds / duration.inMilliseconds
-                : 0.0;
+    // Use the combined positionDataStream for reliable position updates
+    // This is the same stream used by the fullscreen player
+    return StreamBuilder<PositionData>(
+      stream: audioService.positionDataStream,
+      builder: (context, snapshot) {
+        final positionData = snapshot.data;
+        final duration = positionData?.duration ?? Duration.zero;
+        final position = positionData?.position ?? Duration.zero;
+        final progress = duration.inMilliseconds > 0
+            ? position.inMilliseconds / duration.inMilliseconds
+            : 0.0;
 
-            return _WaveformDisplay(
-              track: track,
-              progress: progress.clamp(0.0, 1.0),
-              theme: theme,
-              isPlaying: isPlaying,
-              duration: duration,
-              audioService: audioService,
-            );
-          },
+        return _WaveformDisplay(
+          track: track,
+          progress: progress.clamp(0.0, 1.0),
+          theme: theme,
+          isPlaying: isPlaying,
+          duration: duration,
+          audioService: audioService,
         );
       },
     );
@@ -559,11 +557,14 @@ class _WaveformDisplayState extends State<_WaveformDisplay> {
                     ),
                   ),
                   // Bioluminescent waves overlay (conditionally shown)
+                  // Wrapped in RepaintBoundary to isolate repaints from parent layout
                   if (visualizerEnabled)
                     Positioned.fill(
-                      child: BioluminescentVisualizer(
-                        audioService: widget.audioService,
-                        opacity: 0.5,
+                      child: RepaintBoundary(
+                        child: BioluminescentVisualizer(
+                          audioService: widget.audioService,
+                          opacity: 0.5,
+                        ),
                       ),
                     ),
                   Positioned.fill(

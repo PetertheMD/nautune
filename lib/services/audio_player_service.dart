@@ -16,6 +16,7 @@ import 'download_service.dart';
 import 'haptic_service.dart';
 import 'image_prewarm_service.dart';
 import 'listening_analytics_service.dart';
+import 'listenbrainz_service.dart';
 import 'lyrics_service.dart';
 import 'playback_reporting_service.dart';
 import 'playback_state_store.dart';
@@ -113,6 +114,10 @@ class AudioPlayerService {
   // Lyrics service for pre-fetching lyrics
   LyricsService? _lyricsService;
   bool _lyricsPrefetched = false;
+
+  // ListenBrainz scrobbling tracking
+  bool _hasScrobbled = false;
+  DateTime? _trackStartTime;
 
   // Sleep timer support
   Timer? _sleepTimer;
@@ -508,6 +513,8 @@ class AudioPlayerService {
       _checkPreloadTrigger(position);
       // Pre-fetch lyrics for next track at ~50% playback
       _checkLyricsPrefetch(position);
+      // Check ListenBrainz scrobble threshold
+      _checkListenBrainzScrobble(position);
       // Sync iOS FFT shadow player position (every second, with ms precision)
       if (Platform.isIOS && position.inMilliseconds % 1000 < 50) {
         IOSFFTService.instance.syncPosition(position.inMilliseconds / 1000.0);
@@ -868,6 +875,11 @@ class AudioPlayerService {
 
     // Record to listening analytics for time-based stats
     unawaited(ListeningAnalyticsService().recordPlay(track));
+
+    // Reset ListenBrainz scrobble state and submit "now playing"
+    _hasScrobbled = false;
+    _trackStartTime = DateTime.now();
+    unawaited(ListenBrainzService().submitNowPlaying(track));
 
     // Immediately update duration from metadata to prevent UI lag
     if (track.duration != null) {
@@ -1989,6 +2001,34 @@ class AudioPlayerService {
     _lyricsPrefetched = true;
     debugPrint('Prefetching lyrics for next track: ${nextTrack.name}');
     _lyricsService!.prefetchLyrics(nextTrack);
+  }
+
+  /// Check if we should scrobble to ListenBrainz
+  /// Scrobbles when track has played for 50% OR 4 minutes, whichever is less
+  void _checkListenBrainzScrobble(Duration position) async {
+    if (_hasScrobbled || _currentTrack == null || _trackStartTime == null) return;
+
+    final listenBrainz = ListenBrainzService();
+    if (!listenBrainz.isScrobblingEnabled) return;
+
+    final duration = _currentTrack!.duration ?? await _player.getDuration();
+    if (duration == null || duration.inMilliseconds == 0) return;
+
+    // Scrobble threshold: 50% of track OR 4 minutes, whichever is less
+    final halfDuration = duration.inSeconds ~/ 2;
+    const fourMinutes = 240; // 4 minutes in seconds
+    final thresholdSeconds = halfDuration < fourMinutes ? halfDuration : fourMinutes;
+
+    // Check if we've reached the threshold
+    if (position.inSeconds >= thresholdSeconds) {
+      _hasScrobbled = true;
+      debugPrint('🎵 ListenBrainz: Scrobbling "${_currentTrack!.name}" (${position.inSeconds}s >= ${thresholdSeconds}s threshold)');
+
+      unawaited(listenBrainz.submitListen(
+        _currentTrack!,
+        _trackStartTime!,
+      ));
+    }
   }
 
   /// Pre-load the next track into _nextPlayer for instant playback

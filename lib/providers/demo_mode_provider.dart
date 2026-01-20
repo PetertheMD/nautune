@@ -270,4 +270,15 @@ class DemoModeProvider extends ChangeNotifier {
 
     notifyListeners();
   }
+
+  @override
+  void dispose() {
+    // Clear demo state on dispose
+    _demoTracks.clear();
+    _demoAlbumTrackMap.clear();
+    _demoPlaylistTrackMap.clear();
+    _demoFavoriteTrackIds.clear();
+    _demoRecentTrackIds.clear();
+    super.dispose();
+  }
 }

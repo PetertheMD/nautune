@@ -1,17 +1,16 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
 import '../models/equalizer_preset.dart';
 
 /// Abstract equalizer service interface.
-/// Platform-specific implementations handle the actual audio processing.
+/// Currently only supported on Linux via PulseAudio LADSPA.
 abstract class EqualizerService {
   /// Get the platform-appropriate equalizer service instance
   static EqualizerService get instance {
     if (Platform.isLinux) {
       return LinuxEqualizerService.instance;
-    } else if (Platform.isIOS) {
-      return IOSEqualizerService.instance;
     }
     return _UnsupportedEqualizerService();
   }
@@ -68,6 +67,11 @@ class LinuxEqualizerService extends EqualizerService {
   EqualizerPreset _currentPreset = BuiltInPresets.flat;
   List<double> _gains = List.filled(10, 0.0);
   int? _moduleId;
+  bool _useEqualizerSink = false; // Whether we're using module-equalizer-sink
+
+  // Debounce timer for applying gains (prevents module reload spam)
+  Timer? _applyDebounceTimer;
+  static const _applyDebounceDelay = Duration(milliseconds: 150);
 
   final _enabledController = BehaviorSubject<bool>.seeded(false);
   final _presetController = BehaviorSubject<EqualizerPreset>.seeded(BuiltInPresets.flat);
@@ -146,12 +150,14 @@ class LinuxEqualizerService extends EqualizerService {
 
       if (result.exitCode == 0) {
         _moduleId = int.tryParse(result.stdout.toString().trim());
-        debugPrint('🎛️ EQ: Loaded module $_moduleId');
+        _useEqualizerSink = false;
+        debugPrint('🎛️ EQ: Loaded LADSPA module $_moduleId');
 
         // Set as default sink
         await Process.run('pactl', ['set-default-sink', 'nautune_eq']);
       } else {
         // Fallback: try simpler equalizer approach using module-equalizer-sink
+        // This supports real-time updates via dbus/qpaeq
         debugPrint('🎛️ EQ: LADSPA failed, trying equalizer-sink...');
         final fallback = await Process.run('pactl', [
           'load-module',
@@ -160,7 +166,11 @@ class LinuxEqualizerService extends EqualizerService {
         ]);
         if (fallback.exitCode == 0) {
           _moduleId = int.tryParse(fallback.stdout.toString().trim());
+          _useEqualizerSink = true;
           debugPrint('🎛️ EQ: Loaded equalizer-sink module $_moduleId');
+
+          // Set as default sink
+          await Process.run('pactl', ['set-default-sink', 'nautune_eq']);
         }
       }
     } catch (e) {
@@ -194,19 +204,96 @@ class LinuxEqualizerService extends EqualizerService {
     await _applyGains();
   }
 
+  /// Schedule gains to be applied with debouncing
+  /// This prevents module reload spam during rapid slider changes
+  void _scheduleApplyGains() {
+    _applyDebounceTimer?.cancel();
+    _applyDebounceTimer = Timer(_applyDebounceDelay, () {
+      _applyGainsNow();
+    });
+  }
+
   Future<void> _applyGains() async {
     if (!_enabled || _moduleId == null) return;
+    _scheduleApplyGains();
+  }
 
-    // Update EQ settings via pactl or dbus
-    // This depends on which module we loaded
+  Future<void> _applyGainsNow() async {
+    if (!_enabled || _moduleId == null) return;
+
     try {
-      // For module-equalizer-sink, use qpaeq or dbus
-      // For now, we reload the module with new settings
+      if (_useEqualizerSink) {
+        // For module-equalizer-sink, try to use paequalization D-Bus interface
+        // This allows real-time updates without audio glitches
+        final success = await _applyGainsViaDbus();
+        if (success) return;
+      }
+
+      // Fallback: For LADSPA module or if D-Bus failed, we need to reload
+      // Batch the reload to minimize glitches
+      debugPrint('🎛️ EQ: Reloading module with new gains');
       await _unloadEqualizerModule();
       await _loadEqualizerModule();
     } catch (e) {
       debugPrint('🎛️ EQ: Error applying gains: $e');
     }
+  }
+
+  /// Apply gains via D-Bus to module-equalizer-sink (real-time, no glitches)
+  Future<bool> _applyGainsViaDbus() async {
+    try {
+      // Try using qpaeq command-line tool to set EQ bands
+      // qpaeq is a Python GUI but we can use dbus-send directly
+      // The equalizer-sink exposes org.PulseAudio.Ext.Equalizing1 interface
+
+      // Convert 10-band gains to the 15-band format used by module-equalizer-sink
+      // Map our 10 bands (31, 63, 125, 250, 500, 1k, 2k, 4k, 8k, 16k) to 15 bands
+      final fifteenBands = _expandTo15Bands(_gains);
+
+      // Use dbus-send to set the equalizer coefficients
+      final result = await Process.run('dbus-send', [
+        '--session',
+        '--dest=org.PulseAudio.Ext.Equalizing1',
+        '--type=method_call',
+        '/org/pulseaudio/equalizing1/equalized',
+        'org.PulseAudio.Ext.Equalizing1.Equalizer.SetFilter',
+        'uint32:${fifteenBands.length}',
+        'array:double:${fifteenBands.join(",")}',
+        'double:0.0', // preamp
+      ]);
+
+      if (result.exitCode == 0) {
+        debugPrint('🎛️ EQ: Applied gains via D-Bus');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('🎛️ EQ: D-Bus update failed: $e');
+    }
+    return false;
+  }
+
+  /// Expand 10-band gains to 15-band format
+  List<double> _expandTo15Bands(List<double> tenBands) {
+    // 10-band: 31, 63, 125, 250, 500, 1k, 2k, 4k, 8k, 16k
+    // 15-band: 25, 40, 63, 100, 160, 250, 400, 630, 1k, 1.6k, 2.5k, 4k, 6.3k, 10k, 16k
+    // Simple linear interpolation
+    return [
+      tenBands[0],                           // 25Hz ≈ 31Hz
+      (tenBands[0] + tenBands[1]) / 2,       // 40Hz
+      tenBands[1],                           // 63Hz
+      (tenBands[1] + tenBands[2]) / 2,       // 100Hz
+      (tenBands[2] + tenBands[3]) / 2,       // 160Hz
+      tenBands[3],                           // 250Hz
+      (tenBands[3] + tenBands[4]) / 2,       // 400Hz
+      (tenBands[4] + tenBands[5]) / 2,       // 630Hz
+      tenBands[5],                           // 1kHz
+      (tenBands[5] + tenBands[6]) / 2,       // 1.6kHz
+      (tenBands[6] + tenBands[7]) / 2,       // 2.5kHz
+      tenBands[7],                           // 4kHz
+      (tenBands[7] + tenBands[8]) / 2,       // 6.3kHz
+      (tenBands[8] + tenBands[9]) / 2,       // 10kHz
+      tenBands[9],                           // 16kHz
+    ];
   }
 
   @override
@@ -225,102 +312,15 @@ class LinuxEqualizerService extends EqualizerService {
 
   @override
   Future<void> dispose() async {
+    _applyDebounceTimer?.cancel();
+    _applyDebounceTimer = null;
     await setEnabled(false);
     await _enabledController.close();
     await _presetController.close();
   }
 }
 
-/// iOS equalizer using AVAudioEngine
-class IOSEqualizerService extends EqualizerService {
-  static IOSEqualizerService? _instance;
-  static IOSEqualizerService get instance => _instance ??= IOSEqualizerService._();
-
-  IOSEqualizerService._();
-
-  bool _initialized = false;
-  bool _enabled = false;
-  EqualizerPreset _currentPreset = BuiltInPresets.flat;
-  List<double> _gains = List.filled(10, 0.0);
-
-  final _enabledController = BehaviorSubject<bool>.seeded(false);
-  final _presetController = BehaviorSubject<EqualizerPreset>.seeded(BuiltInPresets.flat);
-
-  @override
-  bool get isAvailable => Platform.isIOS;
-
-  @override
-  bool get isEnabled => _enabled;
-
-  @override
-  Stream<bool> get enabledStream => _enabledController.stream;
-
-  @override
-  EqualizerPreset get currentPreset => _currentPreset;
-
-  @override
-  Stream<EqualizerPreset> get presetStream => _presetController.stream;
-
-  @override
-  List<double> get currentGains => List.unmodifiable(_gains);
-
-  @override
-  Future<bool> initialize() async {
-    if (_initialized) return true;
-    if (!Platform.isIOS) return false;
-
-    // iOS EQ will be implemented via platform channel to native Swift code
-    // For now, mark as initialized but not functional
-    _initialized = true;
-    debugPrint('🎛️ EQ: iOS equalizer initialized (UI only - native impl pending)');
-    return true;
-  }
-
-  @override
-  Future<void> setEnabled(bool enabled) async {
-    if (!_initialized) return;
-    _enabled = enabled;
-    _enabledController.add(_enabled);
-    // TODO: Call native iOS code via platform channel
-    debugPrint('🎛️ EQ: iOS ${enabled ? "Enabled" : "Disabled"} (pending native impl)');
-  }
-
-  @override
-  Future<void> setBand(int bandIndex, double gainDb) async {
-    if (bandIndex < 0 || bandIndex >= 10) return;
-    _gains[bandIndex] = gainDb.clamp(-12.0, 12.0);
-    // TODO: Call native iOS code via platform channel
-  }
-
-  @override
-  Future<void> setAllBands(List<double> gains) async {
-    if (gains.length != 10) return;
-    _gains = gains.map((g) => g.clamp(-12.0, 12.0)).toList();
-    // TODO: Call native iOS code via platform channel
-  }
-
-  @override
-  Future<void> applyPreset(EqualizerPreset preset) async {
-    _currentPreset = preset;
-    _gains = List.from(preset.gains);
-    _presetController.add(_currentPreset);
-    // TODO: Call native iOS code via platform channel
-    debugPrint('🎛️ EQ: Applied preset "${preset.name}" (pending native impl)');
-  }
-
-  @override
-  Future<void> reset() async {
-    await applyPreset(BuiltInPresets.flat);
-  }
-
-  @override
-  Future<void> dispose() async {
-    await _enabledController.close();
-    await _presetController.close();
-  }
-}
-
-/// Unsupported platform stub
+/// Unsupported platform stub (non-Linux platforms)
 class _UnsupportedEqualizerService extends EqualizerService {
   @override
   bool get isAvailable => false;
