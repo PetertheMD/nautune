@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../jellyfin/jellyfin_service.dart';
 import '../../models/rewind_data.dart';
@@ -75,24 +76,25 @@ class RewindWelcomeCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const Spacer(),
-          Icon(
-            Icons.anchor,
-            size: 80,
-            color: theme.colorScheme.primary,
+          Text(
+            '🔱',
+            style: TextStyle(fontSize: 72, color: theme.colorScheme.primary),
           ),
           const SizedBox(height: 24),
           Text(
             'Your ${data.yearDisplay}',
-            style: theme.textTheme.headlineMedium?.copyWith(
+            style: GoogleFonts.pacifico(
+              fontSize: 28,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(height: 8),
           Text(
             'REWIND',
-            style: theme.textTheme.displayLarge?.copyWith(
+            style: GoogleFonts.pacifico(
+              fontSize: 48,
               fontWeight: FontWeight.bold,
-              letterSpacing: 8,
+              letterSpacing: 4,
               color: theme.colorScheme.primary,
             ),
           ),
@@ -1230,15 +1232,15 @@ class RewindShareCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const Spacer(),
-          Icon(
-            Icons.anchor,
-            size: 60,
-            color: theme.colorScheme.primary,
+          Text(
+            '🔱',
+            style: TextStyle(fontSize: 56, color: theme.colorScheme.primary),
           ),
           const SizedBox(height: 24),
           Text(
             'That\'s your ${data.yearDisplay} Rewind!',
-            style: theme.textTheme.headlineMedium?.copyWith(
+            style: GoogleFonts.pacifico(
+              fontSize: 24,
               fontWeight: FontWeight.bold,
             ),
             textAlign: TextAlign.center,
@@ -1269,7 +1271,8 @@ class RewindShareCard extends StatelessWidget {
           const Spacer(),
           Text(
             'Made with Nautune',
-            style: theme.textTheme.bodySmall?.copyWith(
+            style: GoogleFonts.pacifico(
+              fontSize: 14,
               color: theme.colorScheme.outline,
             ),
           ),

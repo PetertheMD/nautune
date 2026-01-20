@@ -45,8 +45,8 @@ class WaveformData {
     final buffer = ByteData(1 + 4 + 4 + amplitudes.length);
     var offset = 0;
 
-    // Version
-    buffer.setUint8(offset, 1);
+    // Version (bumped to 2 to invalidate old cached waveforms with bad normalization)
+    buffer.setUint8(offset, 2);
     offset += 1;
 
     // Duration (0 if null)
@@ -73,10 +73,10 @@ class WaveformData {
     final buffer = ByteData.sublistView(bytes);
     var offset = 0;
 
-    // Version check
+    // Version check (version 2 has correct normalization)
     final version = buffer.getUint8(offset);
     offset += 1;
-    if (version != 1) return WaveformData.empty;
+    if (version != 2) return WaveformData.empty;
 
     // Duration
     final durationMs = buffer.getUint32(offset, Endian.little);

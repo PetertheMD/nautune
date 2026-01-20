@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -101,29 +102,97 @@ class _RewindScreenState extends State<RewindScreen> with TickerProviderStateMix
     _loadRewindData();
   }
 
-  Future<void> _shareCurrentCard() async {
-    if (_currentPage >= _cardKeys.length) return;
+  Future<void> _shareAllCards() async {
+    if (_cardKeys.isEmpty || !_pageController.hasClients) return;
 
-    final key = _cardKeys[_currentPage];
-    final result = await RewindExportService.instance.captureAndShare(
-      key,
-      year: _selectedYear,
-      cardName: 'card_$_currentPage',
+    final originalPage = _currentPage;
+
+    // Show loading indicator
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 12),
+            Text('Exporting all pages...'),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 60),
+      ),
     );
+
+    // Capture each page by navigating to it
+    final List<Uint8List> pageImages = [];
+    for (int i = 0; i < _cardKeys.length; i++) {
+      // Jump to page (no animation for speed)
+      _pageController.jumpToPage(i);
+
+      // Wait for the page to render
+      await Future.delayed(const Duration(milliseconds: 150));
+      await WidgetsBinding.instance.endOfFrame;
+
+      // Capture the page
+      final imageBytes = await RewindExportService.instance.captureWidget(
+        _cardKeys[i],
+        pixelRatio: 3.0,
+      );
+
+      if (imageBytes != null) {
+        pageImages.add(imageBytes);
+        debugPrint('RewindExportService: Captured page ${i + 1}/${_cardKeys.length}');
+      } else {
+        debugPrint('RewindExportService: Failed to capture page ${i + 1}');
+      }
+    }
+
+    // Return to original page
+    _pageController.jumpToPage(originalPage);
 
     if (!mounted) return;
 
+    // Export combined PNG
+    ExportResult result;
+    if (pageImages.isEmpty) {
+      result = ExportResult.error;
+    } else {
+      final pngFile = await RewindExportService.instance.exportAllPagesAsCombinedPng(
+        pageImages: pageImages,
+        year: _selectedYear,
+      );
+
+      if (pngFile != null) {
+        final yearStr = _selectedYear?.toString() ?? 'All Time';
+        result = await RewindExportService.instance.shareFile(
+          pngFile,
+          title: 'My $yearStr Nautune Rewind',
+        );
+      } else {
+        result = ExportResult.error;
+      }
+    }
+
+    if (!mounted) return;
+
+    // Clear the loading snackbar
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
     if (result == ExportResult.success) {
+      final yearStr = _selectedYear?.toString() ?? 'All Time';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Rewind card exported!'),
+        SnackBar(
+          content: Text('$yearStr Rewind exported!'),
           behavior: SnackBarBehavior.floating,
         ),
       );
     } else if (result == ExportResult.error) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Failed to export card'),
+          content: Text('Failed to export Rewind'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -165,8 +234,8 @@ class _RewindScreenState extends State<RewindScreen> with TickerProviderStateMix
         actions: [
           IconButton(
             icon: const Icon(Icons.share),
-            tooltip: 'Share this card',
-            onPressed: _shareCurrentCard,
+            tooltip: 'Export all pages',
+            onPressed: _shareAllCards,
           ),
         ],
       ),
@@ -305,7 +374,7 @@ class _RewindScreenState extends State<RewindScreen> with TickerProviderStateMix
                   // 10: Share card
                   RewindShareCard(
                     data: _data!,
-                    onShare: _shareCurrentCard,
+                    onShare: _shareAllCards,
                     repaintBoundaryKey: _cardKeys[10],
                   ),
                 ],

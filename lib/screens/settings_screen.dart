@@ -12,6 +12,7 @@ import '../services/audio_cache_service.dart';
 import '../services/download_service.dart';
 import '../services/listenbrainz_service.dart';
 import '../services/rewind_service.dart';
+import '../services/waveform_service.dart';
 import '../theme/nautune_theme.dart';
 import '../widgets/equalizer_widget.dart';
 import 'listenbrainz_settings_screen.dart';
@@ -836,10 +837,16 @@ class _StorageManagementScreenState extends State<_StorageManagementScreen> {
                                 label: 'Cached',
                                 value: '${stats.cacheFileCount} tracks',
                               ),
-                              _StatItem(
-                                icon: Icons.album,
-                                label: 'Albums',
-                                value: '${stats.byAlbum.length}',
+                              FutureBuilder<Map<String, dynamic>>(
+                                future: WaveformService.instance.getStorageStats(),
+                                builder: (context, snapshot) {
+                                  final waveformCount = snapshot.data?['fileCount'] ?? 0;
+                                  return _StatItem(
+                                    icon: Icons.waves,
+                                    label: 'Waveforms',
+                                    value: '$waveformCount',
+                                  );
+                                },
                               ),
                             ],
                           ),
@@ -1031,8 +1038,8 @@ class _StorageManagementScreenState extends State<_StorageManagementScreen> {
                                 final confirm = await showDialog<bool>(
                                   context: context,
                                   builder: (context) => AlertDialog(
-                                    title: const Text('Clear Cache?'),
-                                    content: const Text('This will remove all pre-cached tracks. Downloads will not be affected.'),
+                                    title: const Text('Clear All Cache?'),
+                                    content: const Text('This will remove all pre-cached tracks and waveforms. Downloads will not be affected.'),
                                     actions: [
                                       TextButton(
                                         onPressed: () => Navigator.pop(context, false),
@@ -1047,16 +1054,17 @@ class _StorageManagementScreenState extends State<_StorageManagementScreen> {
                                 );
                                 if (confirm == true) {
                                   await AudioCacheService.instance.clearCache();
+                                  await WaveformService.instance.clearAllWaveforms();
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Cache cleared')),
+                                      const SnackBar(content: Text('All cache cleared')),
                                     );
                                     setState(() {});
                                   }
                                 }
                               },
                               icon: const Icon(Icons.delete_sweep),
-                              label: const Text('Clear Cache'),
+                              label: const Text('Clear All Cache'),
                             ),
                           ),
                         ],
@@ -1069,7 +1077,7 @@ class _StorageManagementScreenState extends State<_StorageManagementScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
-                        'Cache auto-expires after 7 days. These are temporary files pre-loaded for smooth playback.',
+                        'Audio cache auto-expires after 7 days. Waveforms are stored until cleared.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),

@@ -101,15 +101,14 @@ class WaveformService {
     return data;
   }
 
-  /// Check if a waveform exists for a track
+  /// Check if a valid waveform exists for a track
   Future<bool> hasWaveform(String trackId) async {
     // Check memory cache first
     if (_cache.containsKey(trackId)) return true;
 
-    // Check disk
-    final path = await _getWaveformPath(trackId);
-    final file = File(path);
-    return await file.exists();
+    // Try to load from disk and validate it's a valid version
+    final data = await getWaveform(trackId);
+    return data != null && data.amplitudes.isNotEmpty;
   }
 
   /// Extract waveform from audio file and save.
@@ -127,7 +126,7 @@ class WaveformService {
       return;
     }
 
-    // Check if already exists
+    // Check if already exists and is valid
     if (await hasWaveform(trackId)) {
       debugPrint('WaveformService: Waveform already exists for $trackId');
       yield 1.0;
@@ -139,6 +138,13 @@ class WaveformService {
 
     try {
       final outputPath = await _getWaveformPath(trackId);
+
+      // Delete old invalid waveform file if it exists
+      final oldFile = File(outputPath);
+      if (await oldFile.exists()) {
+        await oldFile.delete();
+        debugPrint('WaveformService: Deleted old invalid waveform for $trackId');
+      }
 
       Stream<double> progressStream;
       if (_justWaveformBackend != null && _justWaveformBackend!.isAvailable) {

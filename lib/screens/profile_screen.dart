@@ -329,8 +329,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     try {
-      // Fetch tracks for stats calculation - use 100 for better coverage
-      final tracksFuture = appState.jellyfinService.getMostPlayedTracks(libraryId: libraryId, limit: 100);
+      // Fetch ALL tracks for accurate stats calculation (high limit to get everything)
+      final tracksFuture = appState.jellyfinService.getMostPlayedTracks(libraryId: libraryId, limit: 10000);
       final recentFuture = appState.jellyfinService.getRecentlyPlayedTracks(libraryId: libraryId, limit: 10);
       final results = await Future.wait([tracksFuture, recentFuture]);
 

@@ -44,16 +44,16 @@ class RewindService {
     }
 
     try {
-      // Fetch more tracks to aggregate artist/album play counts accurately
+      // Fetch ALL tracks to aggregate stats accurately for all-time
       // Jellyfin doesn't return accurate PlayCount for artists/albums directly
       final serverTracks = await client.fetchMostPlayed(
         credentials,
         libraryId: libraryId,
         itemType: 'Audio',
-        limit: 200, // Fetch more to get accurate aggregations
+        limit: 10000, // Fetch all tracks for accurate all-time stats
       );
 
-      // Parse track data with album image tags
+      // Parse track data with album image tags and runtime
       final trackDataList = serverTracks.map((t) {
         final userData = t['UserData'] as Map<String, dynamic>?;
         return _TrackData(
@@ -65,6 +65,7 @@ class RewindService {
           albumId: t['AlbumId'] as String?,
           albumImageTag: t['AlbumPrimaryImageTag'] as String?,
           playCount: userData?['PlayCount'] as int? ?? 0,
+          runTimeTicks: t['RunTimeTicks'] as int?,
         );
       }).toList();
 
@@ -152,12 +153,21 @@ class RewindService {
       // Calculate total plays from all track data
       final totalPlays = allTracks.fold<int>(0, (sum, t) => sum + t.playCount);
 
+      // Calculate total listening time from server data (playCount * runTimeTicks)
+      // RunTimeTicks are in 100-nanosecond intervals (10,000,000 ticks = 1 second)
+      int totalTicks = 0;
+      for (final track in trackDataList) {
+        if (track.runTimeTicks != null) {
+          totalTicks += track.runTimeTicks! * track.playCount;
+        }
+      }
+      final totalTime = Duration(microseconds: totalTicks ~/ 10); // Convert ticks to microseconds
+
       // Get local analytics for patterns (server doesn't track these)
       final genres = _analytics.getGenresForYear(year);
       final topGenre = _analytics.getTopGenreForYear(year);
       final playsByHour = _analytics.getPlaysByHourForYear(year);
       final playsByDayOfWeek = _analytics.getPlaysByDayOfWeekForYear(year);
-      final totalTime = _analytics.getTotalListeningTimeForYear(year);
       final peakMonth = year != null ? _analytics.getPeakMonthForYear(year) : null;
       final longestStreak = year != null ? _analytics.getLongestStreakForYear(year) : 0;
       final discoveryRate = _analytics.getDiscoveryRateForYear(year);
@@ -397,6 +407,7 @@ class _TrackData {
   final String? albumId;
   final String? albumImageTag;
   final int playCount;
+  final int? runTimeTicks;
 
   _TrackData({
     required this.trackId,
@@ -406,6 +417,7 @@ class _TrackData {
     this.albumId,
     this.albumImageTag,
     required this.playCount,
+    this.runTimeTicks,
   });
 }
 
