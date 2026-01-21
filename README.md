@@ -27,6 +27,11 @@
 
 ## 📋 Changelog
 
+### v5.4.7 - CarPlay Navigation Fix
+- **CarPlay Browsing Fix**: Fixed bug where browsing lists (albums, favorites, recently played) stopped loading after playing a track or using the phone app
+- **Navigation Stack Protection**: Root template refresh now uses flutter_carplay's `templateHistory` to detect navigation depth, preventing stack corruption while browsing
+- **Simplified Callbacks**: Removed unnecessary state management boilerplate from all CarPlay `onPress` handlers
+
 ### v5.4.6 - Stats Accuracy, Offline & Rewind UI
 - **Rewind UI Refresh**: Fresh, modern card designs with nautical wave decorations and theme-aware gradients
 - **Album Color Matching**: Top Album card now extracts colors from album artwork for dynamic gradients

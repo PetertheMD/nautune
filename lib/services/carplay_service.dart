@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_carplay/flutter_carplay.dart';
+import 'package:flutter_carplay/controllers/carplay_controller.dart';
 import '../app_state.dart';
 import '../jellyfin/jellyfin_album.dart';
 import '../jellyfin/jellyfin_artist.dart';
@@ -12,7 +13,6 @@ class CarPlayService {
   final FlutterCarplay _carplay = FlutterCarplay();
   bool _isInitialized = false;
   bool _isConnected = false;
-  bool _isNavigating = false; // Prevents root refresh during navigation
   StreamSubscription? _playbackSubscription;
   Timer? _refreshDebounceTimer;
 
@@ -20,8 +20,11 @@ class CarPlayService {
   static const int _maxItemsPerPage = 100;
 
   CarPlayService({required this.appState});
-  
+
   bool get isConnected => _isConnected;
+
+  /// Returns true if user is at the CarPlay root level (no pushed templates)
+  bool get _isAtRootLevel => FlutterCarPlayController.templateHistory.length <= 1;
   
   /// Call this after the app is fully loaded
   Future<void> initialize() async {
@@ -79,11 +82,10 @@ class CarPlayService {
   }
   
   void _onAppStateChanged() {
-    if (_isConnected && !_isNavigating) {
-      // Debounce refresh to avoid excessive updates during rapid state changes
+    if (_isConnected && _isAtRootLevel) {
       _refreshDebounceTimer?.cancel();
       _refreshDebounceTimer = Timer(const Duration(milliseconds: 500), () {
-        if (_isConnected && !_isNavigating) {
+        if (_isConnected && _isAtRootLevel) {
           _refreshRootTemplate();
         }
       });
@@ -145,39 +147,24 @@ class CarPlayService {
               text: 'Albums',
               detailText: _getAlbumCount(),
               onPress: (complete, self) async {
-                _isNavigating = true;
-                try {
-                  await _showAlbums();
-                } finally {
-                  _isNavigating = false;
-                  complete();
-                }
+                await _showAlbums();
+                complete();
               },
             ),
             CPListItem(
               text: 'Artists',
               detailText: _getArtistCount(),
               onPress: (complete, self) async {
-                _isNavigating = true;
-                try {
-                  await _showArtists();
-                } finally {
-                  _isNavigating = false;
-                  complete();
-                }
+                await _showArtists();
+                complete();
               },
             ),
             CPListItem(
               text: 'Playlists',
               detailText: _getPlaylistCount(),
               onPress: (complete, self) async {
-                _isNavigating = true;
-                try {
-                  await _showPlaylists();
-                } finally {
-                  _isNavigating = false;
-                  complete();
-                }
+                await _showPlaylists();
+                complete();
               },
             ),
           ],
@@ -195,26 +182,16 @@ class CarPlayService {
               text: 'Recently Played',
               detailText: 'Your listening history',
               onPress: (complete, self) async {
-                _isNavigating = true;
-                try {
-                  await _showRecentlyPlayed();
-                } finally {
-                  _isNavigating = false;
-                  complete();
-                }
+                await _showRecentlyPlayed();
+                complete();
               },
             ),
             CPListItem(
               text: 'Favorite Tracks',
               detailText: _getFavoriteCount(),
               onPress: (complete, self) async {
-                _isNavigating = true;
-                try {
-                  await _showFavorites();
-                } finally {
-                  _isNavigating = false;
-                  complete();
-                }
+                await _showFavorites();
+                complete();
               },
             ),
           ],
@@ -232,13 +209,8 @@ class CarPlayService {
               text: 'Downloaded Music',
               detailText: _getDownloadCount(),
               onPress: (complete, self) async {
-                _isNavigating = true;
-                try {
-                  await _showDownloads();
-                } finally {
-                  _isNavigating = false;
-                  complete();
-                }
+                await _showDownloads();
+                complete();
               },
             ),
           ],
@@ -326,13 +298,8 @@ class CarPlayService {
         text: album.name,
         detailText: album.artists.join(', '),
         onPress: (complete, self) async {
-          _isNavigating = true;
-          try {
-            await _showAlbumTracks(album.id, album.name);
-          } finally {
-            _isNavigating = false;
-            complete();
-          }
+          await _showAlbumTracks(album.id, album.name);
+          complete();
         },
       )).toList();
 
@@ -343,13 +310,8 @@ class CarPlayService {
           text: 'Load More...',
           detailText: '$remaining more albums',
           onPress: (complete, self) async {
-            _isNavigating = true;
-            try {
-              await _showAlbums(offset: offset + _maxItemsPerPage);
-            } finally {
-              _isNavigating = false;
-              complete();
-            }
+            await _showAlbums(offset: offset + _maxItemsPerPage);
+            complete();
           },
         ));
       }
@@ -405,13 +367,8 @@ class CarPlayService {
       final items = paginatedArtists.map((artist) => CPListItem(
         text: artist.name,
         onPress: (complete, self) async {
-          _isNavigating = true;
-          try {
-            await _showArtistAlbums(artist.id, artist.name);
-          } finally {
-            _isNavigating = false;
-            complete();
-          }
+          await _showArtistAlbums(artist.id, artist.name);
+          complete();
         },
       )).toList();
 
@@ -422,13 +379,8 @@ class CarPlayService {
           text: 'Load More...',
           detailText: '$remaining more artists',
           onPress: (complete, self) async {
-            _isNavigating = true;
-            try {
-              await _showArtists(offset: offset + _maxItemsPerPage);
-            } finally {
-              _isNavigating = false;
-              complete();
-            }
+            await _showArtists(offset: offset + _maxItemsPerPage);
+            complete();
           },
         ));
       }
@@ -481,13 +433,8 @@ class CarPlayService {
         text: playlist.name,
         detailText: '${playlist.trackCount} tracks',
         onPress: (complete, self) async {
-          _isNavigating = true;
-          try {
-            await _showPlaylistTracks(playlist.id, playlist.name);
-          } finally {
-            _isNavigating = false;
-            complete();
-          }
+          await _showPlaylistTracks(playlist.id, playlist.name);
+          complete();
         },
       )).toList();
 
@@ -498,13 +445,8 @@ class CarPlayService {
           text: 'Load More...',
           detailText: '$remaining more playlists',
           onPress: (complete, self) async {
-            _isNavigating = true;
-            try {
-              await _showPlaylists(offset: offset + _maxItemsPerPage);
-            } finally {
-              _isNavigating = false;
-              complete();
-            }
+            await _showPlaylists(offset: offset + _maxItemsPerPage);
+            complete();
           },
         ));
       }
@@ -606,13 +548,8 @@ class CarPlayService {
         text: album.name,
         detailText: album.artists.join(', '),
         onPress: (complete, self) async {
-          _isNavigating = true;
-          try {
-            await _showAlbumTracks(album.id, album.name);
-          } finally {
-            _isNavigating = false;
-            complete();
-          }
+          await _showAlbumTracks(album.id, album.name);
+          complete();
         },
       )).toList();
 
@@ -716,13 +653,8 @@ class CarPlayService {
           text: 'Load More...',
           detailText: '$remaining more songs',
           onPress: (complete, self) async {
-            _isNavigating = true;
-            try {
-              await _showFavorites(offset: offset + _maxItemsPerPage);
-            } finally {
-              _isNavigating = false;
-              complete();
-            }
+            await _showFavorites(offset: offset + _maxItemsPerPage);
+            complete();
           },
         ));
       }
@@ -792,13 +724,8 @@ class CarPlayService {
           text: 'Load More...',
           detailText: '$remaining more songs',
           onPress: (complete, self) async {
-            _isNavigating = true;
-            try {
-              await _showRecentlyPlayed(offset: offset + _maxItemsPerPage);
-            } finally {
-              _isNavigating = false;
-              complete();
-            }
+            await _showRecentlyPlayed(offset: offset + _maxItemsPerPage);
+            complete();
           },
         ));
       }
@@ -855,13 +782,8 @@ class CarPlayService {
           text: 'Load More...',
           detailText: '$remaining more songs',
           onPress: (complete, self) async {
-            _isNavigating = true;
-            try {
-              await _showDownloads(offset: offset + _maxItemsPerPage);
-            } finally {
-              _isNavigating = false;
-              complete();
-            }
+            await _showDownloads(offset: offset + _maxItemsPerPage);
+            complete();
           },
         ));
       }
