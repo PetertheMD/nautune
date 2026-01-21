@@ -443,6 +443,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         )).toList();
       }
 
+      final cachedTracks = cached['topTracks'] as List<dynamic>?;
+      if (cachedTracks != null) {
+        _topTracks = cachedTracks.map((t) => JellyfinTrack.fromStorageJson(
+          Map<String, dynamic>.from(t as Map),
+        )).toList();
+      }
+
       final cachedColors = cached['paletteColors'] as List<dynamic>?;
       if (cachedColors != null) {
         _paletteColors = cachedColors.map((c) => Color(c as int)).toList();
@@ -599,6 +606,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'playCount': a.playCount,
         'imageTag': a.imageTag,
       }).toList(),
+      'topTracks': _topTracks?.map((t) => t.toStorageJson()).toList(),
       // ignore: deprecated_member_use
       'paletteColors': _paletteColors?.map((c) => c.value).toList(),
     };
