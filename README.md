@@ -27,6 +27,14 @@
 
 ## 📋 Changelog
 
+### v5.4.5 - Performance Optimizations
+- **LRU Cache Eviction**: Memory-bounded caches for images, HTTP ETags, and API responses prevent memory bloat in long sessions
+- **List Virtualization**: Added `cacheExtent` to all scrollable lists for smoother 60fps scrolling with 1000+ items
+- **Queue Performance**: Fixed-height queue items with `itemExtent: 72` for instant scroll calculations
+- **Adaptive Bitrate Streaming**: Auto quality mode now checks network type (WiFi → Original, Cellular → 192kbps, Slow → 128kbps)
+- **RepaintBoundary Isolation**: Track tiles wrapped to prevent unnecessary widget repaints during scrolling
+- **Code Cleanup**: Fixed all analyzer warnings for clean codebase
+
 ### v5.4.0 - Rewind & ListenBrainz
 - **Your Rewind**: Spotify Wrapped-style yearly listening stats with swipeable card presentation
 - **Rewind Cards**: Total time, top artists, albums, tracks, genres, and listening personality

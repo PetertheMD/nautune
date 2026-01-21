@@ -188,6 +188,7 @@ class _QueueScreenState extends State<QueueScreen> {
 
               return ReorderableListView.builder(
                 itemCount: queue.length,
+                itemExtent: 72, // Fixed height improves scroll calculation performance
                 onReorder: (oldIndex, newIndex) {
                   // Adjust newIndex if moving down
                   if (newIndex > oldIndex) {
@@ -199,8 +200,9 @@ class _QueueScreenState extends State<QueueScreen> {
                   final track = queue[index];
                   final isCurrentTrack = index == currentIndex;
 
-                  return Dismissible(
-                    key: Key('${track.id}-$index'),
+                  return RepaintBoundary(
+                    child: Dismissible(
+                      key: Key('${track.id}-$index'),
                     direction: queue.length > 1 ? DismissDirection.endToStart : DismissDirection.none,
                     background: Container(
                       color: theme.colorScheme.error,
@@ -316,7 +318,7 @@ class _QueueScreenState extends State<QueueScreen> {
                         },
                       ),
                     ),
-                  );
+                  ));
                 },
               );
             },

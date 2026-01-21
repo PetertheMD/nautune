@@ -2245,6 +2245,7 @@ class _PlaylistsTabState extends State<_PlaylistsTab> {
       onRefresh: () async => onRefresh(),
       child: ListView.builder(
         controller: scrollController,
+        cacheExtent: 500, // Pre-render items above/below viewport for smoother scrolling
         padding: const EdgeInsets.all(16),
         itemCount: playlists!.length + (isLoading ? 1 : 0) + 1, // +1 for header button
         itemBuilder: (context, index) {
@@ -2867,6 +2868,7 @@ class _FavoritesTab extends StatelessWidget {
     return RefreshIndicator(
       onRefresh: () async => onRefresh(),
       child: ListView.builder(
+        cacheExtent: 500, // Pre-render items above/below viewport for smoother scrolling
         padding: const EdgeInsets.all(16),
         itemCount: recentTracks?.length ?? 0,
         itemBuilder: (context, index) {
@@ -2874,13 +2876,14 @@ class _FavoritesTab extends StatelessWidget {
             return const SizedBox.shrink();
           }
           final track = recentTracks![index];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListTile(
-              leading: SizedBox(
-                width: 56,
-                height: 56,
-                child: ClipRRect(
+          return RepaintBoundary(
+            child: Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: (track.albumId != null && track.albumPrimaryImageTag != null)
                       ? JellyfinImage(
@@ -3211,7 +3214,7 @@ class _FavoritesTab extends StatelessWidget {
               ),
               onTap: () => onTrackTap(track),
             ),
-          );
+          ));
         },
       ),
     );
@@ -3595,6 +3598,7 @@ class _RecentTabState extends State<_RecentTab> {
     return RefreshIndicator(
       onRefresh: () async => _loadRecentlyPlayed(),
       child: ListView.builder(
+        cacheExtent: 500, // Pre-render items above/below viewport for smoother scrolling
         padding: const EdgeInsets.all(16),
         itemCount: recentTracks.length,
         itemBuilder: (context, index) {
@@ -4809,6 +4813,7 @@ class _DownloadsTab extends StatelessWidget {
                 ),
               Expanded(
                 child: ListView.builder(
+                  cacheExtent: 500, // Pre-render items above/below viewport for smoother scrolling
                   itemCount: downloads.length,
                   itemBuilder: (context, index) {
                     final download = downloads[index];

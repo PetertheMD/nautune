@@ -11,6 +11,10 @@ import '../jellyfin/jellyfin_album.dart';
 class ImagePrewarmService {
   final JellyfinService _jellyfinService;
   final Set<String> _prewarmingUrls = {};
+
+  /// LRU cache for prewarmed URLs with max size limit to prevent memory bloat
+  static const int _maxPrewarmedSize = 500;
+  final List<String> _prewarmedOrder = []; // Track insertion order for LRU
   final Set<String> _prewarmedUrls = {};
 
   ImagePrewarmService({required JellyfinService jellyfinService})
@@ -75,7 +79,7 @@ class ImagePrewarmService {
       late ImageStreamListener listener;
       listener = ImageStreamListener(
         (info, synchronousCall) {
-          _prewarmedUrls.add(imageUrl);
+          _addToPrewarmedCache(imageUrl);
           _prewarmingUrls.remove(imageUrl);
           stream.removeListener(listener);
         },
@@ -114,10 +118,31 @@ class ImagePrewarmService {
     debugPrint('ImagePrewarm: Prewarming ${tracksToPrewarm.length} upcoming queue images');
   }
 
+  /// Add URL to prewarmed cache with LRU eviction
+  void _addToPrewarmedCache(String url) {
+    // If already in cache, move to end (most recently used)
+    if (_prewarmedUrls.contains(url)) {
+      _prewarmedOrder.remove(url);
+      _prewarmedOrder.add(url);
+      return;
+    }
+
+    // Evict oldest entries if at capacity
+    while (_prewarmedUrls.length >= _maxPrewarmedSize && _prewarmedOrder.isNotEmpty) {
+      final oldest = _prewarmedOrder.removeAt(0);
+      _prewarmedUrls.remove(oldest);
+    }
+
+    // Add new entry
+    _prewarmedUrls.add(url);
+    _prewarmedOrder.add(url);
+  }
+
   /// Clear the prewarmed cache tracking (doesn't clear actual image cache)
   void clearTracking() {
     _prewarmingUrls.clear();
     _prewarmedUrls.clear();
+    _prewarmedOrder.clear();
   }
 
   /// Get stats about prewarming

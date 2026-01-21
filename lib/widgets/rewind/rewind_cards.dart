@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -308,12 +306,12 @@ class RewindTopArtistCard extends StatelessWidget {
                       ),
                       httpHeaders: jellyfinService.imageHeaders(),
                       fit: BoxFit.cover,
-                      placeholder: (_, __) => Icon(
+                      placeholder: (context, url) => Icon(
                         Icons.person,
                         size: 80,
                         color: theme.colorScheme.onPrimaryContainer,
                       ),
-                      errorWidget: (_, __, ___) => Icon(
+                      errorWidget: (context, url, error) => Icon(
                         Icons.person,
                         size: 80,
                         color: theme.colorScheme.onPrimaryContainer,
@@ -419,11 +417,11 @@ class RewindTopArtistsListCard extends StatelessWidget {
                                   ),
                                   httpHeaders: jellyfinService.imageHeaders(),
                                   fit: BoxFit.cover,
-                                  placeholder: (_, __) => Icon(
+                                  placeholder: (context, url) => Icon(
                                     Icons.person,
                                     color: theme.colorScheme.onPrimaryContainer,
                                   ),
-                                  errorWidget: (_, __, ___) => Icon(
+                                  errorWidget: (context, url, error) => Icon(
                                     Icons.person,
                                     color: theme.colorScheme.onPrimaryContainer,
                                   ),
@@ -536,12 +534,12 @@ class RewindTopAlbumCard extends StatelessWidget {
                       ),
                       httpHeaders: jellyfinService.imageHeaders(),
                       fit: BoxFit.cover,
-                      placeholder: (_, __) => Icon(
+                      placeholder: (context, url) => Icon(
                         Icons.album,
                         size: 80,
                         color: theme.colorScheme.onSecondaryContainer,
                       ),
-                      errorWidget: (_, __, ___) => Icon(
+                      errorWidget: (context, url, error) => Icon(
                         Icons.album,
                         size: 80,
                         color: theme.colorScheme.onSecondaryContainer,
@@ -647,8 +645,8 @@ class RewindTopAlbumsGridCard extends StatelessWidget {
                                   ),
                                   httpHeaders: jellyfinService.imageHeaders(),
                                   fit: BoxFit.cover,
-                                  placeholder: (_, __) => const Icon(Icons.album),
-                                  errorWidget: (_, __, ___) => const Icon(Icons.album),
+                                  placeholder: (context, url) => const Icon(Icons.album),
+                                  errorWidget: (context, url, error) => const Icon(Icons.album),
                                 ),
                               )
                             : const Icon(Icons.album),
@@ -740,12 +738,12 @@ class RewindTopTrackCard extends StatelessWidget {
                       ),
                       httpHeaders: jellyfinService.imageHeaders(),
                       fit: BoxFit.cover,
-                      placeholder: (_, __) => Icon(
+                      placeholder: (context, url) => Icon(
                         Icons.music_note,
                         size: 80,
                         color: theme.colorScheme.onPrimaryContainer,
                       ),
-                      errorWidget: (_, __, ___) => Icon(
+                      errorWidget: (context, url, error) => Icon(
                         Icons.music_note,
                         size: 80,
                         color: theme.colorScheme.onPrimaryContainer,

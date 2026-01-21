@@ -289,6 +289,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
               : null,
         ),
         child: CustomScrollView(
+        cacheExtent: 500, // Pre-render items above/below viewport for smoother scrolling
         slivers: [
           SliverAppBar(
             expandedHeight: isDesktop ? 350 : 300,
@@ -685,12 +686,13 @@ class _TrackTile extends StatelessWidget {
         duration != null ? _formatDuration(duration) : '--:--';
     final showArtist = track.artists.isNotEmpty;
 
-    return StreamBuilder<JellyfinTrack?>(
-      stream: appState.audioPlayerService.currentTrackStream,
-      builder: (context, snapshot) {
-        final isPlayingTrack = snapshot.data?.id == track.id;
-        
-        return Material(
+    return RepaintBoundary(
+      child: StreamBuilder<JellyfinTrack?>(
+        stream: appState.audioPlayerService.currentTrackStream,
+        builder: (context, snapshot) {
+          final isPlayingTrack = snapshot.data?.id == track.id;
+
+          return Material(
           color: isPlayingTrack 
               ? theme.colorScheme.primaryContainer.withValues(alpha: 0.2) 
               : Colors.transparent,
@@ -1028,8 +1030,9 @@ class _TrackTile extends StatelessWidget {
               ),
             ),
           ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 

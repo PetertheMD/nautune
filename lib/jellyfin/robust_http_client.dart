@@ -16,15 +16,19 @@ class RobustHttpClient {
     this.maxRetries = 3,
     this.baseTimeout = const Duration(seconds: 15),
     this.enableEtagCache = true,
+    this.maxCacheSize = 500,
   }) : _client = client ?? http.Client();
 
   final http.Client _client;
   final int maxRetries;
   final Duration baseTimeout;
   final bool enableEtagCache;
+  final int maxCacheSize;
 
   // ETag cache: URL -> {etag, lastModified, body}
+  // LRU eviction is applied when cache exceeds maxCacheSize
   final Map<String, _CachedResponse> _etagCache = {};
+  final List<String> _cacheOrder = []; // Track insertion order for LRU
 
   /// GET request with retry and optional ETag caching
   Future<http.Response> get(
@@ -126,11 +130,14 @@ class RobustHttpClient {
           final etag = response.headers['etag'];
           final lastModified = response.headers['last-modified'];
           if (etag != null || lastModified != null) {
-            _etagCache[uri.toString()] = _CachedResponse(
-              etag: etag,
-              lastModified: lastModified,
-              body: response.body,
-              cachedAt: DateTime.now(),
+            _addToCache(
+              uri.toString(),
+              _CachedResponse(
+                etag: etag,
+                lastModified: lastModified,
+                body: response.body,
+                cachedAt: DateTime.now(),
+              ),
             );
           }
         }
@@ -187,17 +194,46 @@ class RobustHttpClient {
     );
   }
 
+  /// Add entry to cache with LRU eviction
+  void _addToCache(String url, _CachedResponse response) {
+    // If already in cache, update and move to end (most recently used)
+    if (_etagCache.containsKey(url)) {
+      _cacheOrder.remove(url);
+      _cacheOrder.add(url);
+      _etagCache[url] = response;
+      return;
+    }
+
+    // Evict oldest entries if at capacity
+    while (_etagCache.length >= maxCacheSize && _cacheOrder.isNotEmpty) {
+      final oldest = _cacheOrder.removeAt(0);
+      _etagCache.remove(oldest);
+    }
+
+    // Add new entry
+    _etagCache[url] = response;
+    _cacheOrder.add(url);
+  }
+
   /// Clear the ETag cache
   void clearCache() {
     _etagCache.clear();
+    _cacheOrder.clear();
   }
 
   /// Clear cache entries older than duration
   void clearOldCache(Duration maxAge) {
     final now = DateTime.now();
-    _etagCache.removeWhere((_, cached) => 
-      now.difference(cached.cachedAt) > maxAge
-    );
+    final keysToRemove = <String>[];
+    _etagCache.forEach((key, cached) {
+      if (now.difference(cached.cachedAt) > maxAge) {
+        keysToRemove.add(key);
+      }
+    });
+    for (final key in keysToRemove) {
+      _etagCache.remove(key);
+      _cacheOrder.remove(key);
+    }
   }
 
   /// Close the underlying HTTP client

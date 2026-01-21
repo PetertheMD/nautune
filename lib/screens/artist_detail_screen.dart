@@ -96,6 +96,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
 
     return Scaffold(
       body: CustomScrollView(
+        cacheExtent: 500, // Pre-render items above/below viewport for smoother scrolling
         slivers: [
           SliverAppBar(
             expandedHeight: isDesktop ? 350 : 300,

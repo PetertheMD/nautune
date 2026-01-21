@@ -19,6 +19,9 @@ class JellyfinService {
   final http.Client _httpClient;
   Duration _cacheTtl = const Duration(minutes: 2);
 
+  /// Maximum number of entries per cache map to prevent memory bloat
+  static const int _maxCacheSize = 100;
+
   JellyfinClient? _client;
   JellyfinSession? _session;
   final Map<String, _CacheEntry<List<JellyfinAlbum>>> _albumCache = {};
@@ -26,6 +29,13 @@ class JellyfinService {
   final Map<String, _CacheEntry<List<JellyfinPlaylist>>> _playlistCache = {};
   final Map<String, _CacheEntry<List<JellyfinTrack>>> _recentCache = {};
   final Map<String, _CacheEntry<List<JellyfinGenre>>> _genreCache = {};
+
+  // Track insertion order for LRU eviction
+  final List<String> _albumCacheOrder = [];
+  final List<String> _artistCacheOrder = [];
+  final List<String> _playlistCacheOrder = [];
+  final List<String> _recentCacheOrder = [];
+  final List<String> _genreCacheOrder = [];
 
   // In-flight request deduplication - prevents duplicate network calls
   final Map<String, Future<List<JellyfinAlbum>>> _albumRequests = {};
@@ -256,7 +266,7 @@ class JellyfinService {
 
       // Only cache first page
       if (startIndex == 0) {
-        _albumCache[cacheKey] = _CacheEntry(albums);
+        _addToCacheWithEviction(_albumCache, _albumCacheOrder, cacheKey, albums);
       }
 
       return albums;
@@ -318,7 +328,7 @@ class JellyfinService {
 
       // Only cache first page
       if (startIndex == 0) {
-        _artistCache[cacheKey] = _CacheEntry(artists);
+        _addToCacheWithEviction(_artistCache, _artistCacheOrder, cacheKey, artists);
       }
 
       return artists;
@@ -378,7 +388,7 @@ class JellyfinService {
 
     try {
       final playlists = await request;
-      _playlistCache[cacheKey] = _CacheEntry(playlists);
+      _addToCacheWithEviction(_playlistCache, _playlistCacheOrder, cacheKey, playlists);
       return playlists;
     } finally {
       _playlistRequests.remove(cacheKey);
@@ -408,7 +418,7 @@ class JellyfinService {
       libraryId: libraryId,
       limit: limit,
     );
-    _recentCache[cacheKey] = _CacheEntry(recent);
+    _addToCacheWithEviction(_recentCache, _recentCacheOrder, cacheKey, recent);
     return recent;
   }
 
@@ -447,7 +457,7 @@ class JellyfinService {
       libraryId: libraryId,
       limit: limit,
     );
-    _recentCache[cacheKey] = _CacheEntry(recent);
+    _addToCacheWithEviction(_recentCache, _recentCacheOrder, cacheKey, recent);
     return recent;
   }
 
@@ -474,7 +484,7 @@ class JellyfinService {
       libraryId: libraryId,
       limit: limit,
     );
-    _albumCache[cacheKey] = _CacheEntry(recent);
+    _addToCacheWithEviction(_albumCache, _albumCacheOrder, cacheKey, recent);
     return recent;
   }
 
@@ -997,7 +1007,7 @@ class JellyfinService {
     );
 
     final genres = genresJson.map((json) => JellyfinGenre.fromJson(json)).toList();
-    _genreCache[cacheKey] = _CacheEntry(genres);
+    _addToCacheWithEviction(_genreCache, _genreCacheOrder, cacheKey, genres);
 
     return genres;
   }
@@ -1242,6 +1252,37 @@ class JellyfinService {
     _playlistCache.clear();
     _recentCache.clear();
     _genreCache.clear();
+    _albumCacheOrder.clear();
+    _artistCacheOrder.clear();
+    _playlistCacheOrder.clear();
+    _recentCacheOrder.clear();
+    _genreCacheOrder.clear();
+  }
+
+  /// Add entry to a cache map with LRU eviction
+  void _addToCacheWithEviction<T>(
+    Map<String, _CacheEntry<T>> cache,
+    List<String> cacheOrder,
+    String key,
+    T value,
+  ) {
+    // If already in cache, update and move to end (most recently used)
+    if (cache.containsKey(key)) {
+      cacheOrder.remove(key);
+      cacheOrder.add(key);
+      cache[key] = _CacheEntry(value);
+      return;
+    }
+
+    // Evict oldest entries if at capacity
+    while (cache.length >= _maxCacheSize && cacheOrder.isNotEmpty) {
+      final oldest = cacheOrder.removeAt(0);
+      cache.remove(oldest);
+    }
+
+    // Add new entry
+    cache[key] = _CacheEntry(value);
+    cacheOrder.add(key);
   }
 }
 

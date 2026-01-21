@@ -233,13 +233,9 @@ class AudioPlayerService {
       return (url, true);
     }
 
-    // For auto mode, default to original (WiFi detection handled elsewhere)
+    // For auto mode, check network type and switch quality accordingly
     if (quality == StreamingQuality.auto) {
-      // TODO: Check network type and switch quality accordingly
-      // For now, default to original quality
-      final url = track.directDownloadUrl();
-      debugPrint('🎵 Stream URL (Auto/Direct): $url');
-      return (url, true);
+      return _getAutoQualityStreamUrl(track, sessionId: sessionId);
     }
 
     // For transcoded quality, use the stream endpoint that forces transcoding
@@ -253,6 +249,105 @@ class AudioPlayerService {
     );
     debugPrint('🎵 Stream URL (Transcode ${bitrate ~/ 1000}kbps): $url');
     return (url, false);
+  }
+
+  // Cached network type for auto quality mode
+  _NetworkType _cachedNetworkType = _NetworkType.wifi;
+  DateTime? _lastNetworkCheck;
+
+  /// Get stream URL based on auto quality mode with network-aware switching
+  /// - WiFi/Ethernet → Original (lossless)
+  /// - Cellular → Normal (192kbps)
+  /// - Unknown/Slow → Low (128kbps)
+  (String? url, bool isDirectStream) _getAutoQualityStreamUrl(
+    JellyfinTrack track, {
+    String? sessionId,
+  }) {
+    // Refresh network type in background if stale (older than 30 seconds)
+    _refreshNetworkTypeIfNeeded();
+
+    // Use cached network type for quality decision
+    switch (_cachedNetworkType) {
+      case _NetworkType.wifi:
+        // WiFi/Ethernet: Use original lossless quality
+        final url = track.directDownloadUrl();
+        debugPrint('🎵 Stream URL (Auto/WiFi - Original): $url');
+        return (url, true);
+
+      case _NetworkType.cellular:
+        // Cellular: Use normal quality (192kbps)
+        final url = track.transcodedStreamUrl(
+          deviceId: _deviceId,
+          audioBitrate: 192000,
+          audioCodec: 'mp3',
+          container: 'mp3',
+          playSessionId: sessionId,
+        );
+        debugPrint('🎵 Stream URL (Auto/Cellular - 192kbps): $url');
+        return (url, false);
+
+      case _NetworkType.slow:
+        // Slow connection: Use low quality (128kbps)
+        final url = track.transcodedStreamUrl(
+          deviceId: _deviceId,
+          audioBitrate: 128000,
+          audioCodec: 'mp3',
+          container: 'mp3',
+          playSessionId: sessionId,
+        );
+        debugPrint('🎵 Stream URL (Auto/Slow - 128kbps): $url');
+        return (url, false);
+    }
+  }
+
+  /// Refresh cached network type if stale
+  void _refreshNetworkTypeIfNeeded() {
+    final now = DateTime.now();
+    final lastCheck = _lastNetworkCheck;
+
+    // Check every 30 seconds
+    if (lastCheck != null && now.difference(lastCheck).inSeconds < 30) {
+      return;
+    }
+
+    _lastNetworkCheck = now;
+
+    // Start async network check
+    final connectivity = _connectivityService;
+    if (connectivity == null) return;
+
+    unawaited(_updateNetworkType(connectivity));
+  }
+
+  /// Update cached network type from connectivity service
+  Future<void> _updateNetworkType(ConnectivityService connectivity) async {
+    try {
+      final isWifi = await connectivity.isOnWifi();
+      if (isWifi) {
+        if (_cachedNetworkType != _NetworkType.wifi) {
+          _cachedNetworkType = _NetworkType.wifi;
+          debugPrint('📶 Network type updated: WiFi (original quality)');
+        }
+        return;
+      }
+
+      final isMobile = await connectivity.isOnMobileData();
+      if (isMobile) {
+        if (_cachedNetworkType != _NetworkType.cellular) {
+          _cachedNetworkType = _NetworkType.cellular;
+          debugPrint('📶 Network type updated: Cellular (192kbps)');
+        }
+        return;
+      }
+
+      // Unknown/VPN - assume slow
+      if (_cachedNetworkType != _NetworkType.slow) {
+        _cachedNetworkType = _NetworkType.slow;
+        debugPrint('📶 Network type updated: Unknown/Slow (128kbps)');
+      }
+    } catch (e) {
+      debugPrint('📶 Network check failed: $e');
+    }
   }
 
   void _cancelCrossfade() {
@@ -2290,4 +2385,11 @@ class PositionData {
   final Duration position;
   final Duration bufferedPosition;
   final Duration duration;
+}
+
+/// Network type for auto quality selection
+enum _NetworkType {
+  wifi,     // WiFi or Ethernet - use original quality
+  cellular, // Mobile data - use normal quality (192kbps)
+  slow,     // Unknown/slow - use low quality (128kbps)
 }

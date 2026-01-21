@@ -29,8 +29,8 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
   bool _initialized = false;
 
   // Analytics tracking
-  final Stopwatch _sessionStopwatch = Stopwatch();
   Timer? _usageTimer;
+  int _activeListeningMs = 0; // Time when at least one sound is playing
   int _rainUsageMs = 0;
   int _thunderUsageMs = 0;
   int _campfireUsageMs = 0;
@@ -51,13 +51,19 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
   }
 
   void _startTracking() {
-    if (_sessionStopwatch.isRunning) return;
+    if (_usageTimer != null) return;
 
-    // Start session timer
-    _sessionStopwatch.start();
-
-    // Track slider usage every second (pure time - any volume > 0 counts)
+    // Track slider usage every second
+    // Only count time when at least one sound is actively playing
     _usageTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final isAnySoundActive = _rainVolume > 0 || _thunderVolume > 0 || _campfireVolume > 0;
+
+      // Only count active listening time (when at least one sound is on)
+      if (isAnySoundActive) {
+        _activeListeningMs += 1000;
+      }
+
+      // Track individual sound usage
       if (_rainVolume > 0) {
         _rainUsageMs += 1000;
       }
@@ -97,13 +103,12 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
   void dispose() {
     // Stop tracking
     _usageTimer?.cancel();
-    _sessionStopwatch.stop();
 
-    // Record session to analytics
+    // Record session to analytics only if user actually listened (> 5 seconds of active sound)
     final analytics = ListeningAnalyticsService();
-    if (analytics.isInitialized && _sessionStopwatch.elapsed.inSeconds > 5) {
+    if (analytics.isInitialized && _activeListeningMs > 5000) {
       analytics.recordRelaxModeSession(
-        sessionDuration: _sessionStopwatch.elapsed,
+        sessionDuration: Duration(milliseconds: _activeListeningMs),
         rainUsage: Duration(milliseconds: _rainUsageMs),
         thunderUsage: Duration(milliseconds: _thunderUsageMs),
         campfireUsage: Duration(milliseconds: _campfireUsageMs),
