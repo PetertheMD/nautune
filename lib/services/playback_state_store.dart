@@ -4,7 +4,9 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import '../jellyfin/jellyfin_track.dart';
 import '../models/playback_state.dart';
+import '../models/visualizer_type.dart';
 export '../models/playback_state.dart' show StreamingQuality, StreamingQualityExtension;
+export '../models/visualizer_type.dart' show VisualizerType, VisualizerTypeExtension;
 
 class PlaybackStateStore {
   static const _boxName = 'nautune_playback';
@@ -138,6 +140,7 @@ class PlaybackStateStore {
     int? customAccentColor,
     bool? customThemeIsLight,
     bool? visualizerEnabled,
+    VisualizerType? visualizerType,
     int? preCacheTrackCount,
     bool? wifiOnlyCaching,
     bool? isOfflineMode,
@@ -170,6 +173,7 @@ class PlaybackStateStore {
         customAccentColor: customAccentColor ?? state.customAccentColor,
         customThemeIsLight: customThemeIsLight ?? state.customThemeIsLight,
         visualizerEnabled: visualizerEnabled ?? state.visualizerEnabled,
+        visualizerType: visualizerType ?? state.visualizerType,
         preCacheTrackCount: preCacheTrackCount ?? state.preCacheTrackCount,
         wifiOnlyCaching: wifiOnlyCaching ?? state.wifiOnlyCaching,
         isOfflineMode: isOfflineMode ?? state.isOfflineMode,

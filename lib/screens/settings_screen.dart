@@ -13,6 +13,7 @@ import '../app_state.dart';
 import '../services/listening_analytics_service.dart';
 import '../services/network_download_service.dart';
 import '../models/playback_state.dart' show StreamingQuality, StreamingQualityExtension;
+import '../models/visualizer_type.dart';
 import '../providers/session_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/ui_state_provider.dart';
@@ -23,6 +24,7 @@ import '../services/rewind_service.dart';
 import '../services/waveform_service.dart';
 import '../theme/nautune_theme.dart';
 import '../widgets/equalizer_widget.dart';
+import '../widgets/visualizer_picker.dart';
 import 'listenbrainz_settings_screen.dart';
 import 'rewind_screen.dart';
 
@@ -133,10 +135,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
               ListTile(
                 leading: Icon(Icons.waves, color: theme.colorScheme.primary),
-                title: const Text('Animated Visualizer'),
+                title: const Text('Audio Visualizer'),
                 subtitle: Text(
                   appState.visualizerEnabled
-                      ? 'Bioluminescent waves enabled'
+                      ? appState.visualizerType.label
                       : 'Disabled for battery savings'
                 ),
                 trailing: Switch(
@@ -146,6 +148,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
               ),
+              if (appState.visualizerEnabled)
+                ListTile(
+                  leading: Icon(appState.visualizerType.icon, color: theme.colorScheme.primary),
+                  title: const Text('Visualizer Style'),
+                  subtitle: Text(appState.visualizerType.description),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _showVisualizerPicker(context),
+                ),
             ],
           ),
         ),
@@ -464,6 +474,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String _encodeJson(Map<String, dynamic> data) {
     return jsonEncode(data);
+  }
+
+  void _showVisualizerPicker(BuildContext context) async {
+    final appState = Provider.of<NautuneAppState>(context, listen: false);
+
+    final selected = await VisualizerPicker.show(
+      context,
+      currentType: appState.visualizerType,
+    );
+
+    if (selected != null) {
+      appState.setVisualizerType(selected);
+    }
   }
 
   void _showThemePicker(BuildContext context) {

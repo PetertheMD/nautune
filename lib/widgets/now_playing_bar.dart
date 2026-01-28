@@ -9,7 +9,8 @@ import '../screens/queue_screen.dart';
 import '../services/audio_player_service.dart';
 import '../services/haptic_service.dart';
 import '../app_state.dart';
-import 'bioluminescent_visualizer.dart';
+import '../models/visualizer_type.dart';
+import 'visualizers/visualizer_factory.dart';
 import 'jellyfin_waveform.dart';
 
 /// Compact control surface that mirrors the full player while staying unobtrusive.
@@ -528,6 +529,9 @@ class _WaveformDisplayState extends State<_WaveformDisplay> {
     final visualizerEnabled = context.select<NautuneAppState, bool>(
       (state) => state.visualizerEnabled,
     );
+    final visualizerType = context.select<NautuneAppState, VisualizerType>(
+      (state) => state.visualizerType,
+    );
 
     return SizedBox(
       height: 40,
@@ -556,12 +560,13 @@ class _WaveformDisplayState extends State<_WaveformDisplay> {
                       height: 40,
                     ),
                   ),
-                  // Bioluminescent waves overlay (conditionally shown)
+                  // Audio visualizer overlay (conditionally shown)
                   // Wrapped in RepaintBoundary to isolate repaints from parent layout
                   if (visualizerEnabled)
                     Positioned.fill(
                       child: RepaintBoundary(
-                        child: BioluminescentVisualizer(
+                        child: VisualizerFactory(
+                          type: visualizerType,
                           audioService: widget.audioService,
                           opacity: 0.5,
                         ),

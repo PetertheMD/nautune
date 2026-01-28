@@ -22,7 +22,7 @@ import '../jellyfin/jellyfin_track.dart';
 import '../services/audio_player_service.dart';
 import '../services/share_service.dart';
 import '../widgets/add_to_playlist_dialog.dart';
-import '../widgets/bioluminescent_visualizer.dart';
+import '../widgets/visualizers/visualizer_factory.dart';
 import '../widgets/jellyfin_image.dart';
 import '../widgets/jellyfin_waveform.dart';
 import 'album_detail_screen.dart';
@@ -1863,12 +1863,13 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                   // Bottom section: Controls with bioluminescent visualizer
                   Stack(
                     children: [
-                      // Bioluminescent waves behind controls (disabled for Sailors - no audio)
+                      // Visualizer behind controls (disabled for Sailors - no audio)
                       // Wrapped in RepaintBoundary to isolate repaints from parent layout
                       if (_appState.visualizerEnabled && !widget.sailorMode)
                         Positioned.fill(
                           child: RepaintBoundary(
-                            child: BioluminescentVisualizer(
+                            child: VisualizerFactory(
+                              type: _appState.visualizerType,
                               audioService: _audioService,
                               opacity: 0.4,
                             ),

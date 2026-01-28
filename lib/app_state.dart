@@ -140,6 +140,7 @@ class NautuneAppState extends ChangeNotifier {
   bool _visualizerEnabled = true; // Bioluminescent visualizer toggle
   bool _visualizerEnabledByUser = true; // User's explicit preference (for Low Power Mode restore)
   bool _visualizerSuppressedByLowPower = false; // Temporarily disabled by iOS Low Power Mode
+  VisualizerType _visualizerType = VisualizerType.bioluminescent; // Current visualizer style
   StreamSubscription? _powerModeSub;
   SortOption _albumSortBy = SortOption.name;
   SortOrder _albumSortOrder = SortOrder.ascending;
@@ -412,6 +413,7 @@ class NautuneAppState extends ChangeNotifier {
   int get cacheTtlMinutes => _cacheTtlMinutes;
   StreamingQuality get streamingQuality => _streamingQuality;
   bool get visualizerEnabled => _visualizerEnabled;
+  VisualizerType get visualizerType => _visualizerType;
   Duration get cacheTtl => Duration(minutes: _cacheTtlMinutes);
   SortOption get albumSortBy => _albumSortBy;
   SortOrder get albumSortOrder => _albumSortOrder;
@@ -711,6 +713,18 @@ class NautuneAppState extends ChangeNotifier {
     ));
   }
 
+  /// Set visualizer type/style
+  void setVisualizerType(VisualizerType type) {
+    if (_visualizerType == type) return;
+    _visualizerType = type;
+    notifyListeners();
+
+    unawaited(_playbackStateStore.saveUiState(
+      visualizerType: type,
+    ));
+    debugPrint('🎨 Visualizer type set to: ${type.label}');
+  }
+
   /// Set pre-cache track count for smart caching
   void setPreCacheTrackCount(int count) {
     _audioPlayerService.setPreCacheTrackCount(count);
@@ -932,6 +946,7 @@ class NautuneAppState extends ChangeNotifier {
       _streamingQuality = storedPlaybackState.streamingQuality;
       _visualizerEnabled = storedPlaybackState.visualizerEnabled;
       _visualizerEnabledByUser = storedPlaybackState.visualizerEnabled;
+      _visualizerType = storedPlaybackState.visualizerType;
       _libraryScrollOffsets =
           Map<String, double>.from(storedPlaybackState.scrollOffsets);
       await _audioPlayerService.hydrateFromPersistence(storedPlaybackState);

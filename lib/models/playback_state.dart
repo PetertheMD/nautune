@@ -1,4 +1,5 @@
 import '../jellyfin/jellyfin_track.dart';
+import 'visualizer_type.dart';
 
 /// Streaming quality options for audio playback
 enum StreamingQuality {
@@ -97,6 +98,7 @@ class PlaybackState {
     this.customThemeIsLight = false,  // Whether custom theme is light mode
     // Visualizer
     this.visualizerEnabled = true,
+    this.visualizerType = VisualizerType.bioluminescent,
     // Smart caching
     this.preCacheTrackCount = 3,  // 0 = off, 3, 5, or 10
     this.wifiOnlyCaching = false,
@@ -144,6 +146,7 @@ class PlaybackState {
   final bool customThemeIsLight;  // Whether custom theme is light
   // Visualizer
   final bool visualizerEnabled;
+  final VisualizerType visualizerType;
   // Smart caching
   final int preCacheTrackCount;  // 0 = off, 3, 5, or 10
   final bool wifiOnlyCaching;
@@ -189,6 +192,7 @@ class PlaybackState {
     int? customAccentColor,
     bool? customThemeIsLight,
     bool? visualizerEnabled,
+    VisualizerType? visualizerType,
     int? preCacheTrackCount,
     bool? wifiOnlyCaching,
     bool? isOfflineMode,
@@ -228,6 +232,7 @@ class PlaybackState {
       customAccentColor: customAccentColor ?? this.customAccentColor,
       customThemeIsLight: customThemeIsLight ?? this.customThemeIsLight,
       visualizerEnabled: visualizerEnabled ?? this.visualizerEnabled,
+      visualizerType: visualizerType ?? this.visualizerType,
       preCacheTrackCount: preCacheTrackCount ?? this.preCacheTrackCount,
       wifiOnlyCaching: wifiOnlyCaching ?? this.wifiOnlyCaching,
       isOfflineMode: isOfflineMode ?? this.isOfflineMode,
@@ -270,6 +275,7 @@ class PlaybackState {
       'customAccentColor': customAccentColor,
       'customThemeIsLight': customThemeIsLight,
       'visualizerEnabled': visualizerEnabled,
+      'visualizerType': visualizerType.name,
       'preCacheTrackCount': preCacheTrackCount,
       'wifiOnlyCaching': wifiOnlyCaching,
       'isOfflineMode': isOfflineMode,
@@ -324,6 +330,7 @@ class PlaybackState {
       customAccentColor: (json['customAccentColor'] as num?)?.toInt(),
       customThemeIsLight: json['customThemeIsLight'] as bool? ?? false,
       visualizerEnabled: json['visualizerEnabled'] as bool? ?? true,
+      visualizerType: VisualizerTypeExtension.fromString(json['visualizerType'] as String?),
       preCacheTrackCount: (json['preCacheTrackCount'] as num?)?.toInt() ?? 3,
       wifiOnlyCaching: json['wifiOnlyCaching'] as bool? ?? false,
       isOfflineMode: json['isOfflineMode'] as bool? ?? false,
@@ -369,6 +376,7 @@ class PlaybackState {
       customAccentColor: customAccentColor,
       customThemeIsLight: customThemeIsLight,
       visualizerEnabled: visualizerEnabled, // Preserve visualizer preference
+      visualizerType: visualizerType, // Preserve visualizer type
       preCacheTrackCount: preCacheTrackCount, // Preserve smart cache settings
       wifiOnlyCaching: wifiOnlyCaching,
       gridSize: gridSize, // Preserve grid size preference
