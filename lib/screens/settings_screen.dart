@@ -54,10 +54,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return '1 week';
   }
 
+  String _gridSizeLabel(int size) {
+    switch (size) {
+      case 2: return '2 per row (large)';
+      case 3: return '3 per row (default)';
+      case 4: return '4 per row (compact)';
+      case 5: return '5 per row (dense)';
+      case 6: return '6 per row (ultra-compact)';
+      default: return '$size per row';
+    }
+  }
+
   Widget _buildAppearanceSection(BuildContext context) {
     final theme = Theme.of(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
     final appState = Provider.of<NautuneAppState>(context);
+    final uiState = Provider.of<UIStateProvider>(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -74,6 +86,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _showThemePicker(context),
               ),
+              ListTile(
+                leading: Icon(
+                  uiState.useListMode ? Icons.view_list : Icons.grid_view,
+                  color: theme.colorScheme.primary,
+                ),
+                title: const Text('View Mode'),
+                subtitle: Text(uiState.useListMode ? 'List view' : 'Grid view'),
+                trailing: SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, icon: Icon(Icons.grid_view, size: 18)),
+                    ButtonSegment(value: true, icon: Icon(Icons.view_list, size: 18)),
+                  ],
+                  selected: {uiState.useListMode},
+                  onSelectionChanged: (selected) {
+                    uiState.setUseListMode(selected.first);
+                  },
+                  showSelectedIcon: false,
+                  style: ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ),
+              if (!uiState.useListMode) ...[
+                ListTile(
+                  leading: Icon(Icons.apps, color: theme.colorScheme.primary),
+                  title: const Text('Grid Size'),
+                  subtitle: Text(_gridSizeLabel(uiState.gridSize)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      const Text('2'),
+                      Expanded(
+                        child: Slider(
+                          value: uiState.gridSize.toDouble(),
+                          min: 2,
+                          max: 6,
+                          divisions: 4,
+                          label: '${uiState.gridSize}',
+                          onChanged: (value) {
+                            uiState.setGridSize(value.round());
+                          },
+                        ),
+                      ),
+                      const Text('6'),
+                    ],
+                  ),
+                ),
+              ],
               ListTile(
                 leading: Icon(Icons.waves, color: theme.colorScheme.primary),
                 title: const Text('Animated Visualizer'),
@@ -204,8 +267,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final analytics = ListeningAnalyticsService();
     final networkService = NetworkDownloadService();
 
-    // Wait for services to initialize
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Ensure services are fully initialized
+    await analytics.initialize();
+    await networkService.initialize();
 
     // Combine both services' data
     final analyticsJson = analytics.exportAllStatsAsJson();
@@ -357,6 +421,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final analytics = ListeningAnalyticsService();
       final networkService = NetworkDownloadService();
 
+      // Ensure services are fully initialized
+      await analytics.initialize();
+      await networkService.initialize();
+
       // Import main analytics
       final importedEvents = await analytics.importAllStatsFromJson(jsonContent);
 
@@ -383,92 +451,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Import failed: $e'),
-            backgroundColor: theme.colorScheme.error,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _resetStats(BuildContext context) async {
-    final theme = Theme.of(context);
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning, color: theme.colorScheme.error),
-            const SizedBox(width: 8),
-            const Text('Reset All Stats?'),
-          ],
-        ),
-        content: const Text(
-          'This will permanently delete all your listening history, '
-          'achievements, Rewind data, and Network stats.\n\n'
-          'This action cannot be undone. Consider exporting a backup first.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: theme.colorScheme.error,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Reset Everything'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return;
-
-    // Double confirmation
-    final doubleConfirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Are you absolutely sure?'),
-        content: const Text('Type "RESET" to confirm deletion of all stats.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: theme.colorScheme.error,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes, Reset'),
-          ),
-        ],
-      ),
-    );
-
-    if (doubleConfirmed != true) return;
-
-    try {
-      final analytics = ListeningAnalyticsService();
-      await analytics.clearAll();
-
-      // Note: Network stats are kept separate, user can clear them from Network settings
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('All stats have been reset'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Reset failed: $e'),
             backgroundColor: theme.colorScheme.error,
           ),
         );
@@ -912,14 +894,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: const Text('Restore from backup file'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _importStats(context),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: Icon(Icons.delete_forever, color: theme.colorScheme.error),
-                  title: Text('Reset All Stats', style: TextStyle(color: theme.colorScheme.error)),
-                  subtitle: const Text('Clear all listening history'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _resetStats(context),
                 ),
               ],
             ),

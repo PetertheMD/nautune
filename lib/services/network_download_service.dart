@@ -208,6 +208,15 @@ class NetworkDownloadService extends ChangeNotifier {
     _initializeAndLoad();
   }
 
+  /// Wait for initialization to complete (for external callers)
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+    // Wait for _initializeAndLoad to complete
+    while (!_isInitialized) {
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
   Future<void> _initializeAndLoad() async {
     await _initHive();
     await _loadSettings();

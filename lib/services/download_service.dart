@@ -1125,6 +1125,29 @@ class DownloadService extends ChangeNotifier {
       } else {
         debugPrint('Keeping artwork for album $albumId (${remainingTracks.length} tracks remain)');
       }
+
+      // Only delete artist images if no other downloaded tracks share these artists
+      for (final artistId in item.track.artistIds) {
+        // Check if any other downloaded tracks have this artist
+        bool artistHasOtherTracks = false;
+        for (final otherItem in _downloads.values) {
+          if (otherItem.track.id != trackId &&
+              otherItem.track.artistIds.contains(artistId)) {
+            artistHasOtherTracks = true;
+            break;
+          }
+        }
+
+        if (!artistHasOtherTracks) {
+          // No other tracks from this artist - safe to delete artist image
+          final artistImagePath = await _getArtistImagePath(artistId);
+          final artistImageFile = File(artistImagePath);
+          if (await artistImageFile.exists()) {
+            await artistImageFile.delete();
+            debugPrint('Deleted artist image for: $artistId');
+          }
+        }
+      }
     } catch (e) {
       debugPrint('Error during physical deletion of $trackId: $e');
       success = false;
@@ -1178,6 +1201,26 @@ class DownloadService extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error clearing artwork folder: $e');
+    }
+
+    // Delete entire artists folder (artist images)
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      final Directory artistsDir;
+      if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
+        artistsDir = Directory(
+          '${docsDir.path}${Platform.pathSeparator}nautune${Platform.pathSeparator}downloads${Platform.pathSeparator}artists',
+        );
+      } else {
+        artistsDir = Directory('${docsDir.path}/downloads/artists');
+      }
+
+      if (await artistsDir.exists()) {
+        await artistsDir.delete(recursive: true);
+        debugPrint('Deleted artists folder');
+      }
+    } catch (e) {
+      debugPrint('Error clearing artists folder: $e');
     }
 
     // Also scan for orphaned audio files not in our tracking

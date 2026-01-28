@@ -102,6 +102,10 @@ class PlaybackState {
     this.wifiOnlyCaching = false,
     // Offline mode
     this.isOfflineMode = false,
+    // Grid size (2 = compact, 3 = normal, 4 = large)
+    this.gridSize = 2,
+    // List mode vs grid mode
+    this.useListMode = false,
   });
 
   final String? currentTrackId;
@@ -145,6 +149,10 @@ class PlaybackState {
   final bool wifiOnlyCaching;
   // Offline mode
   final bool isOfflineMode;
+  // Grid size (2 = compact, 3 = normal, 4 = large)
+  final int gridSize;
+  // List mode vs grid mode
+  final bool useListMode;
 
   bool get hasTrack => currentTrackId != null;
 
@@ -184,6 +192,8 @@ class PlaybackState {
     int? preCacheTrackCount,
     bool? wifiOnlyCaching,
     bool? isOfflineMode,
+    int? gridSize,
+    bool? useListMode,
   }) {
     return PlaybackState(
       currentTrackId: currentTrackId ?? this.currentTrackId,
@@ -221,6 +231,8 @@ class PlaybackState {
       preCacheTrackCount: preCacheTrackCount ?? this.preCacheTrackCount,
       wifiOnlyCaching: wifiOnlyCaching ?? this.wifiOnlyCaching,
       isOfflineMode: isOfflineMode ?? this.isOfflineMode,
+      gridSize: gridSize ?? this.gridSize,
+      useListMode: useListMode ?? this.useListMode,
     );
   }
 
@@ -261,6 +273,8 @@ class PlaybackState {
       'preCacheTrackCount': preCacheTrackCount,
       'wifiOnlyCaching': wifiOnlyCaching,
       'isOfflineMode': isOfflineMode,
+      'gridSize': gridSize,
+      'useListMode': useListMode,
     };
   }
 
@@ -313,6 +327,8 @@ class PlaybackState {
       preCacheTrackCount: (json['preCacheTrackCount'] as num?)?.toInt() ?? 3,
       wifiOnlyCaching: json['wifiOnlyCaching'] as bool? ?? false,
       isOfflineMode: json['isOfflineMode'] as bool? ?? false,
+      gridSize: (json['gridSize'] as num?)?.toInt() ?? 2,
+      useListMode: json['useListMode'] as bool? ?? false,
     );
   }
 
@@ -355,6 +371,8 @@ class PlaybackState {
       visualizerEnabled: visualizerEnabled, // Preserve visualizer preference
       preCacheTrackCount: preCacheTrackCount, // Preserve smart cache settings
       wifiOnlyCaching: wifiOnlyCaching,
+      gridSize: gridSize, // Preserve grid size preference
+      useListMode: useListMode, // Preserve list mode preference
     );
   }
 

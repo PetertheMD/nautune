@@ -27,10 +27,17 @@
 
 ## 📋 Changelog
 
+### v5.5.3 - View Modes & Download Cleanup
+- **List Mode**: Toggle between grid view and compact list view for albums and artists
+- **Grid Size Options**: Customize grid density with 2-6 columns per row in Settings > Appearance
+- **Offline View Modes**: List/grid preferences apply to offline mode albums and artists
+- **Artist Image Cleanup**: Deleting downloads now properly removes associated artist images
+- **Download Cleanup**: "Clear All Downloads" now removes both album artwork and artist images folders
+- **Backup Fix**: Stats export now properly awaits service initialization for complete data
+
 ### v5.5.2 - Stats Backup & PDF Export
 - **Stats Backup**: Export all listening data (play history, Rewind stats, Relax mode, Network stats) to JSON backup file
 - **Stats Restore**: Import backup file to restore listening history after app reinstall or device migration
-- **Stats Reset**: Option to clear all listening data with double confirmation
 - **PDF Rewind Export**: Your Rewind is now exported as a single PDF document instead of stacked PNGs
 - **Profile Network Stats**: Network listening stats now appear in your Profile alongside other stats
 - **Comprehensive Backups**: Backup includes all-time data, yearly breakdowns, achievements, and easter egg stats

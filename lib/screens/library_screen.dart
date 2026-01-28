@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../providers/syncplay_provider.dart';
+import '../providers/ui_state_provider.dart';
 import '../jellyfin/jellyfin_album.dart';
 import '../jellyfin/jellyfin_artist.dart';
 import '../jellyfin/jellyfin_genre.dart';
@@ -1048,9 +1049,53 @@ class _AlbumsTab extends StatelessWidget {
       onRefresh: () async => onRefresh(),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // 4 columns on desktop (>800px), 2 columns on mobile
-          final crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
+          // User-controlled grid size - directly sets columns per row
+          final uiState = context.watch<UIStateProvider>();
+          final crossAxisCount = uiState.gridSize;
+          final useListMode = uiState.useListMode;
 
+          // List mode rendering
+          if (useListMode) {
+            return Stack(
+              children: [
+                CustomScrollView(
+                  controller: scrollController,
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            if (index >= albums!.length) {
+                              return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()));
+                            }
+                            final album = albums![index];
+                            return _AlbumListTile(
+                              album: album,
+                              onTap: () => onAlbumTap(album),
+                              appState: appState,
+                            );
+                          },
+                          childCount: albums!.length + (isLoadingMore ? 1 : 0),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                AlphabetScrollbar(
+                  items: albums!,
+                  getItemName: (album) => (album as JellyfinAlbum).name,
+                  scrollController: scrollController,
+                  itemHeight: 72, // List tile height
+                  crossAxisCount: 1,
+                  sortOrder: appState.albumSortOrder,
+                  sortBy: appState.albumSortBy,
+                ),
+              ],
+            );
+          }
+
+          // Grid mode rendering
           return Stack(
             children: [
               CustomScrollView(
@@ -1097,6 +1142,85 @@ class _AlbumsTab extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+class _AlbumListTile extends StatelessWidget {
+  const _AlbumListTile({required this.album, required this.onTap, required this.appState});
+  final JellyfinAlbum album;
+  final VoidCallback onTap;
+  final NautuneAppState appState;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ListTile(
+      onTap: onTap,
+      onLongPress: () {
+        showModalBottomSheet(
+          context: context,
+          builder: (context) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.playlist_add),
+                  title: const Text('Add to Playlist'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await showAddToPlaylistDialog(
+                      context: context,
+                      appState: appState,
+                      album: album,
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: SizedBox(
+          width: 56,
+          height: 56,
+          child: album.primaryImageTag != null
+              ? JellyfinImage(
+                  itemId: album.id,
+                  imageTag: album.primaryImageTag,
+                  boxFit: BoxFit.cover,
+                  errorBuilder: (context, url, error) => Image.asset(
+                    'assets/no_album_art.png',
+                    fit: BoxFit.cover,
+                  ),
+                )
+              : Image.asset(
+                  'assets/no_album_art.png',
+                  fit: BoxFit.cover,
+                ),
+        ),
+      ),
+      title: Text(
+        album.name,
+        style: theme.textTheme.titleSmall?.copyWith(
+          color: theme.colorScheme.tertiary,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: album.artists.isNotEmpty
+          ? Text(
+              album.displayArtist,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            )
+          : null,
     );
   }
 }
@@ -1487,32 +1611,38 @@ class _AlbumCard extends StatelessWidget {
                       ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    album.name,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: theme.colorScheme.tertiary,  // Ocean blue
-                      height: 1.2,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (album.artists.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      album.displayArtist,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue slightly transparent
+            Expanded(
+              child: ClipRect(
+                child: Padding(
+                  padding: const EdgeInsets.all(6.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          album.name,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: theme.colorScheme.tertiary,  // Ocean blue
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ],
+                      if (album.artists.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          album.displayArtist,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.tertiary.withValues(alpha: 0.7),  // Ocean blue slightly transparent
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             ),
           ],
@@ -3794,10 +3924,55 @@ class _ArtistsTab extends StatelessWidget {
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // 4 columns on desktop (>800px), 3 columns on mobile
-          final crossAxisCount = constraints.maxWidth > 800 ? 4 : 3;
+          // User-controlled grid size - directly sets columns per row
+          final uiState = context.watch<UIStateProvider>();
+          final crossAxisCount = uiState.gridSize;
+          final useListMode = uiState.useListMode;
           final controller = scrollController ?? ScrollController();
 
+          // List mode rendering
+          if (useListMode) {
+            return Stack(
+              children: [
+                CustomScrollView(
+                  controller: controller,
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            if (index >= effectiveArtists.length) {
+                              return const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+                            }
+                            final artist = effectiveArtists[index];
+                            return _ArtistListTile(artist: artist, appState: appState);
+                          },
+                          childCount: effectiveArtists.length + (effectiveIsLoadingMore ? 1 : 0),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                AlphabetScrollbar(
+                  items: effectiveArtists,
+                  getItemName: (artist) => (artist as JellyfinArtist).name,
+                  scrollController: controller,
+                  itemHeight: 72, // List tile height
+                  crossAxisCount: 1,
+                  sortOrder: artists != null ? SortOrder.ascending : appState.artistSortOrder,
+                  sortBy: artists != null ? SortOption.name : appState.artistSortBy,
+                ),
+              ],
+            );
+          }
+
+          // Grid mode rendering
           return Stack(
             children: [
               CustomScrollView(
@@ -3844,6 +4019,70 @@ class _ArtistsTab extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _ArtistListTile extends StatelessWidget {
+  const _ArtistListTile({required this.artist, required this.appState});
+
+  final JellyfinArtist artist;
+  final NautuneAppState appState;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    Widget artwork;
+    final tag = artist.primaryImageTag;
+    if (tag != null && tag.isNotEmpty) {
+      artwork = ClipOval(
+        child: JellyfinImage(
+          itemId: artist.id,
+          imageTag: tag,
+          artistId: artist.id,
+          maxWidth: 100,
+          boxFit: BoxFit.cover,
+          errorBuilder: (context, url, error) => ClipOval(
+            child: Image.asset(
+              'assets/no_artist_art.png',
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+      );
+    } else {
+      artwork = ClipOval(
+        child: Image.asset(
+          'assets/no_artist_art.png',
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+
+    return ListTile(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ArtistDetailScreen(
+              artist: artist,
+            ),
+          ),
+        );
+      },
+      leading: SizedBox(
+        width: 56,
+        height: 56,
+        child: artwork,
+      ),
+      title: Text(
+        artist.name,
+        style: theme.textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w500,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
@@ -3920,7 +4159,9 @@ class _GenresTabState extends State<_GenresTab> {
       onRefresh: () => widget.appState.refreshGenres(),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
+          // User-controlled grid size - directly sets columns per row
+          final uiState = context.watch<UIStateProvider>();
+          final crossAxisCount = uiState.gridSize;
 
           return Stack(
             children: [
@@ -4688,21 +4929,29 @@ class _ArtistCard extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
+            flex: 3,
             child: AspectRatio(
               aspectRatio: 1,
               child: artwork,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            artist.name,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w500,
-              color: theme.colorScheme.tertiary,  // Ocean blue
+          Expanded(
+            flex: 1,
+            child: ClipRect(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  artist.name,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: theme.colorScheme.tertiary,  // Ocean blue
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ),
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
           ),
         ],
       ),

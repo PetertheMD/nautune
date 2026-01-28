@@ -48,6 +48,12 @@ class UIStateProvider extends ChangeNotifier {
   bool _autoCleanupEnabled = false;
   int _autoCleanupDays = 30;
 
+  // Grid size (2-6 columns per row)
+  int _gridSize = 2;
+
+  // List mode (true = list view, false = grid view)
+  bool _useListMode = false;
+
   // Getters
   bool get showVolumeBar => _showVolumeBar;
   bool get crossfadeEnabled => _crossfadeEnabled;
@@ -67,6 +73,12 @@ class UIStateProvider extends ChangeNotifier {
   int get storageLimitMB => _storageLimitMB;
   bool get autoCleanupEnabled => _autoCleanupEnabled;
   int get autoCleanupDays => _autoCleanupDays;
+
+  // Grid size getter
+  int get gridSize => _gridSize;
+
+  // List mode getter
+  bool get useListMode => _useListMode;
 
   /// Initialize UI state by loading persisted preferences.
   ///
@@ -95,6 +107,12 @@ class UIStateProvider extends ChangeNotifier {
         _storageLimitMB = storedPlaybackState.storageLimitMB;
         _autoCleanupEnabled = storedPlaybackState.autoCleanupEnabled;
         _autoCleanupDays = storedPlaybackState.autoCleanupDays;
+
+        // Grid size
+        _gridSize = storedPlaybackState.gridSize;
+
+        // List mode
+        _useListMode = storedPlaybackState.useListMode;
 
         debugPrint('UIStateProvider: Restored UI preferences');
         notifyListeners();
@@ -236,6 +254,23 @@ class UIStateProvider extends ChangeNotifier {
       autoCleanupEnabled: _autoCleanupEnabled,
       autoCleanupDays: _autoCleanupDays,
     ));
+    notifyListeners();
+  }
+
+  /// Set grid size for album/artist views (2-6 columns per row).
+  void setGridSize(int size) {
+    final clampedSize = size.clamp(2, 6);
+    if (_gridSize == clampedSize) return;
+    _gridSize = clampedSize;
+    unawaited(_playbackStateStore.saveUiState(gridSize: clampedSize));
+    notifyListeners();
+  }
+
+  /// Toggle between list mode and grid mode.
+  void setUseListMode(bool value) {
+    if (_useListMode == value) return;
+    _useListMode = value;
+    unawaited(_playbackStateStore.saveUiState(useListMode: value));
     notifyListeners();
   }
 
