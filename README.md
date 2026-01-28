@@ -9,8 +9,8 @@
 - **Collaborative Playlists**: Real-time SyncPlay sessions - listen together with friends via QR code or share link
 - **Custom Color Theme**: Create your own theme with primary/secondary color picker
 - **10-Band Equalizer** (Linux): Full graphic EQ with 12 presets (Rock, Pop, Jazz, Classical, and more)
-- **Real-Time FFT Visualizer**: True audio-reactive waves using PulseAudio (Linux) and MTAudioProcessingTap (iOS)
-- **Bioluminescent Waves**: Track-reactive animation that adapts to loudness and genre
+- **5 Audio Visualizers**: Ocean Waves, Spectrum Bars, Mirror Bars, Radial, and Psychedelic styles
+- **Real-Time FFT**: True audio-reactive visualization using PulseAudio (Linux) and MTAudioProcessingTap (iOS)
 - **Smart Playlists**: Tag-aware mood playlists (Chill, Energetic, Melancholy, Upbeat) using actual file tags
 - **Smart Pre-Cache**: Configurable pre-caching of upcoming tracks (3, 5, or 10) with WiFi-only option
 - **Smart Lyrics**: Multi-source lyrics with sync, caching, and pre-fetching
@@ -27,6 +27,17 @@
 ---
 
 ## 📋 Changelog
+
+### v5.5.7 - Multiple Visualizer Styles
+- **5 Visualizer Styles**: Choose from Ocean Waves, Spectrum Bars, Mirror Bars, Radial, and Psychedelic
+- **Spectrum Bars**: Classic vertical frequency bars with album art-based color gradients and peak hold indicators
+- **Mirror Bars**: Symmetric bars extending from center line with bass-reactive sizing
+- **Radial**: Circular bar arrangement with slow rotation and bass pulse rings
+- **Psychedelic**: Milkdrop/Butterchurn-inspired effects with 3 auto-cycling presets (Neon Pulse, Cosmic Spiral, Kaleidoscope)
+- **Album Art Colors**: Spectrum visualizers use dynamic colors extracted from current album artwork
+- **Style Picker**: New visual picker in Settings > Appearance with live previews
+- **Persistence**: Selected visualizer style saved across app restarts
+- **Improved Reactivity**: All visualizers now react more dramatically to bass, mids, and treble
 
 ### v5.5.6 - Tag-Aware Smart Playlists
 - **Tag-Based Mood Detection**: Smart playlists now read actual tags from your Jellyfin library instead of guessing from genres
@@ -173,7 +184,7 @@
 
 ### v4.6.0 - FFT Visualizer & Lyrics
 - **Real-Time FFT Visualizer**: True audio-reactive waves with bass SLAM and treble shimmer
-- **Bioluminescent Visualizer**: Track-reactive animation adapting to loudness and genre
+- **Bioluminescent Visualizer**: Track-reactive animation adapting to loudness and genre (now called "Ocean Waves")
 - **Smart Lyrics**: Multi-source fallback (Jellyfin → LRCLIB → lyrics.ovh) with sync and caching
 - **iOS Low Power Mode**: Visualizer auto-disables when Low Power Mode is on
 - **Enhanced Stats**: Listening heatmap, streak tracker, week comparison
@@ -337,6 +348,36 @@ Now you can:
 
 ---
 
+## 🎨 Visualizer Styles
+
+Nautune offers 5 audio-reactive visualizer styles. Access the picker via **Settings > Appearance > Visualizer Style**.
+
+| Style | Description |
+|-------|-------------|
+| **Ocean Waves** | Bioluminescent waves with floating particles, bass-reactive depth |
+| **Spectrum Bars** | Classic vertical frequency bars with album art colors and peak hold |
+| **Mirror Bars** | Symmetric bars extending from center, creates "sound wave" look |
+| **Radial** | Circular bar arrangement with slow rotation and bass pulse rings |
+| **Psychedelic** | Milkdrop-inspired effects with 3 auto-cycling presets |
+
+### Psychedelic Presets
+
+The Psychedelic visualizer cycles through three presets every 30 seconds:
+
+1. **Neon Pulse**: Bright concentric rings with expanding bass bursts and particle orbits
+2. **Cosmic Spiral**: Rotating spiral arms with central vortex and drifting stars
+3. **Kaleidoscope**: 8-fold symmetry with geometric patterns and mandala core
+
+### Technical Details
+
+- **30fps rendering**: Battery-optimized frame rate with smooth interpolation
+- **Fast attack / slow decay**: Musical smoothing for natural-feeling reactivity
+- **Album art colors**: Spectrum visualizers extract primary color from current artwork
+- **Bass boost**: All visualizers react dramatically to bass frequencies
+- **Low Power Mode**: Visualizers auto-disable on iOS when Low Power Mode is active
+
+---
+
 ## 🎵 ListenBrainz Setup Guide
 
 ListenBrainz is a free, open-source music listening tracker. Connect your account to scrobble plays and get personalized music recommendations.
@@ -453,10 +494,9 @@ flutter analyze
 | Feature | Platform | Status |
 |---------|----------|--------|
 | Desktop Remote Control | iOS → Linux | 🔜 Planned |
-| Additional Visualizers | All | 🔜 Planned |
+| Additional Visualizers | All | ✅ Complete |
 
 - **Desktop Remote Control**: Control desktop playback from iOS device over local network.
-- **Additional Visualizers**: More audio-reactive visualizer styles beyond bioluminescent waves (e.g., spectrum bars, particle effects, waveforms).
 
 ## 🙏 Acknowledgments
 
