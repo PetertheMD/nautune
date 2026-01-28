@@ -151,8 +151,61 @@ class SmartPlaylistService {
     return _genreMoodMap[normalized];
   }
 
-  /// Analyze a track's primary mood based on its genres
-  Mood? getTrackMood(JellyfinTrack track) {
+  /// Try to detect mood from tags (preferred over genre mapping)
+  /// Looks for mood-related keywords in the track's tags
+  Mood? _getMoodFromTags(JellyfinTrack track) {
+    final tags = track.tags;
+    if (tags == null || tags.isEmpty) return null;
+
+    for (final tag in tags) {
+      final normalized = tag.toLowerCase().trim();
+
+      // Check for chill-related keywords
+      if (normalized.contains('chill') ||
+          normalized.contains('relaxed') ||
+          normalized.contains('calm') ||
+          normalized.contains('mellow') ||
+          normalized.contains('peaceful') ||
+          normalized.contains('ambient')) {
+        return Mood.chill;
+      }
+
+      // Check for energetic-related keywords
+      if (normalized.contains('energetic') ||
+          normalized.contains('energy') ||
+          normalized.contains('intense') ||
+          normalized.contains('powerful') ||
+          normalized.contains('driving') ||
+          normalized.contains('aggressive')) {
+        return Mood.energetic;
+      }
+
+      // Check for melancholy-related keywords
+      if (normalized.contains('melancholy') ||
+          normalized.contains('sad') ||
+          normalized.contains('emotional') ||
+          normalized.contains('somber') ||
+          normalized.contains('moody') ||
+          normalized.contains('dark')) {
+        return Mood.melancholy;
+      }
+
+      // Check for upbeat-related keywords
+      if (normalized.contains('upbeat') ||
+          normalized.contains('happy') ||
+          normalized.contains('cheerful') ||
+          normalized.contains('fun') ||
+          normalized.contains('party') ||
+          normalized.contains('groovy')) {
+        return Mood.upbeat;
+      }
+    }
+
+    return null;
+  }
+
+  /// Analyze a track's primary mood based on its genres (fallback method)
+  Mood? _getMoodFromGenres(JellyfinTrack track) {
     final genres = track.genres;
     if (genres == null || genres.isEmpty) return null;
 
@@ -171,6 +224,16 @@ class SmartPlaylistService {
     return moodCounts.entries
         .reduce((a, b) => a.value >= b.value ? a : b)
         .key;
+  }
+
+  /// Get mood from actual tags (preferred) or fall back to genre mapping
+  Mood? getTrackMood(JellyfinTrack track) {
+    // First check actual tags for mood keywords
+    final tagMood = _getMoodFromTags(track);
+    if (tagMood != null) return tagMood;
+
+    // Fall back to existing genre-based mapping
+    return _getMoodFromGenres(track);
   }
 
   /// Get all tracks that match a specific mood
@@ -234,5 +297,139 @@ class SmartPlaylistService {
       debugPrint('SmartPlaylist: Error getting mood counts: $e');
       return {};
     }
+  }
+
+  // ============ Tag-based filtering methods ============
+
+  /// Get tracks by specific tag (case-insensitive partial match)
+  Future<List<JellyfinTrack>> getTracksByTag(String tag, {int limit = 50}) async {
+    try {
+      final allTracks = await _jellyfinService.getAllTracks(libraryId: _libraryId);
+      final normalizedTag = tag.toLowerCase();
+
+      final matchingTracks = allTracks
+          .where((track) =>
+              track.tags?.any((t) => t.toLowerCase().contains(normalizedTag)) ?? false)
+          .toList();
+
+      debugPrint('SmartPlaylist: Found ${matchingTracks.length} tracks for tag "$tag"');
+
+      // Shuffle and limit
+      matchingTracks.shuffle(_random);
+      if (matchingTracks.length > limit) {
+        return matchingTracks.sublist(0, limit);
+      }
+
+      return matchingTracks;
+    } catch (e) {
+      debugPrint('SmartPlaylist: Error getting tracks by tag: $e');
+      return [];
+    }
+  }
+
+  /// Get tracks that have ANY of the specified tags
+  Future<List<JellyfinTrack>> getTracksByAnyTag(List<String> tags, {int limit = 50}) async {
+    try {
+      final allTracks = await _jellyfinService.getAllTracks(libraryId: _libraryId);
+      final normalizedTags = tags.map((t) => t.toLowerCase()).toSet();
+
+      final matchingTracks = allTracks.where((track) {
+        final trackTags = track.tags;
+        if (trackTags == null || trackTags.isEmpty) return false;
+        return trackTags.any((t) =>
+            normalizedTags.any((nt) => t.toLowerCase().contains(nt)));
+      }).toList();
+
+      debugPrint('SmartPlaylist: Found ${matchingTracks.length} tracks for tags $tags');
+
+      // Shuffle and limit
+      matchingTracks.shuffle(_random);
+      if (matchingTracks.length > limit) {
+        return matchingTracks.sublist(0, limit);
+      }
+
+      return matchingTracks;
+    } catch (e) {
+      debugPrint('SmartPlaylist: Error getting tracks by tags: $e');
+      return [];
+    }
+  }
+
+  /// Get tracks that have ALL of the specified tags
+  Future<List<JellyfinTrack>> getTracksByAllTags(List<String> tags, {int limit = 50}) async {
+    try {
+      final allTracks = await _jellyfinService.getAllTracks(libraryId: _libraryId);
+      final normalizedTags = tags.map((t) => t.toLowerCase()).toList();
+
+      final matchingTracks = allTracks.where((track) {
+        final trackTags = track.tags;
+        if (trackTags == null || trackTags.isEmpty) return false;
+        final trackTagsNormalized = trackTags.map((t) => t.toLowerCase()).toList();
+        return normalizedTags.every((nt) =>
+            trackTagsNormalized.any((tt) => tt.contains(nt)));
+      }).toList();
+
+      debugPrint('SmartPlaylist: Found ${matchingTracks.length} tracks with all tags $tags');
+
+      // Shuffle and limit
+      matchingTracks.shuffle(_random);
+      if (matchingTracks.length > limit) {
+        return matchingTracks.sublist(0, limit);
+      }
+
+      return matchingTracks;
+    } catch (e) {
+      debugPrint('SmartPlaylist: Error getting tracks by all tags: $e');
+      return [];
+    }
+  }
+
+  /// Get all unique tags in library (for filter UI)
+  Future<Set<String>> getAllTags() async {
+    try {
+      final allTracks = await _jellyfinService.getAllTracks(libraryId: _libraryId);
+      final tags = <String>{};
+
+      for (final track in allTracks) {
+        final trackTags = track.tags;
+        if (trackTags != null && trackTags.isNotEmpty) {
+          tags.addAll(trackTags);
+        }
+      }
+
+      debugPrint('SmartPlaylist: Found ${tags.length} unique tags in library');
+      return tags;
+    } catch (e) {
+      debugPrint('SmartPlaylist: Error getting all tags: $e');
+      return {};
+    }
+  }
+
+  /// Get tag counts (how many tracks have each tag)
+  Future<Map<String, int>> getTagCounts() async {
+    try {
+      final allTracks = await _jellyfinService.getAllTracks(libraryId: _libraryId);
+      final counts = <String, int>{};
+
+      for (final track in allTracks) {
+        final trackTags = track.tags;
+        if (trackTags != null) {
+          for (final tag in trackTags) {
+            counts[tag] = (counts[tag] ?? 0) + 1;
+          }
+        }
+      }
+
+      return counts;
+    } catch (e) {
+      debugPrint('SmartPlaylist: Error getting tag counts: $e');
+      return {};
+    }
+  }
+
+  /// Check if any tracks have the specified tag
+  Future<bool> hasTaggedTracks(String tag) async {
+    final tracks = await getTracksByTag(tag, limit: 1);
+    return tracks.isNotEmpty;
   }
 }

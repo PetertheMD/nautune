@@ -11,6 +11,7 @@
 - **10-Band Equalizer** (Linux): Full graphic EQ with 12 presets (Rock, Pop, Jazz, Classical, and more)
 - **Real-Time FFT Visualizer**: True audio-reactive waves using PulseAudio (Linux) and MTAudioProcessingTap (iOS)
 - **Bioluminescent Waves**: Track-reactive animation that adapts to loudness and genre
+- **Smart Playlists**: Tag-aware mood playlists (Chill, Energetic, Melancholy, Upbeat) using actual file tags
 - **Smart Pre-Cache**: Configurable pre-caching of upcoming tracks (3, 5, or 10) with WiFi-only option
 - **Smart Lyrics**: Multi-source lyrics with sync, caching, and pre-fetching
 - **41 Nautical Milestones**: Earn achievements as you listen
@@ -26,6 +27,15 @@
 ---
 
 ## 📋 Changelog
+
+### v5.5.6 - Tag-Aware Smart Playlists
+- **Tag-Based Mood Detection**: Smart playlists now read actual tags from your Jellyfin library instead of guessing from genres
+- **Mood Keywords**: Tracks tagged with "chill", "energetic", "sad", "upbeat" (and similar) are correctly categorized
+- **Genre Fallback**: Falls back to genre-based guessing when no mood tags are present
+- **Tag Filtering API**: New methods for filtering tracks by custom tags (workout, party, remix, etc.)
+- **Extended Metadata**: Tags field now fetched across all track API requests for consistency
+- **Offline Tag Support**: Tags are persisted in offline storage for downloaded tracks
+- **Queue Screen Fix**: Fixed "Every item of ReorderableListView must have a key" error when viewing queue
 
 ### v5.5.5 - TUI Mode (Linux)
 - **Terminal UI Mode**: Launch Nautune with a jellyfin-tui inspired terminal interface using `--tui` flag

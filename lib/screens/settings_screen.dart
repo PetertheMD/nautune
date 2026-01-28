@@ -4,8 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+
+import '../app_version.dart';
 import 'package:provider/provider.dart';
 
 import '../app_state.dart';
@@ -33,14 +34,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  Future<String> _packageVersion() async {
-    try {
-      final packageInfo = await PackageInfo.fromPlatform();
-      return '${packageInfo.version}+${packageInfo.buildNumber}';
-    } catch (_) {
-      return 'unknown';
-    }
-  }
+  String get _packageVersion => AppVersion.current;
   String _formatDuration(int minutes) {
     if (minutes < 60) return '$minutes minutes';
     if (minutes < 1440) {
@@ -903,16 +897,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             margin: const EdgeInsets.only(bottom: 16),
             child: Column(
               children: [
-                FutureBuilder<String>(
-                  future: _packageVersion(),
-                  builder: (context, snapshot) {
-                    final version = snapshot.data ?? '…';
-                    return ListTile(
-                      leading: Icon(Icons.anchor, color: theme.colorScheme.primary),
-                      title: const Text('Nautune'),
-                      subtitle: Text('Version $version'),
-                    );
-                  },
+                ListTile(
+                  leading: Icon(Icons.anchor, color: theme.colorScheme.primary),
+                  title: const Text('Nautune'),
+                  subtitle: Text('Version $_packageVersion'),
                 ),
                 ListTile(
                   leading: Icon(Icons.gavel, color: theme.colorScheme.primary),

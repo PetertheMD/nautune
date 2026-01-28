@@ -33,6 +33,7 @@ import 'services/local_cache_service.dart';
 import 'services/deep_link_service.dart';
 import 'services/notification_service.dart';
 import 'services/playback_state_store.dart';
+import 'app_version.dart';
 
 /// Migrates old Hive files from ~/Documents/ to ~/Documents/nautune/
 /// Only runs if files exist in old location and NOT in new location.
@@ -102,6 +103,9 @@ Future<void> _migrateHiveFiles() async {
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize app version from package info
+  await AppVersion.init();
 
   // Detect TUI mode from command line, environment, or dart-define
   const tuiModeDefine = bool.fromEnvironment('TUI_MODE', defaultValue: false);

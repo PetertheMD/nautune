@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../app_version.dart';
 import '../models/syncplay_models.dart';
 import 'jellyfin_credentials.dart';
 import 'jellyfin_exceptions.dart';
@@ -41,7 +42,7 @@ class SyncPlayClient {
       'Accept': 'application/json',
       'X-Emby-Authorization':
           'MediaBrowser Client="Nautune", Device="${defaultTargetPlatform.name}", '
-          'DeviceId="$deviceId", Version="5.0.0"',
+          'DeviceId="$deviceId", Version="${AppVersion.current}"',
     };
 
     if (credentials != null) {

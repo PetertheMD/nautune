@@ -30,6 +30,7 @@ class JellyfinTrack {
     this.channels,
     this.genres,
     this.providerIds,
+    this.tags,
   });
 
   final String id;
@@ -62,6 +63,7 @@ class JellyfinTrack {
   final int? channels; // Number of audio channels (1=mono, 2=stereo, 6=5.1, etc.)
   final List<String>? genres; // Track genres for stats
   final Map<String, String>? providerIds; // External IDs (MusicBrainzTrack, MusicBrainzArtist, etc.)
+  final List<String>? tags; // User tags from Jellyfin for smart playlist filtering
 
   factory JellyfinTrack.fromJson(Map<String, dynamic> json, {String? serverUrl, String? token, String? userId}) {
     final rawArtists = json['Artists'];
@@ -166,6 +168,10 @@ class JellyfinTrack {
       if (providerIds.isEmpty) providerIds = null;
     }
 
+    // Parse tags (user-defined tags for smart playlist filtering)
+    final rawTags = json['Tags'];
+    final tagsList = (rawTags is List) ? rawTags.whereType<String>().toList() : null;
+
     return JellyfinTrack(
       id: json['Id'] is String ? json['Id'] as String : '',
       name: json['Name'] is String ? json['Name'] as String : '',
@@ -195,6 +201,7 @@ class JellyfinTrack {
       channels: channels,
       genres: genresList,
       providerIds: providerIds,
+      tags: tagsList,
     );
   }
 
@@ -227,6 +234,7 @@ class JellyfinTrack {
     int? channels,
     List<String>? genres,
     Map<String, String>? providerIds,
+    List<String>? tags,
   }) {
     return JellyfinTrack(
       id: id ?? this.id,
@@ -257,6 +265,7 @@ class JellyfinTrack {
       channels: channels ?? this.channels,
       genres: genres ?? this.genres,
       providerIds: providerIds ?? this.providerIds,
+      tags: tags ?? this.tags,
     );
   }
 
@@ -564,6 +573,7 @@ class JellyfinTrack {
       'bitDepth': bitDepth,
       'channels': channels,
       'genres': genres,
+      'tags': tags,
     };
   }
 
@@ -582,6 +592,9 @@ class JellyfinTrack {
 
     final rawGenres = json['genres'];
     final genresList = (rawGenres is List) ? rawGenres.whereType<String>().toList() : null;
+
+    final rawTags = json['tags'];
+    final tagsList = (rawTags is List) ? rawTags.whereType<String>().toList() : null;
 
     return JellyfinTrack(
       id: json['id'] is String ? json['id'] as String : '',
@@ -611,6 +624,7 @@ class JellyfinTrack {
       bitDepth: json['bitDepth'] is int ? json['bitDepth'] as int : (json['bitDepth'] is num ? (json['bitDepth'] as num).toInt() : null),
       channels: json['channels'] is int ? json['channels'] as int : (json['channels'] is num ? (json['channels'] as num).toInt() : null),
       genres: genresList,
+      tags: tagsList,
     );
   }
 

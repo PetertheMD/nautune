@@ -201,8 +201,9 @@ class _QueueScreenState extends State<QueueScreen> {
                   final isCurrentTrack = index == currentIndex;
 
                   return RepaintBoundary(
+                    key: ValueKey('queue-${track.id}-$index'),
                     child: Dismissible(
-                      key: Key('${track.id}-$index'),
+                      key: ValueKey('dismiss-${track.id}-$index'),
                     direction: queue.length > 1 ? DismissDirection.endToStart : DismissDirection.none,
                     background: Container(
                       color: theme.colorScheme.error,
