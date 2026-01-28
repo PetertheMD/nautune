@@ -2,7 +2,7 @@ name: nautune
 description: "Nautune - Poseidon Music Player for Jellyfin"
 publish_to: 'none'
 
-version: 5.4.9+1
+version: 5.5.0+1
 
 environment:
   sdk: ^3.9.2
@@ -67,6 +67,7 @@ flutter:
     - assets/no_album_art.png
     - assets/no_artist_art.png
     - assets/relax/
+    - assets/images/
 
 flutter_launcher_icons:
   android: false

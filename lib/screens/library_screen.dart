@@ -31,6 +31,7 @@ import 'genre_detail_screen.dart';
 import 'offline_library_screen.dart';
 import 'collab_playlist_screen.dart';
 import 'relax_mode_screen.dart';
+import 'network_screen.dart';
 import 'playlist_detail_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
@@ -4039,6 +4040,7 @@ class _SearchTabState extends State<_SearchTab> {
   String _lastQuery = '';
   bool _isLoading = false;
   bool _showRelaxEasterEgg = false;
+  bool _showNetworkEasterEgg = false;
   List<JellyfinAlbum> _albumResults = const [];
   List<JellyfinArtist> _artistResults = const [];
   List<JellyfinTrack> _trackResults = const [];
@@ -4123,14 +4125,16 @@ class _SearchTabState extends State<_SearchTab> {
         _trackResults = const [];
         _isLoading = false;
         _showRelaxEasterEgg = false;
+        _showNetworkEasterEgg = false;
       });
       return;
     }
 
     setState(() {
       _isLoading = true;
-      // Easter egg: show Relax Mode card when searching "relax"
+      // Easter eggs: show special cards when searching certain keywords
       _showRelaxEasterEgg = lowerQuery.contains('relax');
+      _showNetworkEasterEgg = lowerQuery.contains('network');
     });
     unawaited(_rememberQuery(trimmed));
 
@@ -4403,7 +4407,8 @@ class _SearchTabState extends State<_SearchTab> {
     final hasResults = _albumResults.isNotEmpty ||
                       _artistResults.isNotEmpty ||
                       _trackResults.isNotEmpty ||
-                      _showRelaxEasterEgg;
+                      _showRelaxEasterEgg ||
+                      _showNetworkEasterEgg;
 
     if (!hasResults) {
       return Center(
@@ -4421,6 +4426,9 @@ class _SearchTabState extends State<_SearchTab> {
         // Easter egg: Relax Mode card
         if (_showRelaxEasterEgg)
           _buildRelaxModeCard(theme),
+        // Easter egg: Network radio card
+        if (_showNetworkEasterEgg)
+          _buildNetworkModeCard(theme),
         // Artists section
         if (_artistResults.isNotEmpty) ...[
           _buildSectionHeader(theme, 'Artists', Icons.person, _artistResults.length),
@@ -4464,6 +4472,28 @@ class _SearchTabState extends State<_SearchTab> {
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (context) => const RelaxModeScreen()),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNetworkModeCard(ThemeData theme) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      color: Colors.black,
+      child: ListTile(
+        leading: const Icon(Icons.radio, color: Colors.white),
+        title: const Text(
+          'The Network',
+          style: TextStyle(color: Colors.white, fontFamily: 'monospace'),
+        ),
+        subtitle: const Text(
+          'Other People Radio 0-333',
+          style: TextStyle(color: Colors.white70, fontFamily: 'monospace'),
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white54),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const NetworkScreen()),
         ),
       ),
     );

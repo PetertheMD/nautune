@@ -22,6 +22,7 @@ import 'screens/mini_player_screen.dart';
 import 'screens/collab_playlist_screen.dart';
 import 'screens/queue_screen.dart';
 import 'screens/relax_mode_screen.dart';
+import 'screens/network_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/bootstrap_service.dart';
 import 'services/connectivity_service.dart';
@@ -477,6 +478,7 @@ class _NautuneAppState extends State<NautuneApp> with WidgetsBindingObserver, Wi
             '/mini': (context) => const MiniPlayerScreen(),
             '/collab': (context) => const CollabPlaylistScreen(),
             '/relax': (context) => const RelaxModeScreen(),
+            '/network': (context) => const NetworkScreen(),
           },
           home: Consumer2<SessionProvider, NautuneAppState>(
           builder: (context, session, app, _) {

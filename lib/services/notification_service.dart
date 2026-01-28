@@ -43,7 +43,7 @@ class NotificationService {
     );
 
     await _flutterLocalNotificationsPlugin.initialize(
-      initializationSettings,
+      settings: initializationSettings,
       onDidReceiveNotificationResponse: (details) {
         // Handle notification tap
       },
@@ -124,10 +124,10 @@ class NotificationService {
     );
 
     await _flutterLocalNotificationsPlugin.show(
-      _downloadNotificationId,
-      title,
-      body,
-      platformChannelSpecifics,
+      id: _downloadNotificationId,
+      title: title,
+      body: body,
+      notificationDetails: platformChannelSpecifics,
     );
   }
 
@@ -152,16 +152,16 @@ class NotificationService {
     );
 
     await _flutterLocalNotificationsPlugin.show(
-      _downloadNotificationId,
-      title,
-      body,
-      platformChannelSpecifics,
+      id: _downloadNotificationId,
+      title: title,
+      body: body,
+      notificationDetails: platformChannelSpecifics,
     );
   }
 
   /// Cancel the download notification
   Future<void> cancel() async {
     if (!_initialized) return;
-    await _flutterLocalNotificationsPlugin.cancel(_downloadNotificationId);
+    await _flutterLocalNotificationsPlugin.cancel(id: _downloadNotificationId);
   }
 }

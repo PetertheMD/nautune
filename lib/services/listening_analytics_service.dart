@@ -278,10 +278,12 @@ class ListeningAnalyticsService {
   static const _eventsKey = 'play_events';
   static const _streakKey = 'streak_data';
   static const _relaxModeKey = 'relax_mode_stats';
+  static const _networkDiscoveredKey = 'network_discovered';
 
   Box? _box;
   List<PlayEvent> _events = [];
   RelaxModeStats _relaxModeStats = RelaxModeStats();
+  bool _networkDiscovered = false;
   bool _initialized = false;
 
   /// Singleton instance
@@ -299,6 +301,7 @@ class ListeningAnalyticsService {
       _box = await Hive.openBox(_boxName);
       await _loadEvents();
       await _loadRelaxModeStats();
+      await _loadNetworkDiscovered();
       _initialized = true;
       debugPrint('ListeningAnalyticsService: Initialized with ${_events.length} events');
     } catch (e) {
@@ -314,6 +317,7 @@ class ListeningAnalyticsService {
       await Future.wait([
         _saveEvents(),
         _saveRelaxModeStats(),
+        _saveNetworkDiscovered(),
       ]);
       debugPrint('ListeningAnalyticsService: Analytics saved');
     } catch (e) {
@@ -377,6 +381,27 @@ class ListeningAnalyticsService {
 
     await _saveRelaxModeStats();
     debugPrint('ListeningAnalyticsService: Recorded Relax Mode session (${sessionDuration.inMinutes}m)');
+  }
+
+  // Network Easter Egg discovery tracking
+  Future<void> _loadNetworkDiscovered() async {
+    _networkDiscovered = _box?.get(_networkDiscoveredKey) as bool? ?? false;
+  }
+
+  Future<void> _saveNetworkDiscovered() async {
+    if (_box == null) return;
+    await _box!.put(_networkDiscoveredKey, _networkDiscovered);
+  }
+
+  /// Check if Network easter egg has been discovered
+  bool get networkDiscovered => _networkDiscovered;
+
+  /// Mark Network easter egg as discovered (for milestone)
+  Future<void> markNetworkDiscovered() async {
+    if (_networkDiscovered) return;
+    _networkDiscovered = true;
+    await _saveNetworkDiscovered();
+    debugPrint('ListeningAnalyticsService: Network easter egg discovered!');
   }
 
   Future<void> _loadEvents() async {
@@ -1182,6 +1207,16 @@ class ListeningAnalyticsService {
         iconType: IconType.special,
         targetValue: 1,
         currentValue: _relaxModeStats.discovered ? 1 : 0,
+      ),
+
+      // Network milestone - Hidden easter egg discovery
+      ListeningMilestone(
+        id: 'network_radio',
+        name: 'Signal Found',
+        description: 'Tune into The Network radio',
+        iconType: IconType.special,
+        targetValue: 1,
+        currentValue: _networkDiscovered ? 1 : 0,
       ),
     ];
 

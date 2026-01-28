@@ -27,6 +27,17 @@
 
 ## 📋 Changelog
 
+### v5.5.0 - The Network (Easter Egg)
+- **Other People Radio**: Hidden radio feature with 60+ channels of curated mixes from Nicolas Jaar's Other People label
+- **Easter Egg Access**: Search "network" in the library to discover the feature
+- **Channel Dial**: Enter any number 0-333 to tune to the nearest channel
+- **Save for Offline**: Toggle auto-cache to automatically save channels as you listen
+- **Offline Playback**: Downloaded channels work without internet connection
+- **Storage Management**: View saved channels with channel numbers, delete individual or all downloads
+- **"Signal Found" Milestone**: Unlock a badge for discovering The Network
+- **Dark Interface**: Minimalist black UI with ticker-style text animations
+- Content from [other-people.network](https://www.other-people.network) - see [Acknowledgments](#-acknowledgments)
+
 ### v5.4.9 - Offline Artist Images Fix
 - **Offline Artist Images**: Fixed bug where artist images showed default art instead of cached images when browsing offline
 - **Artist ID Resolution**: Offline artists now use actual Jellyfin UUIDs from track metadata instead of synthetic IDs, ensuring cached artwork loads correctly
@@ -128,6 +139,48 @@
 
 ---
 
+## 📻 The Network (Easter Egg)
+
+<img src="screenshots/network.png" width="300" alt="The Network Radio">
+
+A hidden radio feature paying homage to [other-people.network](https://www.other-people.network) - Nicolas Jaar's experimental radio project.
+
+### How to Access
+
+1. Go to **Library** tab
+2. Search for **"network"**
+3. Tap the **"The Network"** card that appears
+
+### Using The Network
+
+- **Channel Dial**: Enter any number between 0-333 to tune to the nearest available channel
+- **Channel List**: Browse and tap any of the 60+ available channels
+- **Mute**: Toggle audio with the speaker icon in the top bar
+
+### Save for Offline
+
+The Network supports offline listening with auto-caching:
+
+1. Tap the **gear icon** in the top right
+2. Enable **"Save for Offline"**
+3. Play any channel - it automatically downloads in the background
+4. View saved channels in the settings panel with channel numbers and storage size
+5. Delete individual channels or clear all from settings
+
+When offline, only your saved channels appear in the list. The app shows an "OFFLINE" indicator when auto-cache is enabled.
+
+### Storage Location
+
+Network downloads are stored separately from your Jellyfin library:
+- **Linux**: `~/Documents/nautune/network/audio/`
+- **iOS**: `Documents/network/audio/`
+
+### "Signal Found" Milestone
+
+Discovering The Network unlocks a special nautical milestone badge.
+
+---
+
 ## 🔊 FFT Visualizer Platform Support
 
 | Platform | FFT Method | Status |
@@ -198,6 +251,8 @@ Nautune follows a clean data structure on Linux for easy backups and management:
 - `~/Documents/nautune/`: Primary application data
 - `~/Documents/nautune/downloads/`: High-quality offline audio files
 - `~/Documents/nautune/downloads/artwork/`: Cached album artwork (stored per-album to save space)
+- `~/Documents/nautune/network/audio/`: Network easter egg offline channels
+- `~/Documents/nautune/network/images/`: Network channel artwork
 
 ---
 
@@ -256,6 +311,15 @@ flutter analyze
 
 - **Desktop Remote Control**: Control desktop playback from iOS device over local network.
 - **Additional Visualizers**: More audio-reactive visualizer styles beyond bioluminescent waves (e.g., spectrum bars, particle effects, waveforms).
+
+## 🙏 Acknowledgments
+
+### Other People Network
+The "Network" easter egg features audio content from [www.other-people.network](https://www.other-people.network), a creative project by **Nicolas Jaar** and the **Other People** label. The original site was programmed by **Cole Brown** with design by Cole Brown and Against All Logic, featuring mixes from Nicolas Jaar, Against All Logic, and Ancient Astronaut.
+
+All credit for the radio content, artwork, and creative vision belongs to the Other People team. Visit [other-people.network/about](https://www.other-people.network/#/about) for the full credits list.
+
+---
 
 ## 📄 License
 

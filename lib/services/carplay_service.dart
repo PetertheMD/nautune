@@ -15,6 +15,7 @@ class CarPlayService {
   bool _isConnected = false;
   StreamSubscription? _playbackSubscription;
   Timer? _refreshDebounceTimer;
+  bool _isPlaybackInProgress = false;
 
   // Pagination limits for CarPlay (prevents performance issues with large libraries)
   static const int _maxItemsPerPage = 100;
@@ -82,6 +83,7 @@ class CarPlayService {
   }
   
   void _onAppStateChanged() {
+    if (_isPlaybackInProgress) return;
     if (_isConnected && _isAtRootLevel) {
       _refreshDebounceTimer?.cancel();
       _refreshDebounceTimer = Timer(const Duration(milliseconds: 500), () {
@@ -93,6 +95,7 @@ class CarPlayService {
   }
   
   void _onPlaybackChanged(JellyfinTrack? track) {
+    if (_isPlaybackInProgress) return;
     if (track != null && _isConnected) {
       updateNowPlaying(
         trackId: track.id,
@@ -482,14 +485,20 @@ class CarPlayService {
         return CPListItem(
           text: track.name,
           detailText: track.artists.join(', '),
-          onPress: (complete, self) {
-            // Play track with album as queue context
-            appState.audioPlayerService.playTrack(
-              track,
-              queueContext: tracks,
-              reorderQueue: false,
-            );
-            complete();
+          onPress: (complete, self) async {
+            _isPlaybackInProgress = true;
+            try {
+              await appState.audioPlayerService.playTrack(
+                track,
+                queueContext: tracks,
+                reorderQueue: false,
+              );
+            } catch (e) {
+              debugPrint('CarPlay playback error: $e');
+            } finally {
+              _isPlaybackInProgress = false;
+              complete();
+            }
           },
         );
       }).toList();
@@ -578,14 +587,20 @@ class CarPlayService {
         return CPListItem(
           text: track.name,
           detailText: track.artists.join(', '),
-          onPress: (complete, self) {
-            // Play track with playlist as queue context
-            appState.audioPlayerService.playTrack(
-              track,
-              queueContext: tracks,
-              reorderQueue: false,
-            );
-            complete();
+          onPress: (complete, self) async {
+            _isPlaybackInProgress = true;
+            try {
+              await appState.audioPlayerService.playTrack(
+                track,
+                queueContext: tracks,
+                reorderQueue: false,
+              );
+            } catch (e) {
+              debugPrint('CarPlay playback error: $e');
+            } finally {
+              _isPlaybackInProgress = false;
+              complete();
+            }
           },
         );
       }).toList();
@@ -634,15 +649,20 @@ class CarPlayService {
       final items = paginatedFavorites.map((track) => CPListItem(
         text: track.name,
         detailText: '${track.artists.join(', ')} • ${track.album}',
-        onPress: (complete, self) {
-          // Play track with favorites as queue context
-          appState.audioPlayerService.playTrack(
-            track,
-            queueContext: allFavorites,
-            reorderQueue: false,
-            // Favorites list is reversed in UI often, but here we just play
-          );
-          complete();
+        onPress: (complete, self) async {
+          _isPlaybackInProgress = true;
+          try {
+            await appState.audioPlayerService.playTrack(
+              track,
+              queueContext: allFavorites,
+              reorderQueue: false,
+            );
+          } catch (e) {
+            debugPrint('CarPlay playback error: $e');
+          } finally {
+            _isPlaybackInProgress = false;
+            complete();
+          }
         },
       )).toList();
 
@@ -706,14 +726,20 @@ class CarPlayService {
       final items = paginatedRecent.map((track) => CPListItem(
         text: track.name,
         detailText: '${track.artists.join(', ')} • ${track.album}',
-        onPress: (complete, self) {
-          // Play track with recently played as queue context
-          appState.audioPlayerService.playTrack(
-            track,
-            queueContext: allRecent,
-            reorderQueue: false,
-          );
-          complete();
+        onPress: (complete, self) async {
+          _isPlaybackInProgress = true;
+          try {
+            await appState.audioPlayerService.playTrack(
+              track,
+              queueContext: allRecent,
+              reorderQueue: false,
+            );
+          } catch (e) {
+            debugPrint('CarPlay playback error: $e');
+          } finally {
+            _isPlaybackInProgress = false;
+            complete();
+          }
         },
       )).toList();
 
@@ -764,14 +790,20 @@ class CarPlayService {
       final items = paginatedDownloads.map((download) => CPListItem(
         text: download.track.name,
         detailText: '${download.track.artists.join(', ')} • ${download.track.album}',
-        onPress: (complete, self) {
-          // Play track with all downloads as queue context
-          appState.audioPlayerService.playTrack(
-            download.track,
-            queueContext: allTracks,
-            reorderQueue: false,
-          );
-          complete();
+        onPress: (complete, self) async {
+          _isPlaybackInProgress = true;
+          try {
+            await appState.audioPlayerService.playTrack(
+              download.track,
+              queueContext: allTracks,
+              reorderQueue: false,
+            );
+          } catch (e) {
+            debugPrint('CarPlay playback error: $e');
+          } finally {
+            _isPlaybackInProgress = false;
+            complete();
+          }
         },
       )).toList();
 
