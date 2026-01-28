@@ -1,9 +1,16 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 import '../app_state.dart';
+import '../services/listening_analytics_service.dart';
+import '../services/network_download_service.dart';
 import '../models/playback_state.dart' show StreamingQuality, StreamingQualityExtension;
 import '../providers/session_provider.dart';
 import '../providers/theme_provider.dart';
@@ -190,6 +197,297 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _exportStats(BuildContext context) async {
+    final theme = Theme.of(context);
+    final analytics = ListeningAnalyticsService();
+    final networkService = NetworkDownloadService();
+
+    // Wait for services to initialize
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // Combine both services' data
+    final analyticsJson = analytics.exportAllStatsAsJson();
+    final networkJson = networkService.exportStatsAsJson();
+
+    // Parse and combine
+    final analyticsData = Map<String, dynamic>.from(
+      (await _parseJsonSafe(analyticsJson)) ?? {},
+    );
+    final networkData = Map<String, dynamic>.from(
+      (await _parseJsonSafe(networkJson)) ?? {},
+    );
+
+    final combinedBackup = {
+      ...analyticsData,
+      'network_channel_stats': networkData['network_stats'],
+    };
+
+    final backupJson = _encodeJson(combinedBackup);
+
+    // Save to file
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      final backupDir = Platform.isLinux || Platform.isMacOS || Platform.isWindows
+          ? Directory('${docsDir.path}/nautune/backups')
+          : Directory('${docsDir.path}/backups');
+
+      if (!await backupDir.exists()) {
+        await backupDir.create(recursive: true);
+      }
+
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
+      final backupFile = File('${backupDir.path}/nautune_backup_$timestamp.json');
+      await backupFile.writeAsString(backupJson);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Backup saved to ${backupFile.path}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Copy Path',
+              textColor: Colors.white,
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: backupFile.path));
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: theme.colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _importStats(BuildContext context) async {
+    final theme = Theme.of(context);
+    final controller = TextEditingController();
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import Stats'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Paste your backup JSON below, or enter the path to a backup file:',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                hintText: 'Paste backup JSON or file path...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              // Try to paste from clipboard
+              final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+              if (clipboardData?.text != null) {
+                controller.text = clipboardData!.text!;
+              }
+            },
+            child: const Text('Paste'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null || result.isEmpty) return;
+
+    String jsonContent = result.trim();
+
+    // Check if it's a file path
+    if (!jsonContent.startsWith('{')) {
+      try {
+        final file = File(jsonContent);
+        if (await file.exists()) {
+          jsonContent = await file.readAsString();
+        } else {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('File not found'),
+                backgroundColor: theme.colorScheme.error,
+              ),
+            );
+          }
+          return;
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error reading file: $e'),
+              backgroundColor: theme.colorScheme.error,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    try {
+      final analytics = ListeningAnalyticsService();
+      final networkService = NetworkDownloadService();
+
+      // Import main analytics
+      final importedEvents = await analytics.importAllStatsFromJson(jsonContent);
+
+      // Import network stats if present
+      final jsonData = await _parseJsonSafe(jsonContent);
+      int networkImported = 0;
+      if (jsonData != null && jsonData['network_channel_stats'] != null) {
+        final networkStatsJson = _encodeJson({
+          'network_stats': jsonData['network_channel_stats'],
+        });
+        networkImported = await networkService.importStatsFromJson(networkStatsJson);
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Imported $importedEvents events, $networkImported channel stats'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Import failed: $e'),
+            backgroundColor: theme.colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _resetStats(BuildContext context) async {
+    final theme = Theme.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: theme.colorScheme.error),
+            const SizedBox(width: 8),
+            const Text('Reset All Stats?'),
+          ],
+        ),
+        content: const Text(
+          'This will permanently delete all your listening history, '
+          'achievements, Rewind data, and Network stats.\n\n'
+          'This action cannot be undone. Consider exporting a backup first.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reset Everything'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    // Double confirmation
+    final doubleConfirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Are you absolutely sure?'),
+        content: const Text('Type "RESET" to confirm deletion of all stats.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes, Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (doubleConfirmed != true) return;
+
+    try {
+      final analytics = ListeningAnalyticsService();
+      await analytics.clearAll();
+
+      // Note: Network stats are kept separate, user can clear them from Network settings
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All stats have been reset'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reset failed: $e'),
+            backgroundColor: theme.colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>?> _parseJsonSafe(String json) async {
+    try {
+      final decoded = json.trim();
+      if (!decoded.startsWith('{')) return null;
+      return jsonDecode(decoded) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _encodeJson(Map<String, dynamic> data) {
+    return jsonEncode(data);
   }
 
   void _showThemePicker(BuildContext context) {
@@ -595,6 +893,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               );
             },
+          ),
+          const _SectionHeader(icon: Icons.backup, title: 'Data & Backup'),
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Icon(Icons.upload_file, color: theme.colorScheme.primary),
+                  title: const Text('Export Stats'),
+                  subtitle: const Text('Backup all listening data to file'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _exportStats(context),
+                ),
+                ListTile(
+                  leading: Icon(Icons.download, color: theme.colorScheme.primary),
+                  title: const Text('Import Stats'),
+                  subtitle: const Text('Restore from backup file'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _importStats(context),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: Icon(Icons.delete_forever, color: theme.colorScheme.error),
+                  title: Text('Reset All Stats', style: TextStyle(color: theme.colorScheme.error)),
+                  subtitle: const Text('Clear all listening history'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _resetStats(context),
+                ),
+              ],
+            ),
           ),
           const _SectionHeader(icon: Icons.info_outline, title: 'About'),
           Card(

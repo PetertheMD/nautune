@@ -36,6 +36,9 @@ class _NetworkScreenState extends State<NetworkScreen>
   // Download service
   late NetworkDownloadService _downloadService;
 
+  // Listening time tracking
+  DateTime? _playStartTime;
+
   // Ticker animation for scrolling text
   late AnimationController _tickerController;
 
@@ -52,15 +55,27 @@ class _NetworkScreenState extends State<NetworkScreen>
     // Listen to player state changes
     _audioPlayer.onPlayerStateChanged.listen((state) {
       if (mounted) {
+        final wasPlaying = _isPlaying;
         setState(() {
           _isPlaying = state == PlayerState.playing;
         });
+
+        // Track listening time
+        if (_isPlaying && !wasPlaying) {
+          // Started playing
+          _playStartTime = DateTime.now();
+        } else if (!_isPlaying && wasPlaying) {
+          // Stopped playing
+          _recordListenTime();
+        }
       }
     });
 
-    // Listen for errors
+    // Listen for errors (only log actual errors, not spam)
     _audioPlayer.onLog.listen((msg) {
-      debugPrint('AudioPlayer: $msg');
+      if (!msg.contains('Could not query')) {
+        debugPrint('AudioPlayer: $msg');
+      }
     });
 
     // Listen to download service changes
@@ -83,6 +98,8 @@ class _NetworkScreenState extends State<NetworkScreen>
 
   @override
   void dispose() {
+    // Record any remaining listen time before disposing
+    _recordListenTime();
     _tickerController.dispose();
     _audioPlayer.dispose();
     _channelController.dispose();
@@ -91,7 +108,21 @@ class _NetworkScreenState extends State<NetworkScreen>
     super.dispose();
   }
 
+  /// Record listening time for the current channel.
+  void _recordListenTime() {
+    if (_currentChannel != null && _playStartTime != null) {
+      final seconds = DateTime.now().difference(_playStartTime!).inSeconds;
+      if (seconds > 0) {
+        _downloadService.recordListenTime(_currentChannel!.number, seconds);
+      }
+      _playStartTime = null;
+    }
+  }
+
   Future<void> _tuneToChannel(int channelNumber) async {
+    // Record listening time for previous channel before switching
+    _recordListenTime();
+
     // Clamp to valid range
     final clampedNumber = channelNumber.clamp(0, 333);
     final channel = findNearestChannel(clampedNumber);

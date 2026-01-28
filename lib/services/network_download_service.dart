@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -116,6 +117,66 @@ class NetworkStorageStats {
   }
 }
 
+/// Listening stats for a network channel.
+class NetworkChannelStats {
+  final int channelNumber;
+  final int playCount;
+  final int listenTimeSeconds;
+  final DateTime? lastPlayed;
+
+  const NetworkChannelStats({
+    required this.channelNumber,
+    this.playCount = 0,
+    this.listenTimeSeconds = 0,
+    this.lastPlayed,
+  });
+
+  NetworkChannelStats copyWith({
+    int? channelNumber,
+    int? playCount,
+    int? listenTimeSeconds,
+    DateTime? lastPlayed,
+  }) {
+    return NetworkChannelStats(
+      channelNumber: channelNumber ?? this.channelNumber,
+      playCount: playCount ?? this.playCount,
+      listenTimeSeconds: listenTimeSeconds ?? this.listenTimeSeconds,
+      lastPlayed: lastPlayed ?? this.lastPlayed,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'channelNumber': channelNumber,
+        'playCount': playCount,
+        'listenTimeSeconds': listenTimeSeconds,
+        'lastPlayed': lastPlayed?.toIso8601String(),
+      };
+
+  factory NetworkChannelStats.fromJson(Map<String, dynamic> json) {
+    return NetworkChannelStats(
+      channelNumber: json['channelNumber'] as int,
+      playCount: json['playCount'] as int? ?? 0,
+      listenTimeSeconds: json['listenTimeSeconds'] as int? ?? 0,
+      lastPlayed: json['lastPlayed'] != null
+          ? DateTime.tryParse(json['lastPlayed'] as String)
+          : null,
+    );
+  }
+
+  /// Format listen time as human readable string.
+  String get formattedListenTime {
+    if (listenTimeSeconds < 60) return '${listenTimeSeconds}s';
+    if (listenTimeSeconds < 3600) {
+      final mins = listenTimeSeconds ~/ 60;
+      final secs = listenTimeSeconds % 60;
+      return '${mins}m ${secs}s';
+    }
+    final hours = listenTimeSeconds ~/ 3600;
+    final mins = (listenTimeSeconds % 3600) ~/ 60;
+    return '${hours}h ${mins}m';
+  }
+}
+
 /// Service for downloading and managing network channel content offline.
 ///
 /// Supports two modes:
@@ -130,9 +191,13 @@ class NetworkDownloadService extends ChangeNotifier {
   bool _autoCacheEnabled = false;
   bool get autoCacheEnabled => _autoCacheEnabled;
 
+  // Listening stats
+  final Map<int, NetworkChannelStats> _channelStats = {};
+
   static const _boxName = 'nautune_network_downloads';
   static const _downloadsKey = 'downloads';
   static const _autoCacheKey = 'auto_cache_enabled';
+  static const _statsKey = 'channel_stats';
   static bool _hiveInitialized = false;
   Box<dynamic>? _box;
 
@@ -147,6 +212,7 @@ class NetworkDownloadService extends ChangeNotifier {
     await _initHive();
     await _loadSettings();
     await _loadDownloads();
+    await _loadStats();
     await _verifyDownloads();
     _isInitialized = true;
     notifyListeners();
@@ -191,6 +257,165 @@ class NetworkDownloadService extends ChangeNotifier {
       data[entry.key.toString()] = entry.value.toJson();
     }
     await _box!.put(_downloadsKey, data);
+  }
+
+  Future<void> _loadStats() async {
+    if (_box == null) return;
+
+    final raw = _box!.get(_statsKey);
+    if (raw is Map) {
+      for (final entry in raw.entries) {
+        try {
+          final stats = NetworkChannelStats.fromJson(
+            Map<String, dynamic>.from(entry.value as Map),
+          );
+          _channelStats[stats.channelNumber] = stats;
+        } catch (e) {
+          debugPrint('Failed to load network stats: $e');
+        }
+      }
+    }
+  }
+
+  Future<void> _saveStats() async {
+    if (_box == null) return;
+
+    final data = <String, dynamic>{};
+    for (final entry in _channelStats.entries) {
+      data[entry.key.toString()] = entry.value.toJson();
+    }
+    await _box!.put(_statsKey, data);
+  }
+
+  /// Record listening time for a channel.
+  Future<void> recordListenTime(int channelNumber, int seconds) async {
+    if (seconds <= 0) return;
+
+    final existing = _channelStats[channelNumber];
+    if (existing != null) {
+      _channelStats[channelNumber] = existing.copyWith(
+        listenTimeSeconds: existing.listenTimeSeconds + seconds,
+        playCount: existing.playCount + 1,
+        lastPlayed: DateTime.now(),
+      );
+    } else {
+      _channelStats[channelNumber] = NetworkChannelStats(
+        channelNumber: channelNumber,
+        playCount: 1,
+        listenTimeSeconds: seconds,
+        lastPlayed: DateTime.now(),
+      );
+    }
+    await _saveStats();
+    notifyListeners();
+  }
+
+  /// Get stats for a specific channel.
+  NetworkChannelStats? getChannelStats(int channelNumber) {
+    return _channelStats[channelNumber];
+  }
+
+  /// Get top channels by listening time.
+  List<NetworkChannelStats> getTopChannels({int limit = 5}) {
+    final sorted = _channelStats.values.toList()
+      ..sort((a, b) => b.listenTimeSeconds.compareTo(a.listenTimeSeconds));
+    return sorted.take(limit).toList();
+  }
+
+  /// Get total listening time across all channels.
+  int get totalListenTimeSeconds {
+    return _channelStats.values.fold(0, (sum, s) => sum + s.listenTimeSeconds);
+  }
+
+  /// Get total play count across all channels.
+  int get totalPlayCount {
+    return _channelStats.values.fold(0, (sum, s) => sum + s.playCount);
+  }
+
+  /// Format total listen time as human readable string.
+  String get formattedTotalListenTime {
+    final seconds = totalListenTimeSeconds;
+    if (seconds < 60) return '${seconds}s';
+    if (seconds < 3600) {
+      final mins = seconds ~/ 60;
+      return '${mins}m';
+    }
+    final hours = seconds ~/ 3600;
+    final mins = (seconds % 3600) ~/ 60;
+    return '${hours}h ${mins}m';
+  }
+
+  /// Export stats as JSON string for backup.
+  String exportStatsAsJson() {
+    final data = <String, dynamic>{};
+    for (final entry in _channelStats.entries) {
+      data[entry.key.toString()] = entry.value.toJson();
+    }
+    return jsonEncode({
+      'network_stats': data,
+      'exported_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// Import stats from JSON string (merges with existing, keeps higher values).
+  Future<int> importStatsFromJson(String jsonString) async {
+    try {
+      final decoded = jsonString.trim();
+      if (!decoded.startsWith('{')) return 0;
+
+      final Map<String, dynamic> parsed;
+      final jsonData = jsonDecode(decoded) as Map<String, dynamic>;
+
+      if (jsonData.containsKey('network_stats')) {
+        // New format with wrapper
+        parsed = Map<String, dynamic>.from(jsonData['network_stats'] as Map);
+      } else {
+        // Direct stats map
+        parsed = jsonData;
+      }
+
+      int importedCount = 0;
+      for (final entry in parsed.entries) {
+        try {
+          final stats = NetworkChannelStats.fromJson(
+            Map<String, dynamic>.from(entry.value as Map),
+          );
+          final existing = _channelStats[stats.channelNumber];
+
+          if (existing != null) {
+            // Merge: keep higher play count and listen time
+            _channelStats[stats.channelNumber] = NetworkChannelStats(
+              channelNumber: stats.channelNumber,
+              playCount: existing.playCount > stats.playCount
+                  ? existing.playCount
+                  : stats.playCount,
+              listenTimeSeconds: existing.listenTimeSeconds > stats.listenTimeSeconds
+                  ? existing.listenTimeSeconds
+                  : stats.listenTimeSeconds,
+              lastPlayed: (existing.lastPlayed != null && stats.lastPlayed != null)
+                  ? (existing.lastPlayed!.isAfter(stats.lastPlayed!)
+                      ? existing.lastPlayed
+                      : stats.lastPlayed)
+                  : (existing.lastPlayed ?? stats.lastPlayed),
+            );
+          } else {
+            _channelStats[stats.channelNumber] = stats;
+          }
+          importedCount++;
+        } catch (e) {
+          debugPrint('Failed to import channel stats: $e');
+        }
+      }
+
+      if (importedCount > 0) {
+        await _saveStats();
+        notifyListeners();
+      }
+      return importedCount;
+    } catch (e) {
+      debugPrint('Failed to import stats: $e');
+      return 0;
+    }
   }
 
   /// Toggle auto-cache mode.

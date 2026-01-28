@@ -155,20 +155,20 @@ class _RewindScreenState extends State<RewindScreen> with TickerProviderStateMix
 
     if (!mounted) return;
 
-    // Export combined PNG
+    // Export as PDF
     ExportResult result;
     if (pageImages.isEmpty) {
       result = ExportResult.error;
     } else {
-      final pngFile = await RewindExportService.instance.exportAllPagesAsCombinedPng(
+      final pdfFile = await RewindExportService.instance.exportAllPagesAsPdf(
         pageImages: pageImages,
         year: _selectedYear,
       );
 
-      if (pngFile != null) {
+      if (pdfFile != null) {
         final yearStr = _selectedYear?.toString() ?? 'All Time';
         result = await RewindExportService.instance.shareFile(
-          pngFile,
+          pdfFile,
           title: 'My $yearStr Nautune Rewind',
         );
       } else {

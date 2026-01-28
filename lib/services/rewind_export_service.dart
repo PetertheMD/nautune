@@ -6,6 +6,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 /// Result of an export operation
 enum ExportResult {
@@ -80,8 +82,55 @@ class RewindExportService {
     }
   }
 
-  /// Export all Rewind pages as a combined PNG (stitched vertically)
+  /// Export all Rewind pages as a PDF document
   /// Takes a list of image bytes (one per page)
+  Future<File?> exportAllPagesAsPdf({
+    required List<Uint8List> pageImages,
+    required int? year,
+  }) async {
+    if (pageImages.isEmpty) {
+      debugPrint('RewindExportService: No pages to export');
+      return null;
+    }
+
+    try {
+      final pdf = pw.Document();
+
+      for (final imageBytes in pageImages) {
+        final image = pw.MemoryImage(imageBytes);
+
+        pdf.addPage(
+          pw.Page(
+            pageFormat: PdfPageFormat.a4,
+            margin: pw.EdgeInsets.zero,
+            build: (pw.Context context) {
+              return pw.Center(
+                child: pw.Image(image, fit: pw.BoxFit.contain),
+              );
+            },
+          ),
+        );
+      }
+
+      // Save to file
+      final nautuneDir = await _getNautuneDocsFolder();
+      final yearStr = year?.toString() ?? 'all-time';
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filename = 'nautune_rewind_${yearStr}_$timestamp.pdf';
+      final filePath = '${nautuneDir.path}${Platform.pathSeparator}$filename';
+
+      final file = File(filePath);
+      await file.writeAsBytes(await pdf.save());
+      debugPrint('RewindExportService: Exported PDF with ${pageImages.length} pages to ${file.path}');
+      return file;
+    } catch (e) {
+      debugPrint('RewindExportService: Error creating PDF: $e');
+      return null;
+    }
+  }
+
+  /// Legacy: Export all Rewind pages as a combined PNG (stitched vertically)
+  /// Kept for backwards compatibility - use exportAllPagesAsPdf instead
   Future<File?> exportAllPagesAsCombinedPng({
     required List<Uint8List> pageImages,
     required int? year,

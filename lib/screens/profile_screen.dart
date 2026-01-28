@@ -16,6 +16,7 @@ import '../jellyfin/jellyfin_user.dart';
 import '../providers/session_provider.dart';
 import '../services/listenbrainz_service.dart';
 import '../services/listening_analytics_service.dart';
+import '../services/network_download_service.dart';
 import '../services/rewind_service.dart';
 import 'rewind_screen.dart';
 
@@ -343,12 +344,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Top content tab controller
   int _topContentTab = 0;
 
+  // Network easter egg stats
+  NetworkDownloadService? _networkService;
+  List<NetworkChannelStats>? _networkTopChannels;
+  int _networkTotalPlays = 0;
+  int _networkTotalSeconds = 0;
+
   @override
   void initState() {
     super.initState();
     _loadUserProfile();
     _loadStats();
     _loadLocalAnalytics();
+    _loadNetworkStats();
+  }
+
+  void _loadNetworkStats() {
+    _networkService = NetworkDownloadService();
+    _networkService!.addListener(_onNetworkStatsChanged);
+  }
+
+  void _onNetworkStatsChanged() {
+    if (!mounted || _networkService == null) return;
+    setState(() {
+      _networkTopChannels = _networkService!.getTopChannels(limit: 5);
+      _networkTotalPlays = _networkService!.totalPlayCount;
+      _networkTotalSeconds = _networkService!.totalListenTimeSeconds;
+    });
+  }
+
+  @override
+  void dispose() {
+    _networkService?.removeListener(_onNetworkStatsChanged);
+    super.dispose();
   }
 
   void _loadLocalAnalytics() {
@@ -831,6 +859,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _buildListenBrainzStatsRow(theme),
                     const SizedBox(height: 12),
                   ],
+
+                  // 2d. Network Radio Stats (if any plays)
+                  if (_networkTotalPlays > 0) ...[
+                    _buildNetworkStatsSection(theme),
+                    const SizedBox(height: 12),
+                  ],
                   const SizedBox(height: 12),
 
                   // 3. Listening Patterns - Peak hour, Avg session, Discovery rate
@@ -1267,6 +1301,218 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildNetworkStatsSection(ThemeData theme) {
+    // Format total listen time
+    String formattedTime;
+    if (_networkTotalSeconds < 60) {
+      formattedTime = '${_networkTotalSeconds}s';
+    } else if (_networkTotalSeconds < 3600) {
+      formattedTime = '${_networkTotalSeconds ~/ 60}m';
+    } else {
+      final hours = _networkTotalSeconds ~/ 3600;
+      final mins = (_networkTotalSeconds % 3600) ~/ 60;
+      formattedTime = '${hours}h ${mins}m';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.radio,
+                  color: Colors.white70,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'The Network',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'monospace',
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Other People Radio',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white54,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    formattedTime,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  Text(
+                    '$_networkTotalPlays plays',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: Colors.white54,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          // Top channels
+          if (_networkTopChannels != null && _networkTopChannels!.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Divider(color: Colors.white24, height: 1),
+            const SizedBox(height: 12),
+            Text(
+              'TOP CHANNELS',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: Colors.white38,
+                fontFamily: 'monospace',
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...(_networkTopChannels!.take(3).toList().asMap().entries.map((entry) {
+              final index = entry.key;
+              final stats = entry.value;
+              final channel = _getChannelForNumber(stats.channelNumber);
+              if (channel == null) return const SizedBox.shrink();
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      child: Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          color: index == 0 ? Colors.amber : Colors.white54,
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          fontWeight: index == 0 ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 36,
+                      child: Text(
+                        '${stats.channelNumber}'.padLeft(3, '0'),
+                        style: const TextStyle(
+                          color: Colors.green,
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        channel,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      _formatChannelTime(stats.listenTimeSeconds),
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontFamily: 'monospace',
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            })),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String? _getChannelForNumber(int number) {
+    // Import channel data
+    try {
+      final channels = const [
+        {'number': 5, 'name': 'Ad Me to You'},
+        {'number': 279, 'name': 'Against All Logic'},
+        {'number': 11, 'name': 'Ambient Set'},
+        {'number': 156, 'name': 'American Dream Radio'},
+        {'number': 57, 'name': 'Bible FM'},
+        {'number': 135, 'name': 'Billionaire FM'},
+        {'number': 60, 'name': 'A Burning House'},
+        {'number': 65, 'name': 'Chance FM 1'},
+        {'number': 66, 'name': 'Chance FM 2'},
+        {'number': 70, 'name': 'Change Your Name'},
+        {'number': 132, 'name': 'CNN'},
+        {'number': 75, 'name': 'Code FM'},
+        {'number': 80, 'name': 'Cumbia Mix'},
+        {'number': 168, 'name': 'Deep Symmetry'},
+        {'number': 300, 'name': 'Elegy for the Empyre'},
+        {'number': 69, 'name': 'Red Bull Sponsored Revolution'},
+        {'number': 33, 'name': 'Flood FM'},
+        {'number': 15, 'name': 'Hardcore Ambient'},
+        {'number': 204, 'name': 'Super Symmetry'},
+        {'number': 198, 'name': 'Sex Radio'},
+        {'number': 234, 'name': 'Yankee Yankee Yankee Cuidado!'},
+      ];
+      final match = channels.firstWhere(
+        (c) => c['number'] == number,
+        orElse: () => {'name': 'Channel $number'},
+      );
+      return match['name'] as String?;
+    } catch (_) {
+      return 'Channel $number';
+    }
+  }
+
+  String _formatChannelTime(int seconds) {
+    if (seconds < 60) return '${seconds}s';
+    if (seconds < 3600) {
+      final mins = seconds ~/ 60;
+      final secs = seconds % 60;
+      return '${mins}m ${secs}s';
+    }
+    final hours = seconds ~/ 3600;
+    final mins = (seconds % 3600) ~/ 60;
+    return '${hours}h ${mins}m';
   }
 
   Widget _buildSyncStatusBanner(ThemeData theme) {

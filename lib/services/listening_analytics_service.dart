@@ -1303,6 +1303,115 @@ class ListeningAnalyticsService {
     debugPrint('ListeningAnalyticsService: Cleared all data');
   }
 
+  /// Export ALL analytics data as JSON string for backup.
+  /// Includes: play events, relax mode stats, network discovered flag.
+  /// Network channel stats should be exported separately via NetworkDownloadService.
+  String exportAllStatsAsJson() {
+    return jsonEncode({
+      'nautune_stats_backup': true,
+      'version': 1,
+      'exported_at': DateTime.now().toIso8601String(),
+      'play_events': _events.map((e) => e.toJson()).toList(),
+      'relax_mode_stats': _relaxModeStats.toJson(),
+      'network_discovered': _networkDiscovered,
+    });
+  }
+
+  /// Import ALL analytics data from JSON string.
+  /// Merges with existing data (doesn't overwrite unless events are duplicates).
+  /// Returns number of events imported.
+  Future<int> importAllStatsFromJson(String jsonString) async {
+    if (!_initialized) {
+      debugPrint('ListeningAnalyticsService: Not initialized, cannot import');
+      return 0;
+    }
+
+    try {
+      final decoded = jsonString.trim();
+      if (!decoded.startsWith('{')) return 0;
+
+      final jsonData = jsonDecode(decoded) as Map<String, dynamic>;
+
+      // Verify it's a Nautune backup
+      if (jsonData['nautune_stats_backup'] != true) {
+        debugPrint('ListeningAnalyticsService: Invalid backup format');
+        return 0;
+      }
+
+      int importedCount = 0;
+
+      // Import play events
+      final eventsJson = jsonData['play_events'] as List<dynamic>?;
+      if (eventsJson != null) {
+        final existingEventIds = _events.map((e) => e.eventId).toSet();
+
+        for (final eventJson in eventsJson) {
+          try {
+            final event = PlayEvent.fromJson(
+              Map<String, dynamic>.from(eventJson as Map),
+            );
+            // Only add if not a duplicate (by eventId)
+            if (!existingEventIds.contains(event.eventId)) {
+              _events.add(event);
+              existingEventIds.add(event.eventId);
+              importedCount++;
+            }
+          } catch (e) {
+            debugPrint('ListeningAnalyticsService: Error importing event: $e');
+          }
+        }
+
+        // Sort by timestamp descending
+        _events.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      }
+
+      // Import relax mode stats (merge - keep higher values)
+      final relaxJson = jsonData['relax_mode_stats'] as Map<String, dynamic>?;
+      if (relaxJson != null) {
+        final importedRelax = RelaxModeStats.fromJson(relaxJson);
+        _relaxModeStats = RelaxModeStats(
+          totalSessionsMs: _relaxModeStats.totalSessionsMs > importedRelax.totalSessionsMs
+              ? _relaxModeStats.totalSessionsMs
+              : importedRelax.totalSessionsMs,
+          rainUsageMs: _relaxModeStats.rainUsageMs > importedRelax.rainUsageMs
+              ? _relaxModeStats.rainUsageMs
+              : importedRelax.rainUsageMs,
+          thunderUsageMs: _relaxModeStats.thunderUsageMs > importedRelax.thunderUsageMs
+              ? _relaxModeStats.thunderUsageMs
+              : importedRelax.thunderUsageMs,
+          campfireUsageMs: _relaxModeStats.campfireUsageMs > importedRelax.campfireUsageMs
+              ? _relaxModeStats.campfireUsageMs
+              : importedRelax.campfireUsageMs,
+          discovered: _relaxModeStats.discovered || importedRelax.discovered,
+        );
+      }
+
+      // Import network discovered flag (keep true if either is true)
+      final networkDiscovered = jsonData['network_discovered'] as bool?;
+      if (networkDiscovered == true) {
+        _networkDiscovered = true;
+      }
+
+      // Save all imported data
+      if (importedCount > 0 || relaxJson != null || networkDiscovered == true) {
+        await Future.wait([
+          _saveEvents(),
+          _saveRelaxModeStats(),
+          _saveNetworkDiscovered(),
+        ]);
+        debugPrint('ListeningAnalyticsService: Imported $importedCount events');
+      }
+
+      return importedCount;
+    } catch (e) {
+      debugPrint('ListeningAnalyticsService: Import failed: $e');
+      return 0;
+    }
+  }
+
+  /// Get raw event count for stats display
+  int get totalEventCount => _events.length;
+
   // ============ Year-Based Methods for Rewind ============
 
   /// Get all events for a specific year, or all events if year is null

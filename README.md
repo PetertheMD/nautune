@@ -27,6 +27,19 @@
 
 ## 📋 Changelog
 
+### v5.5.2 - Stats Backup & PDF Export
+- **Stats Backup**: Export all listening data (play history, Rewind stats, Relax mode, Network stats) to JSON backup file
+- **Stats Restore**: Import backup file to restore listening history after app reinstall or device migration
+- **Stats Reset**: Option to clear all listening data with double confirmation
+- **PDF Rewind Export**: Your Rewind is now exported as a single PDF document instead of stacked PNGs
+- **Profile Network Stats**: Network listening stats now appear in your Profile alongside other stats
+- **Comprehensive Backups**: Backup includes all-time data, yearly breakdowns, achievements, and easter egg stats
+
+### v5.5.1 - Network Stats & Artwork
+- **Top 5 Channels**: Track your most listened Network channels with play count and total time
+- **Listening Stats**: View total plays and listening time in Profile screen
+- **Artwork Fixes**: Added correct artwork mappings for 50+ channels
+
 ### v5.5.0 - The Network (Easter Egg)
 - **Other People Radio**: Hidden radio feature with 60+ channels of curated mixes from Nicolas Jaar's Other People label
 - **Easter Egg Access**: Search "network" in the library to discover the feature
@@ -174,6 +187,16 @@ When offline, only your saved channels appear in the list. The app shows an "OFF
 Network downloads are stored separately from your Jellyfin library:
 - **Linux**: `~/Documents/nautune/network/audio/`
 - **iOS**: `Documents/network/audio/`
+
+### Listening Stats
+
+The Network tracks your listening history:
+
+- **Top 5 Channels**: See your most played channels ranked by listening time
+- **Total Stats**: View total play count and cumulative listening time
+- Access stats via the **gear icon** in the Network screen
+
+Stats persist across sessions and work for both online streaming and offline playback.
 
 ### "Signal Found" Milestone
 
