@@ -3360,7 +3360,13 @@ class _FavoritesTab extends StatelessWidget {
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
-    return '${twoDigits(duration.inMinutes.remainder(60))}:${twoDigits(duration.inSeconds.remainder(60))}';
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '$hours:${twoDigits(minutes)}:${twoDigits(seconds)}';
+    }
+    return '${twoDigits(minutes)}:${twoDigits(seconds)}';
   }
 }
 
@@ -3831,7 +3837,13 @@ class _RecentTabState extends State<_RecentTab> {
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
-    return '${twoDigits(duration.inMinutes.remainder(60))}:${twoDigits(duration.inSeconds.remainder(60))}';
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '$hours:${twoDigits(minutes)}:${twoDigits(seconds)}';
+    }
+    return '${twoDigits(minutes)}:${twoDigits(seconds)}';
   }
 }
 
@@ -4741,8 +4753,12 @@ class _SearchTabState extends State<_SearchTab> {
   }
 
   String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes;
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
     final seconds = duration.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
@@ -4975,15 +4991,19 @@ class _DownloadsTab extends StatelessWidget {
   }
 
   String _formatDuration(Duration d) {
-    final minutes = d.inMinutes;
+    final hours = d.inHours;
+    final minutes = d.inMinutes.remainder(60);
     final seconds = d.inSeconds % 60;
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return ListenableBuilder(
       listenable: appState.downloadService,
       builder: (context, _) {

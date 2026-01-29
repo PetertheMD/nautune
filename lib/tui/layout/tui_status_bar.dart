@@ -16,28 +16,33 @@ class TuiStatusBar extends StatelessWidget {
     final appState = context.watch<NautuneAppState>();
     final audioService = appState.audioPlayerService;
 
-    return Container(
-      color: TuiColors.background,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Divider
-          Text(
-            TuiChars.horizontal * 200,
-            style: TuiTextStyles.normal.copyWith(color: TuiColors.border),
-            overflow: TextOverflow.clip,
-            maxLines: 1,
+    return ListenableBuilder(
+      listenable: TuiThemeManager.instance,
+      builder: (context, _) {
+        return Container(
+          color: TuiColors.background,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Divider
+              Text(
+                TuiChars.horizontal * 200,
+                style: TuiTextStyles.normal.copyWith(color: TuiColors.border),
+                overflow: TextOverflow.clip,
+                maxLines: 1,
+              ),
+              const SizedBox(height: 4),
+              // Now playing row
+              _NowPlayingRow(audioService: audioService),
+              const SizedBox(height: 4),
+              // Controls hint
+              const _ControlsHint(),
+            ],
           ),
-          const SizedBox(height: 4),
-          // Now playing row
-          _NowPlayingRow(audioService: audioService),
-          const SizedBox(height: 4),
-          // Controls hint
-          const _ControlsHint(),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -65,7 +70,6 @@ class _NowPlayingRow extends StatelessWidget {
           stream: audioService.playingStream,
           builder: (context, playingSnapshot) {
             final isPlaying = playingSnapshot.data ?? false;
-            final statusIcon = isPlaying ? TuiChars.playing : TuiChars.paused;
 
             return StreamBuilder<Duration>(
               stream: audioService.positionStream,
@@ -79,9 +83,9 @@ class _NowPlayingRow extends StatelessWidget {
 
                     return Row(
                       children: [
-                        // Status icon and track info
+                        // Status icon
                         Text(
-                          '$statusIcon ',
+                          '${isPlaying ? TuiChars.playing : TuiChars.paused} ',
                           style: isPlaying ? TuiTextStyles.playing : TuiTextStyles.dim,
                         ),
                         Expanded(
@@ -153,13 +157,13 @@ class _ControlsHint extends StatelessWidget {
           const SizedBox(width: 12),
           _hint('+/-', 'vol'),
           const SizedBox(width: 12),
-          _hint('S', 'stop'),
+          _hint('r/t', 'seek'),
           const SizedBox(width: 12),
-          _hint('c', 'clear'),
+          _hint('f', 'fav'),
           const SizedBox(width: 12),
-          _hint('x', 'del'),
+          _hint('T', 'theme'),
           const SizedBox(width: 12),
-          _hint('/', 'search'),
+          _hint('?', 'help'),
           const SizedBox(width: 12),
           _hint('q', 'quit'),
         ],

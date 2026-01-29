@@ -49,6 +49,14 @@ class PulseAudioFFTService {
         return false;
       }
 
+      // Get the default sink name first
+      String? defaultSink;
+      final infoResult = await Process.run('pactl', ['get-default-sink']);
+      if (infoResult.exitCode == 0) {
+        defaultSink = (infoResult.stdout as String).trim();
+        debugPrint('🔊 PulseAudio FFT: Default sink: $defaultSink');
+      }
+
       // Find monitor source using pactl
       final result = await Process.run('pactl', ['list', 'sources', 'short']);
       if (result.exitCode != 0) {
@@ -59,13 +67,29 @@ class PulseAudioFFTService {
       final output = result.stdout as String;
       final lines = output.split('\n');
 
+      // First pass: try to find monitor matching default sink
+      if (defaultSink != null && defaultSink.isNotEmpty) {
+        final expectedMonitor = '$defaultSink.monitor';
+        for (final line in lines) {
+          if (line.contains(expectedMonitor)) {
+            final parts = line.split(RegExp(r'\s+'));
+            if (parts.length >= 2) {
+              _monitorSource = parts[1];
+              debugPrint('🔊 PulseAudio FFT: Found default sink monitor: $_monitorSource');
+              return true;
+            }
+          }
+        }
+      }
+
+      // Fallback: use any monitor source
       for (final line in lines) {
         if (line.contains('.monitor')) {
           // Format: "56  alsa_output.xxx.monitor  PipeWire  s32le 2ch 48000Hz  IDLE"
           final parts = line.split(RegExp(r'\s+'));
           if (parts.length >= 2) {
             _monitorSource = parts[1];
-            debugPrint('🔊 PulseAudio FFT: Found monitor source: $_monitorSource');
+            debugPrint('🔊 PulseAudio FFT: Found fallback monitor source: $_monitorSource');
             return true;
           }
         }

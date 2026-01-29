@@ -2462,8 +2462,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     String formatDuration(Duration? d) {
       if (d == null) return '-';
-      final mins = d.inMinutes;
+      final hours = d.inHours;
+      final mins = d.inMinutes.remainder(60);
       final secs = d.inSeconds % 60;
+      if (hours > 0) {
+        return '$hours:${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+      }
       return '$mins:${secs.toString().padLeft(2, '0')}';
     }
 
@@ -2582,9 +2586,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required Color color,
   }) {
     final duration = track.duration;
-    final durationStr = duration != null
-        ? '${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}'
-        : '';
+    String durationStr = '';
+    if (duration != null) {
+      final hours = duration.inHours;
+      final mins = duration.inMinutes.remainder(60);
+      final secs = duration.inSeconds % 60;
+      durationStr = hours > 0
+          ? '$hours:${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}'
+          : '$mins:${secs.toString().padLeft(2, '0')}';
+    }
 
     return Row(
       children: [

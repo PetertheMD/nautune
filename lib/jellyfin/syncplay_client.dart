@@ -550,6 +550,54 @@ class SyncPlayClient {
 
   // ============ Item Fetching ============
 
+  /// Get multiple items by IDs in a single batch request
+  /// GET /Users/{userId}/Items?ids=id1,id2,id3
+  /// Batches in chunks of 50 to avoid URL length issues
+  Future<List<JellyfinTrack>> getItems({
+    required JellyfinCredentials credentials,
+    required List<String> itemIds,
+  }) async {
+    if (itemIds.isEmpty) return [];
+
+    final results = <JellyfinTrack>[];
+    const batchSize = 50;
+
+    // Process in batches of 50 to avoid URL length limits
+    for (var i = 0; i < itemIds.length; i += batchSize) {
+      final batchIds = itemIds.skip(i).take(batchSize).toList();
+      final uri = _buildUri(
+        '/Users/${credentials.userId}/Items',
+        {'Ids': batchIds.join(',')},
+      );
+
+      try {
+        final response = await _robustClient.get(
+          uri,
+          headers: _defaultHeaders(credentials),
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          final items = data['Items'] as List<dynamic>? ?? [];
+          for (final item in items) {
+            if (item is Map<String, dynamic>) {
+              results.add(JellyfinTrack.fromJson(
+                item,
+                serverUrl: serverUrl,
+                token: credentials.accessToken,
+                userId: credentials.userId,
+              ));
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Failed to fetch batch of items: $e');
+      }
+    }
+
+    return results;
+  }
+
   /// Get a single item by ID
   /// GET /Users/{userId}/Items/{itemId}
   Future<JellyfinTrack?> getItem({

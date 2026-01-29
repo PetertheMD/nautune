@@ -28,6 +28,26 @@
 
 ## 📋 Changelog
 
+### v5.6.0 - Enhanced TUI Mode
+- **10 Built-in Themes**: Dark, Gruvbox Dark/Light, Nord Dark/Light, Catppuccin Mocha/Latte, Light, Dracula, Solarized Dark
+- **Persistent Theme Selection**: TUI theme choice saved and restored between app restarts
+- **Album Art Color Extraction**: Primary color dynamically extracted from album artwork with smooth transitions
+- **Lyrics Pane**: Synchronized lyrics display with multi-source fallback (Jellyfin → LRCLIB → lyrics.ovh)
+- **Window Dragging**: Drag the tab bar to move the TUI window around your screen
+- **Tab Bar**: Top navigation bar with section tabs and now-playing indicator
+- **Help Overlay**: Press `?` to see all keybindings organized by category
+- **Seek Controls**: `r/t` for ±5 second seek, `,/.` for ±60 second seek
+- **Letter Jumping**: `a/A` to jump between letter groups in sorted lists
+- **Queue Reordering**: `J/K` to move queue items up/down
+- **Favorites**: `f` to toggle favorite on selected track
+- **Add to Queue**: `e` to add selected track to queue
+- **Theme Cycling**: `T` to cycle through themes
+- **Section Cycling**: `Tab` to cycle through sidebar sections
+- **Buffering Spinner**: Animated spinner indicator during audio buffering
+- **Scrollbar Visualization**: Visual scrollbar on right edge of lists when scrollable
+- **Smooth Color Transitions**: Smoothstep easing for album art color changes
+- **Duration Format Fix**: Long tracks (1+ hours) now display correctly as `H:MM:SS` instead of broken format
+
 ### v5.5.7 - Multiple Visualizer Styles
 - **5 Visualizer Styles**: Choose from Ocean Waves, Spectrum Bars, Mirror Bars, Radial, and Psychedelic
 - **Spectrum Bars**: Classic vertical frequency bars with album art-based color gradients and peak hold indicators
@@ -271,34 +291,72 @@ flutter run -d linux --dart-define=TUI_MODE=true
 
 ### Keyboard Bindings
 
+**Navigation**
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Move selection down/up |
 | `h` / `l` | Navigate back/forward (switch panes) |
-| `gg` | Go to top of list |
-| `G` | Go to bottom of list |
+| `gg` / `Home` | Go to top of list |
+| `G` / `End` | Go to bottom of list |
+| `PgUp` / `PgDn` | Page up/down |
+| `a` / `A` | Jump to next/previous letter group |
+| `Tab` | Cycle through sections |
 | `Enter` | Play/Select item |
+| `Esc` | Exit search / Go back |
+
+**Playback**
+| Key | Action |
+|-----|--------|
 | `Space` | Toggle play/pause |
 | `n` / `p` | Next/Previous track |
+| `r` / `t` | Seek backward/forward 5 seconds |
+| `,` / `.` | Seek backward/forward 60 seconds |
+| `S` | Stop playback |
+| `R` | Cycle repeat mode |
+| `s` | Shuffle queue |
+
+**Volume**
+| Key | Action |
+|-----|--------|
 | `+` / `-` | Volume up/down |
 | `m` | Toggle mute |
-| `s` | Shuffle queue |
-| `r` | Cycle repeat mode |
-| `S` | Stop playback |
-| `c` | Clear queue |
+
+**Queue**
+| Key | Action |
+|-----|--------|
+| `e` | Add selected track to queue |
+| `E` / `c` | Clear queue |
 | `x` / `d` | Delete item from queue |
+| `J` / `K` | Move queue item down/up |
+
+**Other**
+| Key | Action |
+|-----|--------|
 | `/` | Enter search mode |
-| `Esc` | Exit search / Go back |
+| `f` | Toggle favorite on track |
+| `T` | Cycle through themes |
+| `?` | Show/hide help overlay |
+| `X` | Full reset (stop + clear) |
 | `q` | Quit |
 
 ### Features
 
-- **Sidebar Navigation**: Browse Albums, Artists, Queue, or Search
-- **Vim-Style Movement**: Familiar keybindings for keyboard users
-- **Multi-Key Sequences**: 500ms timeout for sequences like `gg`
+- **10 Built-in Themes**: Dark, Gruvbox, Nord, Catppuccin, Dracula, Solarized, and more
+- **Persistent Theme**: Theme selection saved and restored between restarts
+- **Album Art Colors**: Dynamic primary color extraction with smooth transitions
+- **Synchronized Lyrics**: Auto-scrolling lyrics pane with multi-source fallback
+- **Window Dragging**: Drag the tab bar to reposition the window
+- **Tab Bar**: Top navigation with section tabs and now-playing indicator
+- **Sidebar Navigation**: Browse Albums, Artists, Queue, Lyrics, or Search
+- **Help Overlay**: Press `?` to see all keybindings organized by category
+- **Vim-Style Movement**: Familiar keybindings with multi-key sequence support
+- **Letter Jumping**: `a/A` to jump between letter groups in sorted lists
+- **Queue Reordering**: `J/K` to move queue items up/down
+- **Seek Controls**: `r/t` for ±5s, `,/.` for ±60s seeking
 - **ASCII Progress Bar**: `[=========>          ] 2:34 / 4:12`
 - **Volume Indicator**: `Vol: [████████░░] 80%`
-- **Now Playing Bar**: Track info, progress, and controls hint
+- **Scrollbar**: Visual scrollbar on right edge of lists
+- **Buffering Spinner**: Animated indicator during audio buffering
 - **Box-Drawing Borders**: Classic TUI aesthetic
 - **JetBrains Mono Font**: Crisp monospace rendering
 

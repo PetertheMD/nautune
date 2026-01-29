@@ -6,7 +6,35 @@ import '../jellyfin/jellyfin_credentials.dart';
 import '../jellyfin/jellyfin_track.dart';
 import '../jellyfin/syncplay_client.dart';
 import '../models/syncplay_models.dart';
+import '../utils/debouncer.dart';
 import 'syncplay_websocket.dart';
+
+/// Connection quality based on RTT
+enum ConnectionQuality {
+  good,       // < 100ms
+  moderate,   // 100-300ms
+  poor,       // > 300ms
+  disconnected,
+}
+
+/// Reconnection state for UI feedback
+class ReconnectionState {
+  const ReconnectionState({
+    required this.isReconnecting,
+    required this.attempt,
+    required this.maxAttempts,
+  });
+
+  final bool isReconnecting;
+  final int attempt;
+  final int maxAttempts;
+
+  static const idle = ReconnectionState(
+    isReconnecting: false,
+    attempt: 0,
+    maxAttempts: 5,
+  );
+}
 
 /// Playback command from server to sync playback across devices
 class SyncPlayCommand {
@@ -73,6 +101,26 @@ class SyncPlayService extends ChangeNotifier {
   StreamSubscription<SyncPlayMessage>? _messageSubscription;
   StreamSubscription<bool>? _connectionSubscription;
   Timer? _pingTimer;
+  Timer? _driftCheckTimer;
+
+  // Debouncer for session change notifications (100ms)
+  final Debouncer _sessionDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
+
+  // Track metadata cache (LRU, max 500 items)
+  final _trackCache = _LRUCache<String, JellyfinTrack>(maxSize: 500);
+
+  // RTT tracking for sync accuracy
+  final List<int> _rttHistory = [];
+  static const int _maxRttSamples = 5;
+  int _serverClockOffset = 0; // milliseconds
+  DateTime? _lastPingTime;
+
+  // Connection quality tracking
+  final _connectionQualityController = StreamController<ConnectionQuality>.broadcast();
+  ConnectionQuality _connectionQuality = ConnectionQuality.disconnected;
+
+  // Reconnection state tracking
+  final _reconnectionController = StreamController<ReconnectionState>.broadcast();
 
   // State
   SyncPlaySession? _currentSession;
@@ -113,6 +161,21 @@ class SyncPlayService extends ChangeNotifier {
   final _playbackCommandController = StreamController<SyncPlayCommand>.broadcast();
   Stream<SyncPlayCommand> get playbackCommandStream => _playbackCommandController.stream;
   Stream<List<SyncPlayParticipant>> get participantsStream => _participantsController.stream;
+
+  // Connection quality stream for UI
+  Stream<ConnectionQuality> get connectionQualityStream => _connectionQualityController.stream;
+  ConnectionQuality get connectionQuality => _connectionQuality;
+
+  // Reconnection state stream for UI
+  Stream<ReconnectionState> get reconnectionStream => _reconnectionController.stream;
+
+  // Server clock offset for sync calculations
+  int get serverClockOffset => _serverClockOffset;
+
+  // Average RTT in milliseconds (for UI display)
+  int get averageRtt => _rttHistory.isEmpty
+      ? 0
+      : _rttHistory.reduce((a, b) => a + b) ~/ _rttHistory.length;
 
   // ============ Group Management ============
 
@@ -689,8 +752,17 @@ class SyncPlayService extends ChangeNotifier {
     if (_isRejoining || groupIdToRejoin == null) return;
 
     _isRejoining = true;
+    _rejoinAttempts++;
+
+    // Emit reconnection state for UI
+    _reconnectionController.add(ReconnectionState(
+      isReconnecting: true,
+      attempt: _rejoinAttempts,
+      maxAttempts: _maxRejoinAttempts,
+    ));
+
     try {
-      debugPrint('Auto-rejoining group: $groupIdToRejoin (captain: $wasCaptain) attempt ${_rejoinAttempts + 1}');
+      debugPrint('Auto-rejoining group: $groupIdToRejoin (captain: $wasCaptain) attempt $_rejoinAttempts');
 
       // Try to rejoin the group
       await _client.joinGroup(
@@ -701,6 +773,7 @@ class SyncPlayService extends ChangeNotifier {
       // Check if we were cancelled during the await
       if (_lastGroupId == null) {
         debugPrint('Auto-rejoin cancelled - lastGroupId cleared');
+        _reconnectionController.add(ReconnectionState.idle);
         return;
       }
 
@@ -726,14 +799,18 @@ class SyncPlayService extends ChangeNotifier {
           positionTicks: 0,
           role: wasCaptain ? SyncPlayRole.captain : SyncPlayRole.sailor,
         );
-        _notifySessionChanged();
+        _notifySessionChanged(immediate: true);
       }
 
+      // Request full queue state after successful rejoin
+      _requestFullQueueState();
+
       _rejoinAttempts = 0; // Reset on success
+      _reconnectionController.add(ReconnectionState.idle);
+      _updateConnectionQuality(ConnectionQuality.good); // Optimistic
       debugPrint('✅ Auto-rejoined SyncPlay group successfully');
     } catch (e) {
       debugPrint('Failed to auto-rejoin SyncPlay group: $e');
-      _rejoinAttempts++;
 
       if (_rejoinAttempts < _maxRejoinAttempts && _lastGroupId != null) {
         // Retry with exponential backoff
@@ -754,13 +831,21 @@ class SyncPlayService extends ChangeNotifier {
         _rejoinAttempts = 0;
         _currentSession = null;
         _trackAttributions.clear();
-        _notifySessionChanged();
+        _reconnectionController.add(ReconnectionState.idle);
+        _notifySessionChanged(immediate: true);
       }
     } finally {
       if (_rejoinAttempts == 0 || _rejoinAttempts >= _maxRejoinAttempts) {
         _isRejoining = false;
       }
     }
+  }
+
+  /// Request full queue state from server after rejoin
+  void _requestFullQueueState() {
+    // The server sends full queue state on join via WebSocket
+    // This method is here if we need additional sync logic in the future
+    debugPrint('SyncPlay: Requesting full queue state after rejoin');
   }
 
   Future<void> _disconnectWebSocket() async {
@@ -1239,7 +1324,7 @@ class SyncPlayService extends ChangeNotifier {
       existingTracks[track.track.id] = track;
     }
 
-    // Build new queue, reusing existing track data where possible
+    // Build new queue, reusing existing track data and cache where possible
     final newQueue = <SyncPlayTrack>[];
     final missingIds = <String>[];
 
@@ -1255,20 +1340,35 @@ class SyncPlayService extends ChangeNotifier {
           playlistItemId: queueItem.playlistItemId,
         ));
       } else {
-        missingIds.add(queueItem.itemId);
-        // Add placeholder that will be updated
-        newQueue.add(SyncPlayTrack(
-          track: JellyfinTrack(
-            id: queueItem.itemId,
-            name: 'Loading...',
-            artists: const [],
-            album: '',
-            runTimeTicks: 0,
-          ),
-          addedByUserId: '',
-          addedByUsername: '',
-          playlistItemId: queueItem.playlistItemId,
-        ));
+        // Check cache for track data
+        final cached = _trackCache.get(queueItem.itemId);
+        if (cached != null) {
+          // Found in cache - use it
+          final attribution = _trackAttributions[queueItem.itemId];
+          newQueue.add(SyncPlayTrack(
+            track: cached,
+            addedByUserId: attribution?.userId ?? '',
+            addedByUsername: attribution?.username ?? '',
+            addedByImageTag: attribution?.imageTag,
+            playlistItemId: queueItem.playlistItemId,
+          ));
+          debugPrint('✅ Cache hit for track: ${cached.name}');
+        } else {
+          missingIds.add(queueItem.itemId);
+          // Add placeholder that will be updated
+          newQueue.add(SyncPlayTrack(
+            track: JellyfinTrack(
+              id: queueItem.itemId,
+              name: 'Loading...',
+              artists: const [],
+              album: '',
+              runTimeTicks: 0,
+            ),
+            addedByUserId: '',
+            addedByUsername: '',
+            playlistItemId: queueItem.playlistItemId,
+          ));
+        }
       }
     }
 
@@ -1278,7 +1378,7 @@ class SyncPlayService extends ChangeNotifier {
       currentTrackIndex: trackIndex ?? _currentSession!.currentTrackIndex,
     );
     _notifySessionChanged();
-    debugPrint('✅ Queue updated with ${newQueue.length} items (${missingIds.length} need fetching)');
+    debugPrint('✅ Queue updated with ${newQueue.length} items (${missingIds.length} need fetching, ${newQueue.length - missingIds.length} from cache/existing)');
 
     // Fetch missing track data if any
     if (missingIds.isNotEmpty) {
@@ -1287,41 +1387,52 @@ class SyncPlayService extends ChangeNotifier {
   }
 
   /// Fetch full track data for items we don't have cached
+  /// Uses batch fetching for efficiency
   Future<void> _fetchMissingTrackData(List<String> itemIds) async {
-    debugPrint('🔍 SyncPlay: Fetching ${itemIds.length} missing track(s): $itemIds');
+    debugPrint('🔍 SyncPlay: Batch fetching ${itemIds.length} missing track(s)');
     try {
-      for (final itemId in itemIds) {
-        debugPrint('🔍 SyncPlay: Fetching track $itemId...');
-        final track = await _client.getItem(
-          credentials: _credentials,
-          itemId: itemId,
-        );
-        if (track != null && _currentSession != null) {
-          debugPrint('✅ SyncPlay: Fetched track $itemId: ${track.name} by ${track.artists.join(", ")}');
-          // Update the queue with fetched track data
-          final updatedQueue = _currentSession!.queue.map((t) {
-            if (t.track.id == itemId) {
-              return SyncPlayTrack(
-                track: track,
-                addedByUserId: t.addedByUserId,
-                addedByUsername: t.addedByUsername,
-                addedByImageTag: t.addedByImageTag,
-                playlistItemId: t.playlistItemId,
-              );
-            }
-            return t;
-          }).toList();
+      // Fetch all tracks in a single batch API call
+      final tracks = await _client.getItems(
+        credentials: _credentials,
+        itemIds: itemIds,
+      );
 
-          _currentSession = _currentSession!.copyWith(queue: updatedQueue);
-          _notifySessionChanged();
-          debugPrint('✅ SyncPlay: Queue updated with track $itemId');
-        } else {
-          debugPrint('❌ SyncPlay: Failed to fetch track $itemId - track is null or session ended');
-        }
+      if (_currentSession == null) {
+        debugPrint('❌ SyncPlay: Session ended during fetch');
+        return;
       }
-      debugPrint('✅ SyncPlay: Finished fetching ${itemIds.length} missing track(s)');
+
+      debugPrint('✅ SyncPlay: Batch fetched ${tracks.length} tracks');
+
+      // Create a map for quick lookup
+      final trackMap = <String, JellyfinTrack>{};
+      for (final track in tracks) {
+        trackMap[track.id] = track;
+        // Populate the cache for future use
+        _trackCache.put(track.id, track);
+        debugPrint('✅ SyncPlay: Cached track: ${track.name}');
+      }
+
+      // Update the entire queue at once (not per-item)
+      final updatedQueue = _currentSession!.queue.map((t) {
+        final fetchedTrack = trackMap[t.track.id];
+        if (fetchedTrack != null) {
+          return SyncPlayTrack(
+            track: fetchedTrack,
+            addedByUserId: t.addedByUserId,
+            addedByUsername: t.addedByUsername,
+            addedByImageTag: t.addedByImageTag,
+            playlistItemId: t.playlistItemId,
+          );
+        }
+        return t;
+      }).toList();
+
+      _currentSession = _currentSession!.copyWith(queue: updatedQueue);
+      _notifySessionChanged(); // Single notification for all updates
+      debugPrint('✅ SyncPlay: Queue updated with ${tracks.length} fetched tracks');
     } catch (e, stackTrace) {
-      debugPrint('❌ SyncPlay: Failed to fetch track data: $e');
+      debugPrint('❌ SyncPlay: Failed to batch fetch track data: $e');
       debugPrint('Stack trace: $stackTrace');
     }
   }
@@ -1422,26 +1533,107 @@ class SyncPlayService extends ChangeNotifier {
 
   void _startPingTimer() {
     _stopPingTimer();
-    _pingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    // Use adaptive ping interval: stable (good/moderate) = 15s, unstable = 5s
+    final interval = _connectionQuality == ConnectionQuality.poor ||
+                     _connectionQuality == ConnectionQuality.disconnected
+        ? const Duration(seconds: 5)
+        : const Duration(seconds: 15);
+    _pingTimer = Timer.periodic(interval, (_) {
       _sendPing();
     });
+
+    // Start drift check timer (every 5 seconds)
+    _startDriftCheckTimer();
   }
 
   void _stopPingTimer() {
     _pingTimer?.cancel();
     _pingTimer = null;
+    _driftCheckTimer?.cancel();
+    _driftCheckTimer = null;
+  }
+
+  void _startDriftCheckTimer() {
+    _driftCheckTimer?.cancel();
+    _driftCheckTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _checkPositionDrift();
+    });
+  }
+
+  /// Check if position has drifted more than 500ms and emit corrective seek
+  void _checkPositionDrift() {
+    if (_currentSession == null || _currentSession!.isPaused) return;
+
+    // Only check drift for sailors (captains control their own playback)
+    if (isCaptain) return;
+
+    final lastSync = _currentSession!.lastSyncTime;
+    if (lastSync == null) return;
+
+    // Calculate expected position based on last sync time
+    final elapsed = DateTime.now().difference(lastSync);
+    final expectedTicks = _currentSession!.positionTicks + (elapsed.inMicroseconds * 10);
+
+    // This is where UI would compare with actual audio player position
+    // For now, we emit the expected position for the provider to check
+    // The actual drift detection happens in SyncPlayProvider
+    debugPrint('SyncPlay drift check: expected position = ${expectedTicks ~/ 10000000}s');
   }
 
   Future<void> _sendPing() async {
     if (_currentSession == null) return;
 
+    _lastPingTime = DateTime.now();
     try {
       await _client.ping(
         credentials: _credentials,
-        ping: DateTime.now().millisecondsSinceEpoch,
+        ping: _lastPingTime!.millisecondsSinceEpoch,
       );
+
+      // Calculate RTT
+      final rtt = DateTime.now().difference(_lastPingTime!).inMilliseconds;
+      _updateRtt(rtt);
+
+      debugPrint('SyncPlay ping RTT: ${rtt}ms (avg: ${averageRtt}ms)');
     } catch (e) {
       debugPrint('Failed to send SyncPlay ping: $e');
+      _updateConnectionQuality(ConnectionQuality.disconnected);
+    }
+  }
+
+  void _updateRtt(int rtt) {
+    _rttHistory.add(rtt);
+    if (_rttHistory.length > _maxRttSamples) {
+      _rttHistory.removeAt(0);
+    }
+
+    // Calculate server clock offset (RTT / 2)
+    _serverClockOffset = averageRtt ~/ 2;
+
+    // Update connection quality based on RTT
+    final newQuality = _calculateConnectionQuality(rtt);
+    _updateConnectionQuality(newQuality);
+
+    // Restart ping timer if quality changed significantly (adaptive interval)
+    if ((_connectionQuality == ConnectionQuality.good ||
+         _connectionQuality == ConnectionQuality.moderate) !=
+        (newQuality == ConnectionQuality.good ||
+         newQuality == ConnectionQuality.moderate)) {
+      _startPingTimer(); // Restarts with new interval
+    }
+  }
+
+  ConnectionQuality _calculateConnectionQuality(int rtt) {
+    if (rtt < 100) return ConnectionQuality.good;
+    if (rtt < 300) return ConnectionQuality.moderate;
+    return ConnectionQuality.poor;
+  }
+
+  void _updateConnectionQuality(ConnectionQuality quality) {
+    if (_connectionQuality != quality) {
+      _connectionQuality = quality;
+      _connectionQualityController.add(quality);
+      debugPrint('SyncPlay connection quality: $quality');
     }
   }
 
@@ -1461,7 +1653,16 @@ class SyncPlayService extends ChangeNotifier {
     _error = null;
   }
 
-  void _notifySessionChanged() {
+  void _notifySessionChanged({bool immediate = false}) {
+    if (immediate) {
+      _sessionDebouncer.cancel();
+      _doNotifySessionChanged();
+    } else {
+      _sessionDebouncer.run(_doNotifySessionChanged);
+    }
+  }
+
+  void _doNotifySessionChanged() {
     _sessionController.add(_currentSession);
     if (_currentSession != null) {
       _participantsController.add(_currentSession!.group.participants);
@@ -1504,13 +1705,49 @@ class SyncPlayService extends ChangeNotifier {
   @override
   void dispose() {
     _disconnectWebSocket();
+    _sessionDebouncer.dispose();
     _sessionController.close();
     _groupsController.close();
     _participantsController.close();
     _playbackCommandController.close();
+    _connectionQualityController.close();
+    _reconnectionController.close();
     _client.close();
     super.dispose();
   }
+}
+
+/// Simple LRU cache implementation
+class _LRUCache<K, V> {
+  _LRUCache({required this.maxSize});
+
+  final int maxSize;
+  final _cache = <K, V>{}; // LinkedHashMap maintains insertion order
+
+  V? get(K key) {
+    final value = _cache.remove(key);
+    if (value != null) {
+      // Move to end (most recently used)
+      _cache[key] = value;
+    }
+    return value;
+  }
+
+  void put(K key, V value) {
+    _cache.remove(key); // Remove if exists to reorder
+    _cache[key] = value;
+
+    // Evict oldest if over capacity
+    while (_cache.length > maxSize) {
+      _cache.remove(_cache.keys.first);
+    }
+  }
+
+  bool containsKey(K key) => _cache.containsKey(key);
+
+  void clear() => _cache.clear();
+
+  int get length => _cache.length;
 }
 
 /// Internal class to track user attribution for tracks

@@ -209,8 +209,12 @@ class CollabQueueItem extends StatelessWidget {
   String _formatDuration(Duration? duration) {
     if (duration == null) return '--:--';
 
-    final minutes = duration.inMinutes;
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
     final seconds = duration.inSeconds % 60;
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }
@@ -385,8 +389,12 @@ class CollabNowPlayingItem extends StatelessWidget {
   }
 
   String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes;
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
     final seconds = duration.inSeconds % 60;
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }

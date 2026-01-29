@@ -58,7 +58,7 @@ class TuiNautuneApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: ThemeData.dark().copyWith(
           scaffoldBackgroundColor: TuiColors.background,
-          colorScheme: const ColorScheme.dark(
+          colorScheme: ColorScheme.dark(
             primary: TuiColors.accent,
             surface: TuiColors.background,
           ),

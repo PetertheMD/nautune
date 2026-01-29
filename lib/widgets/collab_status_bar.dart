@@ -5,6 +5,168 @@ import '../models/syncplay_models.dart';
 import '../providers/syncplay_provider.dart';
 import 'syncplay_user_avatar.dart';
 
+/// A prominent role banner shown at the top of the collaborative playlist screen.
+///
+/// Features:
+/// - Captain: Gold/amber background, crown icon, "You're the DJ"
+/// - Sailor: Blue background, anchor icon, "Listening along"
+/// - Connection quality indicator (colored dot)
+/// - Reconnection status display
+class CollabRoleBanner extends StatelessWidget {
+  const CollabRoleBanner({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<SyncPlayProvider>(
+      builder: (context, provider, _) {
+        if (!provider.isInSession) {
+          return const SizedBox.shrink();
+        }
+
+        final isCaptain = provider.isCaptain;
+
+        // Show reconnection banner if reconnecting
+        if (provider.isReconnecting) {
+          return _buildReconnectingBanner(context, provider);
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isCaptain
+                  ? [Colors.amber.shade600, Colors.amber.shade800]
+                  : [Colors.blue.shade600, Colors.blue.shade800],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Row(
+            children: [
+              // Role icon
+              Icon(
+                isCaptain ? Icons.workspace_premium : Icons.anchor,
+                color: Colors.white,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+
+              // Role text
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      isCaptain ? "You're the DJ" : 'Listening along',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isCaptain
+                          ? 'Your music plays for everyone'
+                          : 'Music is controlled by the DJ',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Connection quality indicator
+              _buildConnectionIndicator(context, provider),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildReconnectingBanner(BuildContext context, SyncPlayProvider provider) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade700,
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Reconnecting (attempt ${provider.reconnectionAttempt}/${provider.maxReconnectionAttempts})...',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConnectionIndicator(BuildContext context, SyncPlayProvider provider) {
+    final quality = provider.connectionQuality;
+    final Color dotColor;
+    final String tooltip;
+
+    switch (quality) {
+      case ConnectionQuality.good:
+        dotColor = Colors.green;
+        tooltip = 'Connection: Good (${provider.averageRtt}ms)';
+        break;
+      case ConnectionQuality.moderate:
+        dotColor = Colors.orange;
+        tooltip = 'Connection: Moderate (${provider.averageRtt}ms)';
+        break;
+      case ConnectionQuality.poor:
+        dotColor = Colors.red;
+        tooltip = 'Connection: Poor (${provider.averageRtt}ms)';
+        break;
+      case ConnectionQuality.disconnected:
+        dotColor = Colors.grey;
+        tooltip = 'Connection: Disconnected';
+        break;
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          color: dotColor,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: dotColor.withValues(alpha: 0.5),
+              blurRadius: 4,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// A compact status bar shown when in a collaborative playlist session.
 ///
 /// Features:

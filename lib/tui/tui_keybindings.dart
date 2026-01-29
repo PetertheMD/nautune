@@ -29,6 +29,21 @@ enum TuiAction {
   stop,
   clearQueue,
   deleteFromQueue,
+  // New actions for enhanced TUI
+  seekForward,
+  seekBackward,
+  seekForwardLarge,
+  seekBackwardLarge,
+  jumpNextLetter,
+  jumpPrevLetter,
+  toggleFavorite,
+  addToQueue,
+  moveQueueUp,
+  moveQueueDown,
+  fullReset,
+  toggleHelp,
+  cycleSection,
+  cycleTheme,
 }
 
 /// Vim-style key binding handler with multi-key sequence support.
@@ -53,6 +68,7 @@ class TuiKeyBindings extends ChangeNotifier {
 
     final key = event.logicalKey;
     final char = event.character;
+    final isShift = HardwareKeyboard.instance.isShiftPressed;
 
     // Handle special keys first
     if (key == LogicalKeyboardKey.escape) {
@@ -82,12 +98,12 @@ class TuiKeyBindings extends ChangeNotifier {
 
     if (key == LogicalKeyboardKey.arrowLeft) {
       _resetSequence();
-      return TuiAction.moveLeft;
+      return TuiAction.seekBackward;
     }
 
     if (key == LogicalKeyboardKey.arrowRight) {
       _resetSequence();
-      return TuiAction.moveRight;
+      return TuiAction.seekForward;
     }
 
     if (key == LogicalKeyboardKey.pageUp) {
@@ -110,15 +126,20 @@ class TuiKeyBindings extends ChangeNotifier {
       return TuiAction.goToBottom;
     }
 
+    if (key == LogicalKeyboardKey.tab) {
+      _resetSequence();
+      return TuiAction.cycleSection;
+    }
+
     // Handle character keys for vim bindings
     if (char != null && char.isNotEmpty) {
-      return _handleCharacter(char);
+      return _handleCharacter(char, isShift);
     }
 
     return TuiAction.none;
   }
 
-  TuiAction _handleCharacter(String char) {
+  TuiAction _handleCharacter(String char, bool isShift) {
     // Add to pending sequence
     _pendingSequence += char;
     _startSequenceTimer();
@@ -185,7 +206,7 @@ class TuiKeyBindings extends ChangeNotifier {
       // Shuffle and repeat
       case 's':
         return TuiAction.toggleShuffle;
-      case 'r':
+      case 'R':
         return TuiAction.toggleRepeat;
 
       // Stop and queue management
@@ -196,6 +217,48 @@ class TuiKeyBindings extends ChangeNotifier {
       case 'x':
       case 'd':
         return TuiAction.deleteFromQueue;
+
+      // Seek controls
+      case 'r':
+        return TuiAction.seekBackward;
+      case 't':
+        return TuiAction.seekForward;
+      case ',':
+        return TuiAction.seekBackwardLarge;
+      case '.':
+        return TuiAction.seekForwardLarge;
+
+      // Letter jumping (sorted lists)
+      case 'a':
+        return TuiAction.jumpNextLetter;
+      case 'A':
+        return TuiAction.jumpPrevLetter;
+
+      // Favorite
+      case 'f':
+        return TuiAction.toggleFavorite;
+
+      // Queue operations
+      case 'e':
+        return TuiAction.addToQueue;
+      case 'E':
+        return TuiAction.clearQueue;
+      case 'J':
+        return TuiAction.moveQueueDown;
+      case 'K':
+        return TuiAction.moveQueueUp;
+
+      // Full reset
+      case 'X':
+        return TuiAction.fullReset;
+
+      // Help
+      case '?':
+        return TuiAction.toggleHelp;
+
+      // Theme cycling
+      case 'T':
+        return TuiAction.cycleTheme;
 
       default:
         return TuiAction.none;

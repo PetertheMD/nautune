@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../app_state.dart';
 import '../../jellyfin/jellyfin_album.dart';
@@ -12,10 +14,13 @@ import '../tui_keybindings.dart';
 import '../tui_metrics.dart';
 import '../tui_theme.dart';
 import '../widgets/tui_box.dart';
+import '../widgets/tui_help_overlay.dart';
 import '../widgets/tui_list.dart';
 import 'tui_content_pane.dart';
+import 'tui_lyrics_pane.dart';
 import 'tui_sidebar.dart';
 import 'tui_status_bar.dart';
+import 'tui_tab_bar.dart';
 
 /// The focus pane in the TUI.
 enum TuiFocus {
@@ -32,7 +37,7 @@ class TuiShell extends StatefulWidget {
   State<TuiShell> createState() => _TuiShellState();
 }
 
-class _TuiShellState extends State<TuiShell> {
+class _TuiShellState extends State<TuiShell> with SingleTickerProviderStateMixin {
   final FocusNode _focusNode = FocusNode();
   final TuiKeyBindings _keyBindings = TuiKeyBindings();
 
@@ -54,20 +59,48 @@ class _TuiShellState extends State<TuiShell> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
+  // Help overlay state
+  bool _showHelp = false;
+
+  // Animation ticker for color lerp
+  late Ticker _colorTicker;
+  Duration _lastTickTime = Duration.zero;
+
   @override
   void initState() {
     super.initState();
     TuiMetrics.initialize();
 
-    _albumListState = TuiListState<JellyfinAlbum>();
-    _artistListState = TuiListState<JellyfinArtist>();
-    _trackListState = TuiListState<JellyfinTrack>();
-    _queueListState = TuiListState<JellyfinTrack>();
+    // Initialize theme manager (loads saved theme)
+    TuiThemeManager.instance.initialize();
+
+    _albumListState = TuiListState<JellyfinAlbum>(
+      nameGetter: (album) => album.name,
+    );
+    _artistListState = TuiListState<JellyfinArtist>(
+      nameGetter: (artist) => artist.name,
+    );
+    _trackListState = TuiListState<JellyfinTrack>(
+      nameGetter: (track) => track.name,
+    );
+    _queueListState = TuiListState<JellyfinTrack>(
+      nameGetter: (track) => track.name,
+    );
+
+    // Color transition ticker
+    _colorTicker = createTicker(_onColorTick);
+    _colorTicker.start();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
       _loadInitialData();
     });
+  }
+
+  void _onColorTick(Duration elapsed) {
+    final delta = elapsed - _lastTickTime;
+    _lastTickTime = elapsed;
+    TuiThemeManager.instance.tickLerp(delta);
   }
 
   void _loadInitialData() {
@@ -89,10 +122,24 @@ class _TuiShellState extends State<TuiShell> {
         });
       }
     });
+
+    // Listen to track changes for color extraction
+    appState.audioPlayerService.currentTrackStream.listen((track) {
+      if (mounted && track != null) {
+        _extractColorFromTrack(track, appState);
+      }
+    });
+  }
+
+  void _extractColorFromTrack(JellyfinTrack track, NautuneAppState appState) {
+    final imageUrl = track.artworkUrl();
+    final headers = appState.jellyfinService.imageHeaders();
+    TuiThemeManager.instance.extractPrimaryColor(imageUrl, headers);
   }
 
   @override
   void dispose() {
+    _colorTicker.dispose();
     _focusNode.dispose();
     _keyBindings.dispose();
     _albumListState.dispose();
@@ -105,58 +152,91 @@ class _TuiShellState extends State<TuiShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: TuiColors.background,
-      body: KeyboardListener(
-        focusNode: _focusNode,
-        autofocus: true,
-        onKeyEvent: _handleKeyEvent,
-        child: Stack(
-          children: [
-            Column(
+    return ListenableBuilder(
+      listenable: TuiThemeManager.instance,
+      builder: (context, _) {
+        return Scaffold(
+          backgroundColor: TuiColors.background,
+          body: KeyboardListener(
+            focusNode: _focusNode,
+            autofocus: true,
+            onKeyEvent: _handleKeyEvent,
+            child: Stack(
               children: [
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Sidebar
-                      TuiSidebar(
-                        selectedItem: _selectedSection,
-                        onItemSelected: _onSidebarItemSelected,
-                        focused: _focus == TuiFocus.sidebar,
+                Column(
+                  children: [
+                    // Tab bar (draggable for window movement)
+                    GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onPanStart: (_) => windowManager.startDragging(),
+                      child: TuiTabBar(
+                        selectedSection: _selectedSection,
+                        onSectionSelected: _onSidebarItemSelected,
                       ),
-                      // Vertical divider
-                      const TuiVerticalDivider(),
-                      // Content pane
-                      Expanded(
-                        child: TuiContentPane(
-                          section: _selectedSection,
-                          focused: _focus == TuiFocus.content,
-                          albumListState: _albumListState,
-                          artistListState: _artistListState,
-                          trackListState: _trackListState,
-                          queueListState: _queueListState,
-                          onAlbumSelected: _onAlbumSelected,
-                          onArtistSelected: _onArtistSelected,
-                          onTrackSelected: _onTrackSelected,
-                          onQueueTrackSelected: _onQueueTrackSelected,
-                          selectedAlbum: _selectedAlbum,
-                          selectedArtist: _selectedArtist,
-                          searchQuery: _searchQuery,
-                        ),
+                    ),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Sidebar
+                          TuiSidebar(
+                            selectedItem: _selectedSection,
+                            onItemSelected: _onSidebarItemSelected,
+                            focused: _focus == TuiFocus.sidebar,
+                          ),
+                          // Vertical divider
+                          const TuiVerticalDivider(),
+                          // Content pane
+                          Expanded(
+                            child: _buildContentPane(),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    // Status bar
+                    const TuiStatusBar(),
+                  ],
                 ),
-                // Status bar
-                const TuiStatusBar(),
+                // Search overlay
+                if (_isSearchMode) _buildSearchOverlay(),
+                // Help overlay
+                if (_showHelp)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _showHelp = false),
+                      child: const TuiHelpOverlay(),
+                    ),
+                  ),
               ],
             ),
-            // Search overlay
-            if (_isSearchMode) _buildSearchOverlay(),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildContentPane() {
+    // Special handling for lyrics section
+    if (_selectedSection == TuiSidebarItem.lyrics) {
+      return TuiLyricsPane(
+        focused: _focus == TuiFocus.content,
+      );
+    }
+
+    return TuiContentPane(
+      section: _selectedSection,
+      focused: _focus == TuiFocus.content,
+      albumListState: _albumListState,
+      artistListState: _artistListState,
+      trackListState: _trackListState,
+      queueListState: _queueListState,
+      onAlbumSelected: _onAlbumSelected,
+      onArtistSelected: _onArtistSelected,
+      onTrackSelected: _onTrackSelected,
+      onQueueTrackSelected: _onQueueTrackSelected,
+      selectedAlbum: _selectedAlbum,
+      selectedArtist: _selectedArtist,
+      searchQuery: _searchQuery,
     );
   }
 
@@ -195,6 +275,14 @@ class _TuiShellState extends State<TuiShell> {
   }
 
   void _handleKeyEvent(KeyEvent event) {
+    // Dismiss help on any key
+    if (_showHelp) {
+      if (event is KeyDownEvent) {
+        setState(() => _showHelp = false);
+      }
+      return;
+    }
+
     // Handle search mode separately
     if (_isSearchMode) {
       if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
@@ -319,7 +407,159 @@ class _TuiShellState extends State<TuiShell> {
           audioService.removeFromQueue(index);
         }
         break;
+
+      // Seek controls
+      case TuiAction.seekForward:
+        _seekBy(const Duration(seconds: 5));
+        break;
+
+      case TuiAction.seekBackward:
+        _seekBy(const Duration(seconds: -5));
+        break;
+
+      case TuiAction.seekForwardLarge:
+        _seekBy(const Duration(seconds: 60));
+        break;
+
+      case TuiAction.seekBackwardLarge:
+        _seekBy(const Duration(seconds: -60));
+        break;
+
+      // Letter jumping
+      case TuiAction.jumpNextLetter:
+        _currentListState?.jumpNextLetter();
+        break;
+
+      case TuiAction.jumpPrevLetter:
+        _currentListState?.jumpPrevLetter();
+        break;
+
+      // Favorite
+      case TuiAction.toggleFavorite:
+        _handleToggleFavorite();
+        break;
+
+      // Queue operations
+      case TuiAction.addToQueue:
+        _handleAddToQueue();
+        break;
+
+      case TuiAction.moveQueueUp:
+        _handleMoveQueueUp();
+        break;
+
+      case TuiAction.moveQueueDown:
+        _handleMoveQueueDown();
+        break;
+
+      // Full reset
+      case TuiAction.fullReset:
+        audioService.stop();
+        break;
+
+      // Help
+      case TuiAction.toggleHelp:
+        setState(() => _showHelp = !_showHelp);
+        break;
+
+      // Theme cycling
+      case TuiAction.cycleTheme:
+        TuiThemeManager.instance.cycleTheme();
+        break;
+
+      // Section cycling
+      case TuiAction.cycleSection:
+        _handleCycleSection();
+        break;
     }
+  }
+
+  void _seekBy(Duration delta) {
+    final appState = context.read<NautuneAppState>();
+    final audioService = appState.audioPlayerService;
+    final currentPosition = audioService.currentPosition;
+    final currentTrack = audioService.currentTrack;
+    final trackDuration = currentTrack?.duration;
+
+    if (trackDuration == null) return;
+
+    final newPosition = (currentPosition + delta).inMilliseconds.clamp(
+      0,
+      trackDuration.inMilliseconds,
+    );
+    audioService.seek(Duration(milliseconds: newPosition));
+  }
+
+  void _handleToggleFavorite() async {
+    final appState = context.read<NautuneAppState>();
+    JellyfinTrack? track;
+
+    // Get selected track based on current context
+    if (_selectedSection == TuiSidebarItem.queue) {
+      track = _queueListState.selectedItem;
+    } else if (_selectedAlbum != null || _selectedSection == TuiSidebarItem.search) {
+      track = _trackListState.selectedItem;
+    }
+
+    if (track == null) return;
+
+    try {
+      final isFavorite = track.isFavorite;
+      await appState.jellyfinService.markFavorite(track.id, !isFavorite);
+    } catch (e) {
+      debugPrint('TUI: Failed to toggle favorite: $e');
+    }
+  }
+
+  void _handleAddToQueue() {
+    final appState = context.read<NautuneAppState>();
+    final audioService = appState.audioPlayerService;
+    JellyfinTrack? track;
+
+    if (_selectedAlbum != null || _selectedSection == TuiSidebarItem.search) {
+      track = _trackListState.selectedItem;
+    }
+
+    if (track != null) {
+      audioService.addToQueue([track]);
+    }
+  }
+
+  void _handleMoveQueueUp() {
+    if (_selectedSection != TuiSidebarItem.queue) return;
+
+    final appState = context.read<NautuneAppState>();
+    final audioService = appState.audioPlayerService;
+    final index = _queueListState.cursorIndex;
+
+    if (index > 0) {
+      audioService.reorderQueue(index, index - 1);
+      _queueListState.moveUp();
+    }
+  }
+
+  void _handleMoveQueueDown() {
+    if (_selectedSection != TuiSidebarItem.queue) return;
+
+    final appState = context.read<NautuneAppState>();
+    final audioService = appState.audioPlayerService;
+    final index = _queueListState.cursorIndex;
+
+    if (index < _queueListState.length - 1) {
+      audioService.reorderQueue(index, index + 1);
+      _queueListState.moveDown();
+    }
+  }
+
+  void _handleCycleSection() {
+    final items = TuiSidebarItem.values;
+    final currentIndex = items.indexOf(_selectedSection);
+    final nextIndex = (currentIndex + 1) % items.length;
+    setState(() {
+      _selectedSection = items[nextIndex];
+      _focus = TuiFocus.content;
+      _onSectionChanged();
+    });
   }
 
   void _handleEscape() {
@@ -470,6 +710,10 @@ class _TuiShellState extends State<TuiShell> {
         }
         break;
 
+      case TuiSidebarItem.lyrics:
+        // Lyrics pane has no selection
+        break;
+
       case TuiSidebarItem.search:
         final track = _trackListState.selectedItem;
         if (track != null) {
@@ -487,6 +731,8 @@ class _TuiShellState extends State<TuiShell> {
         return _selectedArtist != null ? _albumListState : _artistListState;
       case TuiSidebarItem.queue:
         return _queueListState;
+      case TuiSidebarItem.lyrics:
+        return null;
       case TuiSidebarItem.search:
         return _trackListState;
     }

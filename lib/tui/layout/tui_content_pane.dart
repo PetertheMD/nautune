@@ -79,6 +79,8 @@ class TuiContentPane extends StatelessWidget {
         return 'Artists';
       case TuiSidebarItem.queue:
         return 'Queue';
+      case TuiSidebarItem.lyrics:
+        return 'Lyrics';
       case TuiSidebarItem.search:
         return searchQuery.isEmpty ? 'Search' : 'Search: $searchQuery';
     }
@@ -100,6 +102,12 @@ class TuiContentPane extends StatelessWidget {
 
       case TuiSidebarItem.queue:
         return _buildQueueList(context, currentTrack);
+
+      case TuiSidebarItem.lyrics:
+        // Lyrics is handled by TuiShell directly with TuiLyricsPane
+        return Center(
+          child: Text('Lyrics view', style: TuiTextStyles.dim),
+        );
 
       case TuiSidebarItem.search:
         return _buildSearchContent(context, currentTrack);
@@ -243,8 +251,12 @@ class TuiContentPane extends StatelessWidget {
 
   String _formatDuration(Duration? d) {
     if (d == null) return '--:--';
-    final minutes = d.inMinutes;
+    final hours = d.inHours;
+    final minutes = d.inMinutes.remainder(60);
     final seconds = d.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
     return '${minutes.toString()}:${seconds.toString().padLeft(2, '0')}';
   }
 }

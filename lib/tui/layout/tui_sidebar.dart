@@ -9,6 +9,7 @@ enum TuiSidebarItem {
   albums,
   artists,
   queue,
+  lyrics,
   search,
 }
 
@@ -21,6 +22,8 @@ extension TuiSidebarItemExtension on TuiSidebarItem {
         return 'Artists';
       case TuiSidebarItem.queue:
         return 'Queue';
+      case TuiSidebarItem.lyrics:
+        return 'Lyrics';
       case TuiSidebarItem.search:
         return 'Search';
     }
@@ -34,6 +37,8 @@ extension TuiSidebarItemExtension on TuiSidebarItem {
         return '♪';
       case TuiSidebarItem.queue:
         return '≡';
+      case TuiSidebarItem.lyrics:
+        return '¶';
       case TuiSidebarItem.search:
         return '/';
     }

@@ -6,6 +6,7 @@ import '../providers/syncplay_provider.dart';
 import '../services/deep_link_service.dart';
 import '../widgets/collab_queue_item.dart';
 import '../widgets/collab_share_sheet.dart';
+import '../widgets/collab_status_bar.dart';
 import '../widgets/syncplay_user_avatar.dart';
 import 'library_screen.dart';
 
@@ -97,6 +98,9 @@ class _CollabPlaylistScreenState extends State<CollabPlaylistScreen> {
           ),
           body: Column(
             children: [
+              // Role banner at top
+              const CollabRoleBanner(),
+
               // Participants section
               _buildParticipantsSection(context, provider, serverUrl),
 
@@ -298,14 +302,30 @@ class _CollabPlaylistScreenState extends State<CollabPlaylistScreen> {
         final track = provider.queue[index];
         final isCurrentTrack = index == provider.currentTrackIndex;
 
-        return CollabQueueItem(
-          key: ValueKey(track.playlistItemId),
-          track: track,
-          index: index,
-          serverUrl: serverUrl,
-          isCurrentTrack: isCurrentTrack,
-          onTap: () => provider.playTrackAtIndex(index),
-          onRemove: () => provider.removeFromQueue(track.playlistItemId),
+        // Wrap with AnimatedSwitcher for smooth transitions
+        return AnimatedSwitcher(
+          key: ValueKey('switcher_${track.playlistItemId}'),
+          duration: const Duration(milliseconds: 300),
+          switchInCurve: Curves.easeInOut,
+          switchOutCurve: Curves.easeInOut,
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: SizeTransition(
+                sizeFactor: animation,
+                child: child,
+              ),
+            );
+          },
+          child: CollabQueueItem(
+            key: ValueKey(track.playlistItemId),
+            track: track,
+            index: index,
+            serverUrl: serverUrl,
+            isCurrentTrack: isCurrentTrack,
+            onTap: () => provider.playTrackAtIndex(index),
+            onRemove: () => provider.removeFromQueue(track.playlistItemId),
+          ),
         );
       },
     );

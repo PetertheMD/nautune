@@ -11,6 +11,8 @@ import '../services/audio_player_service.dart';
 import '../services/syncplay_service.dart';
 import 'session_provider.dart';
 
+export '../services/syncplay_service.dart' show ConnectionQuality, ReconnectionState;
+
 /// Provider for SyncPlay state management in the UI layer.
 ///
 /// Responsibilities:
@@ -40,6 +42,8 @@ class SyncPlayProvider extends ChangeNotifier {
   StreamSubscription<SyncPlaySession?>? _sessionSubscription;
   StreamSubscription<List<SyncPlayParticipant>>? _participantsSubscription;
   StreamSubscription<SyncPlayCommand>? _playbackCommandSubscription;
+  StreamSubscription<ConnectionQuality>? _connectionQualitySubscription;
+  StreamSubscription<ReconnectionState>? _reconnectionSubscription;
 
   // State
   SyncPlaySession? _currentSession;
@@ -48,6 +52,8 @@ class SyncPlayProvider extends ChangeNotifier {
   bool _isCreating = false;
   bool _isJoining = false;
   Object? _error;
+  ConnectionQuality _connectionQuality = ConnectionQuality.disconnected;
+  ReconnectionState _reconnectionState = ReconnectionState.idle;
 
   // Getters
   SyncPlaySession? get currentSession => _currentSession;
@@ -81,6 +87,22 @@ class SyncPlayProvider extends ChangeNotifier {
   bool get isPlaying => !isPaused;
   Duration get position => _currentSession?.position ?? Duration.zero;
   bool get isBuffering => _currentSession?.isBuffering ?? false;
+
+  // Connection quality getters
+  ConnectionQuality get connectionQuality => _connectionQuality;
+  bool get isConnectionGood => _connectionQuality == ConnectionQuality.good;
+  bool get isConnectionModerate => _connectionQuality == ConnectionQuality.moderate;
+  bool get isConnectionPoor => _connectionQuality == ConnectionQuality.poor;
+  bool get isDisconnected => _connectionQuality == ConnectionQuality.disconnected;
+
+  // Reconnection state getters
+  ReconnectionState get reconnectionState => _reconnectionState;
+  bool get isReconnecting => _reconnectionState.isReconnecting;
+  int get reconnectionAttempt => _reconnectionState.attempt;
+  int get maxReconnectionAttempts => _reconnectionState.maxAttempts;
+
+  // Average RTT for display (milliseconds)
+  int get averageRtt => _syncPlayService?.averageRtt ?? 0;
 
   // Share info getters
   String? get shareLink => _syncPlayService?.getShareLink();
@@ -141,6 +163,18 @@ class SyncPlayProvider extends ChangeNotifier {
 
     // Listen to playback commands from server (for sailors to sync with captain)
     _playbackCommandSubscription = _syncPlayService!.playbackCommandStream.listen(_onPlaybackCommand);
+
+    // Listen to connection quality changes
+    _connectionQualitySubscription = _syncPlayService!.connectionQualityStream.listen((quality) {
+      _connectionQuality = quality;
+      notifyListeners();
+    });
+
+    // Listen to reconnection state changes
+    _reconnectionSubscription = _syncPlayService!.reconnectionStream.listen((state) {
+      _reconnectionState = state;
+      notifyListeners();
+    });
 
     // Listen to service loading state
     _syncPlayService!.addListener(_onServiceChanged);
@@ -248,6 +282,10 @@ class SyncPlayProvider extends ChangeNotifier {
     _participantsSubscription = null;
     _playbackCommandSubscription?.cancel();
     _playbackCommandSubscription = null;
+    _connectionQualitySubscription?.cancel();
+    _connectionQualitySubscription = null;
+    _reconnectionSubscription?.cancel();
+    _reconnectionSubscription = null;
     _syncPlayService?.removeListener(_onServiceChanged);
     _syncPlayService?.dispose();
     _syncPlayService = null;
@@ -257,6 +295,8 @@ class SyncPlayProvider extends ChangeNotifier {
     _isCreating = false;
     _isJoining = false;
     _error = null;
+    _connectionQuality = ConnectionQuality.disconnected;
+    _reconnectionState = ReconnectionState.idle;
     notifyListeners();
   }
 
