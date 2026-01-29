@@ -752,6 +752,74 @@ class ListeningAnalyticsService {
     return maxCount > 0 ? maxHour : null;
   }
 
+  /// Get the most active day of the week (0=Monday, 6=Sunday)
+  int? getPeakDayOfWeek({DateTime? since}) {
+    final dayCounts = getPlaysByDayOfWeek(since: since);
+    if (dayCounts.isEmpty) return null;
+
+    int maxDay = 0;
+    int maxCount = 0;
+    dayCounts.forEach((day, count) {
+      if (count > maxCount) {
+        maxCount = count;
+        maxDay = day;
+      }
+    });
+
+    return maxCount > 0 ? maxDay : null;
+  }
+
+  /// Get the day name for a day index (0=Monday, 6=Sunday)
+  static String getDayName(int dayIndex) {
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    return days[dayIndex.clamp(0, 6)];
+  }
+
+  /// Get the short day name for a day index (0=Monday, 6=Sunday)
+  static String getShortDayName(int dayIndex) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days[dayIndex.clamp(0, 6)];
+  }
+
+  /// Get count of marathon sessions (2+ hour listening sessions)
+  int getMarathonSessionCount({DateTime? since}) {
+    final cutoff = since ?? DateTime(2000);
+    final relevantEvents = _events
+        .where((e) => e.timestamp.isAfter(cutoff))
+        .toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    if (relevantEvents.isEmpty) return 0;
+
+    int marathonSessions = 0;
+    DateTime? lastEventTime;
+    int sessionDurationMs = 0;
+
+    for (final event in relevantEvents) {
+      if (lastEventTime == null) {
+        sessionDurationMs = event.durationMs;
+      } else {
+        final gap = event.timestamp.difference(lastEventTime);
+        if (gap.inMinutes > 30) {
+          // Session ended, check if it was a marathon (> 2 hours)
+          if (sessionDurationMs >= 2 * 60 * 60 * 1000) {
+            marathonSessions++;
+          }
+          sessionDurationMs = event.durationMs;
+        } else {
+          sessionDurationMs += event.durationMs;
+        }
+      }
+      lastEventTime = event.timestamp;
+    }
+    // Check the last session
+    if (sessionDurationMs >= 2 * 60 * 60 * 1000) {
+      marathonSessions++;
+    }
+
+    return marathonSessions;
+  }
+
   /// Get recent play events
   List<PlayEvent> getRecentEvents({int limit = 50}) {
     return _events.take(limit).toList();

@@ -29,6 +29,17 @@
 
 ## 📋 Changelog
 
+### v5.6.1 - Profile & Stats UI Improvements
+- **Library Overview Card**: New "Your Musical Ocean" section showing total tracks, albums, artists, and favorites count
+- **Audiophile Stats**: New card displaying codec breakdown, most common format, and highest quality track in your library
+- **Quick Stats Badges**: Inline badges below hero ring showing streak, favorites count, and discovery label
+- **Enhanced Listening Patterns**: Added peak day of week and marathon session count (2+ hour sessions)
+- **On This Day Section**: Collapsible section showing what you listened to on this date in previous months/years
+- **Nautical Typography**: Section headers now use Pacifico font for a nautical feel
+- **Wave Dividers**: Decorative wave dividers between major sections
+- **Performance Improvements**: Split large sliver into multiple slivers for smoother scrolling
+- **Haptic Feedback**: Added light haptic feedback on interactive elements
+
 ### v5.6.0 - Enhanced TUI Mode
 - **Alternate App Icons**: Switch between Classic (purple) and Sunset (orange) icons in Settings > Appearance
 - **Cross-Platform Icons**: Icon choice applies to iOS home screen, Linux/macOS system tray, and app window

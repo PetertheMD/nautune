@@ -593,12 +593,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     label: 'Classic',
                     isSelected: iconService.currentIcon == 'default',
                     onTap: () async {
+                      // Capture appState before async gap
+                      final appState = Platform.isLinux || Platform.isMacOS
+                          ? Provider.of<NautuneAppState>(context, listen: false)
+                          : null;
                       await iconService.setIcon('default');
-                      // Update tray icon on Linux
-                      if (Platform.isLinux || Platform.isMacOS) {
-                        final appState = Provider.of<NautuneAppState>(context, listen: false);
-                        appState.trayService?.updateTrayIcon();
-                      }
+                      // Update tray icon on Linux/macOS
+                      appState?.trayService?.updateTrayIcon();
                       if (context.mounted) Navigator.pop(context);
                     },
                   ),
@@ -607,12 +608,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     label: 'Sunset',
                     isSelected: iconService.currentIcon == 'orange',
                     onTap: () async {
+                      // Capture appState before async gap
+                      final appState = Platform.isLinux || Platform.isMacOS
+                          ? Provider.of<NautuneAppState>(context, listen: false)
+                          : null;
                       await iconService.setIcon('orange');
-                      // Update tray icon on Linux
-                      if (Platform.isLinux || Platform.isMacOS) {
-                        final appState = Provider.of<NautuneAppState>(context, listen: false);
-                        appState.trayService?.updateTrayIcon();
-                      }
+                      // Update tray icon on Linux/macOS
+                      appState?.trayService?.updateTrayIcon();
                       if (context.mounted) Navigator.pop(context);
                     },
                   ),

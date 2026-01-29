@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart' as hive;
 import 'package:material_color_utilities/material_color_utilities.dart';
@@ -337,9 +339,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
   ListeningMilestones? _milestones;
   RelaxModeStats? _relaxModeStats;
   int? _peakHour;
+  int? _peakDay;
+  int _marathonSessions = 0;
   Duration? _avgSessionLength;
   double _discoveryRate = 0.0;
   int _unsyncedPlays = 0; // Plays pending server sync
+
+  // Library overview counts
+  int _libraryTracks = 0;
+  int _libraryAlbums = 0;
+  int _libraryArtists = 0;
+  int _favoritesCount = 0;
+
+  // Audiophile stats
+  Map<String, int>? _codecBreakdown;
+  JellyfinTrack? _highestQualityTrack;
+  String? _mostCommonFormat;
+
+  // On This Day events
+  List<PlayEvent>? _onThisDayEvents;
+  bool _onThisDayExpanded = false;
 
   // Top content tab controller
   int _topContentTab = 0;
@@ -357,6 +376,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadStats();
     _loadLocalAnalytics();
     _loadNetworkStats();
+    _loadLibraryOverview();
   }
 
   void _loadNetworkStats() {
@@ -390,9 +410,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _milestones = analytics.getMilestones();
       _relaxModeStats = analytics.getRelaxModeStats();
       _peakHour = analytics.getPeakListeningHour();
+      _peakDay = analytics.getPeakDayOfWeek();
+      _marathonSessions = analytics.getMarathonSessionCount();
       _avgSessionLength = analytics.getAverageSessionLength();
       _discoveryRate = analytics.getDiscoveryRate();
       _unsyncedPlays = analytics.unsyncedCount;
+      _onThisDayEvents = analytics.getOnThisDayEvents();
     });
   }
 
@@ -407,6 +430,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       debugPrint('Error loading user profile: $e');
+    }
+  }
+
+  Future<void> _loadLibraryOverview() async {
+    final appState = Provider.of<NautuneAppState>(context, listen: false);
+    final sessionProvider = Provider.of<SessionProvider>(context, listen: false);
+    final libraryId = sessionProvider.session?.selectedLibraryId;
+
+    if (libraryId == null) return;
+
+    try {
+      // Load favorites count
+      final favTracks = await appState.jellyfinService.getFavoriteTracks();
+      final favAlbums = await appState.jellyfinService.getFavoriteAlbums();
+
+      if (mounted) {
+        setState(() {
+          _favoritesCount = favTracks.length + favAlbums.length;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading library overview: $e');
     }
   }
 
@@ -568,6 +613,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ))
           .toList();
 
+      // Compute audiophile stats
+      final codecCounts = <String, int>{};
+      JellyfinTrack? highestQuality;
+      int highestQualityScore = 0;
+
+      for (final track in tracks) {
+        // Count codecs
+        final codec = track.codec ?? track.container ?? 'Unknown';
+        codecCounts[codec] = (codecCounts[codec] ?? 0) + 1;
+
+        // Find highest quality track
+        final score = _calculateQualityScore(track);
+        if (score > highestQualityScore) {
+          highestQualityScore = score;
+          highestQuality = track;
+        }
+      }
+
+      // Find most common format
+      String? mostCommon;
+      int mostCommonCount = 0;
+      codecCounts.forEach((codec, count) {
+        if (count > mostCommonCount) {
+          mostCommonCount = count;
+          mostCommon = codec;
+        }
+      });
+
       if (mounted) {
         setState(() {
           _topTracks = tracks.take(5).toList();
@@ -577,6 +650,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _totalPlays = statsResult.totalPlays;
           _totalHours = statsResult.totalHours;
           _genrePlayCounts = statsResult.genrePlayCounts;
+          _codecBreakdown = codecCounts;
+          _highestQualityTrack = highestQuality;
+          _mostCommonFormat = mostCommon;
+          _libraryTracks = tracks.length;
+          _libraryAlbums = statsResult.uniqueAlbumsCount;
+          _libraryArtists = statsResult.uniqueArtistsCount;
           _avgTrackLength = statsResult.avgTrackLength;
           _longestTrack = statsResult.longestTrackIndex != null ? tracks[statsResult.longestTrackIndex!] : null;
           _shortestTrack = statsResult.shortestTrackIndex != null ? tracks[statsResult.shortestTrackIndex!] : null;
@@ -830,73 +909,118 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-          // Stats content
+          // Stats content - Split into multiple slivers for better performance
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 1. Hero Ring - Total hours with animated progress
                   _buildHeroRing(theme),
-                  const SizedBox(height: 24),
+
+                  // Quick Stats Badges (inline below hero)
+                  _buildQuickStatsBadges(theme),
+                  const SizedBox(height: 16),
 
                   // Rewind Banner (if data available)
                   _buildRewindBanner(theme),
 
                   // 2. Key Metrics - Plays, Artists, Albums (3 cards)
                   _buildKeyMetricsRow(theme),
+                  const SizedBox(height: 16),
+
+                  // 3. Library Overview Card - "Your Musical Ocean"
+                  _buildLibraryOverviewCard(theme),
                   const SizedBox(height: 12),
 
-                  // 2b. Sync Status Banner (only if unsynced plays exist)
+                  // Sync Status Banner (only if unsynced plays exist)
                   if (_unsyncedPlays > 0) ...[
                     _buildSyncStatusBanner(theme),
                     const SizedBox(height: 12),
                   ],
 
-                  // 2c. ListenBrainz Stats (if connected)
+                  // ListenBrainz Stats (if connected)
                   if (ListenBrainzService().isConfigured) ...[
                     _buildListenBrainzStatsRow(theme),
                     const SizedBox(height: 12),
                   ],
 
-                  // 2d. Network Radio Stats (if any plays)
+                  // Network Radio Stats (if any plays)
                   if (_networkTotalPlays > 0) ...[
                     _buildNetworkStatsSection(theme),
                     const SizedBox(height: 12),
                   ],
-                  const SizedBox(height: 12),
 
-                  // 3. Listening Patterns - Peak hour, Avg session, Discovery rate
-                  _buildSectionHeader(theme, 'Listening Patterns', Icons.auto_graph),
-                  const SizedBox(height: 12),
-                  _buildListeningPatterns(theme),
-                  const SizedBox(height: 24),
+                  _buildWaveDivider(theme),
 
-                  // 4. Top Content Tabs - Tracks | Artists | Albums
-                  _buildSectionHeader(theme, 'Top Content', Icons.star),
+                  // 4. Listening Patterns - Enhanced with Peak Day and Marathons
+                  _buildNauticalSectionHeader(theme, 'Listening Patterns', Icons.auto_graph),
+                  const SizedBox(height: 12),
+                  _buildEnhancedListeningPatterns(theme),
+                  const SizedBox(height: 16),
+
+                  // 5. Audiophile Stats Card
+                  _buildAudiophileStatsCard(theme),
+
+                  _buildWaveDivider(theme),
+
+                  // 6. Top Content Tabs - Tracks | Artists | Albums
+                  _buildNauticalSectionHeader(theme, 'Top Content', Icons.star),
                   const SizedBox(height: 12),
                   _buildTopContentTabs(theme),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
 
-                  // 5. Listening Activity - Heatmap, Streaks, Week comparison
-                  if (_heatmap != null || _streak != null) ...[
-                    _buildSectionHeader(theme, 'Listening Activity', Icons.insights),
+                  // 7. On This Day Section (collapsible)
+                  _buildOnThisDaySection(theme),
+                ],
+              ),
+            ),
+          ),
+
+          // Listening Activity Section (lazy loaded)
+          if (_heatmap != null || _streak != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildWaveDivider(theme),
+                    _buildNauticalSectionHeader(theme, 'Listening Activity', Icons.insights),
                     const SizedBox(height: 12),
                     _buildListeningActivitySection(theme),
-                    const SizedBox(height: 24),
                   ],
+                ),
+              ),
+            ),
 
-                  // 6. Achievements - Milestones with enhanced badges
-                  if (_milestones != null && _milestones!.all.isNotEmpty) ...[
-                    _buildSectionHeader(theme, 'Achievements', Icons.emoji_events),
+          // Achievements Section (lazy loaded)
+          if (_milestones != null && _milestones!.all.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildWaveDivider(theme),
+                    _buildNauticalSectionHeader(theme, 'Achievements', Icons.emoji_events),
                     const SizedBox(height: 12),
                     _buildMilestonesSection(theme),
-                    const SizedBox(height: 24),
                   ],
+                ),
+              ),
+            ),
 
-                  // 7. Deep Dive - Genre breakdown, detailed insights
-                  _buildSectionHeader(theme, 'Deep Dive', Icons.explore),
+          // Deep Dive Section
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildWaveDivider(theme),
+                  _buildNauticalSectionHeader(theme, 'Deep Dive', Icons.explore),
                   const SizedBox(height: 12),
                   _buildListeningInsights(theme),
                   const SizedBox(height: 16),
@@ -905,7 +1029,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildMonthlyComparison(theme),
                   const SizedBox(height: 16),
                   _buildYearlyComparison(theme),
-                  const SizedBox(height: 32),
                 ],
               ),
             ),
@@ -1637,72 +1760,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return number.toString();
   }
 
-  Widget _buildListeningPatterns(ThemeData theme) {
-    final analytics = ListeningAnalyticsService();
-    final discoveryLabel = analytics.getDiscoveryLabel(_discoveryRate);
-
-    String formatSessionLength(Duration? d) {
-      if (d == null) return '-';
-      final mins = d.inMinutes;
-      if (mins < 60) return '${mins}m';
-      final hours = d.inHours;
-      final remainingMins = mins % 60;
-      return remainingMins > 0 ? '${hours}h ${remainingMins}m' : '${hours}h';
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildPatternItem(
-              theme,
-              icon: Icons.schedule,
-              label: 'Peak Hour',
-              value: _peakHour != null ? _formatHour(_peakHour!) : '-',
-              subtext: 'most active',
-              color: const Color(0xFF409CFF),
-            ),
-          ),
-          Container(
-            width: 1,
-            height: 60,
-            color: theme.colorScheme.outline.withValues(alpha: 0.2),
-          ),
-          Expanded(
-            child: _buildPatternItem(
-              theme,
-              icon: Icons.timelapse,
-              label: 'Avg Session',
-              value: formatSessionLength(_avgSessionLength),
-              subtext: 'per session',
-              color: const Color(0xFF7A3DF1),
-            ),
-          ),
-          Container(
-            width: 1,
-            height: 60,
-            color: theme.colorScheme.outline.withValues(alpha: 0.2),
-          ),
-          Expanded(
-            child: _buildPatternItem(
-              theme,
-              icon: Icons.explore,
-              label: 'Discovery',
-              value: '${_discoveryRate.toStringAsFixed(0)}%',
-              subtext: discoveryLabel,
-              color: const Color(0xFF10B981),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildPatternItem(
     ThemeData theme, {
     required IconData icon,
@@ -1811,22 +1868,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       default:
         return _buildTopTracksList(theme);
     }
-  }
-
-  Widget _buildSectionHeader(ThemeData theme, String title, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, color: theme.colorScheme.primary, size: 20),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: theme.colorScheme.primary,
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildTopTracksList(ThemeData theme) {
@@ -3595,4 +3636,706 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return const Color(0xFF8B5CF6); // Violet - mystical night creatures
     }
   }
+
+  /// Calculate audio quality score for a track
+  int _calculateQualityScore(JellyfinTrack track) {
+    int score = 0;
+    // Bit depth scoring
+    if (track.bitDepth != null) {
+      score += track.bitDepth! * 10; // 16-bit = 160, 24-bit = 240, 32-bit = 320
+    }
+    // Sample rate scoring (kHz * 2)
+    if (track.sampleRate != null) {
+      score += (track.sampleRate! / 1000).round() * 2;
+    }
+    // Bitrate scoring (kbps / 10)
+    if (track.bitrate != null) {
+      score += track.bitrate! ~/ 10000;
+    }
+    // Lossless bonus
+    final codec = track.codec?.toLowerCase() ?? '';
+    if (codec == 'flac' || codec == 'alac' || codec == 'wav') {
+      score += 100;
+    }
+    return score;
+  }
+
+  /// Build Quick Stats Badges below Hero Ring
+  Widget _buildQuickStatsBadges(ThemeData theme) {
+    final streak = _streak;
+    final analytics = ListeningAnalyticsService();
+    final discoveryLabel = analytics.getDiscoveryLabel(_discoveryRate);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          // Streak badge
+          if (streak != null && streak.currentStreak > 0)
+            _buildQuickBadge(
+              theme,
+              icon: Icons.local_fire_department,
+              text: '${streak.currentStreak} day streak',
+              color: Colors.orange,
+            ),
+          // Favorites badge
+          if (_favoritesCount > 0)
+            _buildQuickBadge(
+              theme,
+              icon: Icons.favorite,
+              text: '$_favoritesCount faves',
+              color: Colors.pink,
+            ),
+          // Discovery badge
+          _buildQuickBadge(
+            theme,
+            icon: Icons.explore,
+            text: discoveryLabel,
+            color: const Color(0xFF10B981),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickBadge(
+    ThemeData theme, {
+    required IconData icon,
+    required String text,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build Library Overview Card
+  Widget _buildLibraryOverviewCard(ThemeData theme) {
+    const oceanBlue = Color(0xFF409CFF);
+    const emeraldSea = Color(0xFF10B981);
+    const goldTreasure = Color(0xFFFFD700);
+    const pinkCoral = Color(0xFFEC4899);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            oceanBlue.withValues(alpha: 0.1),
+            emeraldSea.withValues(alpha: 0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: oceanBlue.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.waves, color: oceanBlue, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Your Musical Ocean',
+                style: GoogleFonts.pacifico(
+                  fontSize: 16,
+                  color: oceanBlue,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildLibraryBadge(
+                  theme,
+                  icon: Icons.music_note,
+                  value: _formatNumber(_libraryTracks),
+                  label: 'Tracks',
+                  color: oceanBlue,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildLibraryBadge(
+                  theme,
+                  icon: Icons.album,
+                  value: _formatNumber(_libraryAlbums),
+                  label: 'Albums',
+                  color: emeraldSea,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildLibraryBadge(
+                  theme,
+                  icon: Icons.person,
+                  value: _formatNumber(_libraryArtists),
+                  label: 'Artists',
+                  color: goldTreasure,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildLibraryBadge(
+                  theme,
+                  icon: Icons.favorite,
+                  value: _formatNumber(_favoritesCount),
+                  label: 'Faves',
+                  color: pinkCoral,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLibraryBadge(
+    ThemeData theme, {
+    required IconData icon,
+    required String value,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build Audiophile Stats Card
+  Widget _buildAudiophileStatsCard(ThemeData theme) {
+    if (_codecBreakdown == null || _codecBreakdown!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    const deepPurple = Color(0xFF7A3DF1);
+    final totalTracks = _codecBreakdown!.values.fold<int>(0, (a, b) => a + b);
+
+    // Sort codecs by count
+    final sortedCodecs = _codecBreakdown!.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            deepPurple.withValues(alpha: 0.15),
+            deepPurple.withValues(alpha: 0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: deepPurple.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.headphones, color: deepPurple, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Audiophile Stats',
+                style: GoogleFonts.pacifico(
+                  fontSize: 16,
+                  color: deepPurple,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Most common format
+          if (_mostCommonFormat != null) ...[
+            Row(
+              children: [
+                Icon(Icons.audio_file, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Text(
+                  'Most common: ',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: deepPurple.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _mostCommonFormat!,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: deepPurple,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // Highest quality track
+          if (_highestQualityTrack != null) ...[
+            Row(
+              children: [
+                Icon(Icons.star, size: 16, color: Colors.amber),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Best quality:',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        _highestQualityTrack!.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (_highestQualityTrack!.audioQualityInfo != null && _highestQualityTrack!.audioQualityInfo!.isNotEmpty)
+                        Text(
+                          _highestQualityTrack!.audioQualityInfo!,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: deepPurple,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // Format breakdown bars
+          Text(
+            'Format Breakdown',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...sortedCodecs.take(5).map((entry) {
+            final percentage = entry.value / totalTracks;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 50,
+                    child: Text(
+                      entry.key,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: percentage,
+                        backgroundColor: deepPurple.withValues(alpha: 0.1),
+                        valueColor: AlwaysStoppedAnimation<Color>(deepPurple),
+                        minHeight: 8,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 40,
+                    child: Text(
+                      '${(percentage * 100).toStringAsFixed(0)}%',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: deepPurple,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  /// Build Enhanced Listening Patterns with Peak Day and Marathon Sessions
+  Widget _buildEnhancedListeningPatterns(ThemeData theme) {
+    final analytics = ListeningAnalyticsService();
+    final discoveryLabel = analytics.getDiscoveryLabel(_discoveryRate);
+
+    String formatSessionLength(Duration? d) {
+      if (d == null) return '-';
+      final mins = d.inMinutes;
+      if (mins < 60) return '${mins}m';
+      final hours = d.inHours;
+      final remainingMins = mins % 60;
+      return remainingMins > 0 ? '${hours}h ${remainingMins}m' : '${hours}h';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          // First row: Peak Hour, Peak Day, Avg Session
+          Row(
+            children: [
+              Expanded(
+                child: _buildPatternItem(
+                  theme,
+                  icon: Icons.schedule,
+                  label: 'Peak Hour',
+                  value: _peakHour != null ? _formatHour(_peakHour!) : '-',
+                  subtext: 'most active',
+                  color: const Color(0xFF409CFF),
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 60,
+                color: theme.colorScheme.outline.withValues(alpha: 0.2),
+              ),
+              Expanded(
+                child: _buildPatternItem(
+                  theme,
+                  icon: Icons.today,
+                  label: 'Peak Day',
+                  value: _peakDay != null ? ListeningAnalyticsService.getShortDayName(_peakDay!) : '-',
+                  subtext: 'busiest day',
+                  color: const Color(0xFFFFD700),
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 60,
+                color: theme.colorScheme.outline.withValues(alpha: 0.2),
+              ),
+              Expanded(
+                child: _buildPatternItem(
+                  theme,
+                  icon: Icons.timelapse,
+                  label: 'Avg Session',
+                  value: formatSessionLength(_avgSessionLength),
+                  subtext: 'per session',
+                  color: const Color(0xFF7A3DF1),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(color: theme.colorScheme.outline.withValues(alpha: 0.1)),
+          const SizedBox(height: 12),
+          // Second row: Discovery, Marathon Sessions
+          Row(
+            children: [
+              Expanded(
+                child: _buildPatternItem(
+                  theme,
+                  icon: Icons.explore,
+                  label: 'Discovery',
+                  value: '${_discoveryRate.toStringAsFixed(0)}%',
+                  subtext: discoveryLabel,
+                  color: const Color(0xFF10B981),
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 60,
+                color: theme.colorScheme.outline.withValues(alpha: 0.2),
+              ),
+              Expanded(
+                child: _buildPatternItem(
+                  theme,
+                  icon: Icons.timer,
+                  label: 'Marathons',
+                  value: '$_marathonSessions',
+                  subtext: '2+ hr sessions',
+                  color: Colors.orange,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build On This Day Section
+  Widget _buildOnThisDaySection(ThemeData theme) {
+    if (_onThisDayEvents == null || _onThisDayEvents!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final now = DateTime.now();
+    final monthDay = '${_getMonthName(now.month)} ${now.day}';
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            theme.colorScheme.tertiary.withValues(alpha: 0.1),
+            theme.colorScheme.tertiary.withValues(alpha: 0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.tertiary.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        children: [
+          // Header (always visible)
+          InkWell(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() => _onThisDayExpanded = !_onThisDayExpanded);
+            },
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.history, color: theme.colorScheme.tertiary, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'On This Day ($monthDay)',
+                      style: GoogleFonts.pacifico(
+                        fontSize: 16,
+                        color: theme.colorScheme.tertiary,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.tertiary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${_onThisDayEvents!.length} memories',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.tertiary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedRotation(
+                    turns: _onThisDayExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.expand_more,
+                      color: theme.colorScheme.tertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Expanded content
+          AnimatedCrossFade(
+            firstChild: const SizedBox(width: double.infinity),
+            secondChild: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                children: _onThisDayEvents!.take(5).map((event) {
+                  final yearsAgo = now.year - event.timestamp.year;
+                  final monthsAgo = now.month - event.timestamp.month + (yearsAgo * 12);
+                  String timeAgo;
+                  if (yearsAgo >= 1) {
+                    timeAgo = yearsAgo == 1 ? '1 year ago' : '$yearsAgo years ago';
+                  } else if (monthsAgo >= 1) {
+                    timeAgo = monthsAgo == 1 ? '1 month ago' : '$monthsAgo months ago';
+                  } else {
+                    timeAgo = 'Recently';
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 60,
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.tertiary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            timeAgo,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.tertiary,
+                              fontSize: 9,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                event.trackName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                event.artists.join(', '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            crossFadeState: _onThisDayExpanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build nautical-themed section header with Pacifico font
+  Widget _buildNauticalSectionHeader(ThemeData theme, String title, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, color: theme.colorScheme.primary, size: 22),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: GoogleFonts.pacifico(
+            fontSize: 18,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Build wave divider between sections
+  Widget _buildWaveDivider(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: CustomPaint(
+        size: const Size(double.infinity, 12),
+        painter: _WavePainter(
+          color: theme.colorScheme.primary.withValues(alpha: 0.15),
+        ),
+      ),
+    );
+  }
+}
+
+/// Custom painter for wave divider
+class _WavePainter extends CustomPainter {
+  final Color color;
+
+  _WavePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    path.moveTo(0, size.height / 2);
+
+    for (double i = 0; i < size.width; i++) {
+      path.lineTo(i, size.height / 2 + math.sin(i * 0.05) * 4);
+    }
+
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
