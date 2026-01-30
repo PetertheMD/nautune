@@ -113,7 +113,7 @@
 			<dict>
 				<key>CFBundleIconFiles</key>
 				<array>
-					<string>AppIconOrange</string>
+					<string>AppIconOrange60x60</string>
 				</array>
 				<key>UIPrerenderedIcon</key>
 				<false/>
@@ -137,7 +137,9 @@
 			<dict>
 				<key>CFBundleIconFiles</key>
 				<array>
-					<string>AppIconOrange</string>
+					<string>AppIconOrange60x60</string>
+					<string>AppIconOrange76x76</string>
+					<string>AppIconOrange83.5x83.5</string>
 				</array>
 				<key>UIPrerenderedIcon</key>
 				<false/>
