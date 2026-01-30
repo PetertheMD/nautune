@@ -69,9 +69,8 @@ class FrequencyBands {
 class AudioPlayerService {
   static const int _visualizerBarCount = 24;
 
-  // Pre-allocated arrays for visualizer to avoid per-frame allocations
+  // Pre-allocated array for visualizer to avoid per-frame allocations
   final List<double> _visualizerBars = List<double>.filled(_visualizerBarCount, 0.0);
-  final List<double> _frequencyBands = List<double>.filled(3, 0.0); // bass, mid, treble
 
   AudioPlayer _player = AudioPlayer();
   AudioPlayer _nextPlayer = AudioPlayer();
@@ -1853,18 +1852,24 @@ class AudioPlayerService {
     if (hasFrequencyListeners) {
       // Calculate bass (indices 0-7)
       double bassSum = 0.0;
-      for (int i = 0; i < 8; i++) bassSum += _visualizerBars[i];
+      for (int i = 0; i < 8; i++) {
+        bassSum += _visualizerBars[i];
+      }
       final rawBass = bassSum / 8;
       final bass = (rawBass + _bassEmphasis * 0.2).clamp(0.0, 1.0);
 
       // Calculate mid (indices 8-15)
       double midSum = 0.0;
-      for (int i = 8; i < 16; i++) midSum += _visualizerBars[i];
+      for (int i = 8; i < 16; i++) {
+        midSum += _visualizerBars[i];
+      }
       final mid = (midSum / 8).clamp(0.0, 1.0);
 
       // Calculate treble (indices 16-23)
       double trebleSum = 0.0;
-      for (int i = 16; i < 24; i++) trebleSum += _visualizerBars[i];
+      for (int i = 16; i < 24; i++) {
+        trebleSum += _visualizerBars[i];
+      }
       final treble = (trebleSum / 8).clamp(0.0, 1.0);
 
       _frequencyBandsController.add(FrequencyBands(

@@ -212,7 +212,7 @@ class _NetworkScreenState extends State<NetworkScreen>
           child: Padding(
             padding: EdgeInsets.all(32),
             child: Text(
-              'THE NETWORK REQUIRES\nAN INTERNET CONNECTION\n\nEnable "Save for Offline" to\naccess channels without internet',
+              'THE NETWORK REQUIRES\nAN INTERNET CONNECTION\n\nDownload channels from Settings\nto access them offline',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white,
@@ -263,24 +263,36 @@ class _NetworkScreenState extends State<NetworkScreen>
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Auto-cache indicator
-          if (_downloadService.autoCacheEnabled)
+          // Download status indicator
+          if (_downloadService.downloadedCount > 0)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               margin: const EdgeInsets.only(right: 8),
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.3),
+                color: _downloadService.isDownloadingAny
+                    ? Colors.blue.withValues(alpha: 0.3)
+                    : Colors.green.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.download_done, size: 12, color: Colors.green),
-                  SizedBox(width: 4),
+                  Icon(
+                    _downloadService.isDownloadingAny
+                        ? Icons.downloading
+                        : Icons.download_done,
+                    size: 12,
+                    color: _downloadService.isDownloadingAny
+                        ? Colors.blue
+                        : Colors.green,
+                  ),
+                  const SizedBox(width: 4),
                   Text(
-                    'OFFLINE',
+                    '${_downloadService.downloadedCount}/${networkChannels.length}',
                     style: TextStyle(
-                      color: Colors.green,
+                      color: _downloadService.isDownloadingAny
+                          ? Colors.blue
+                          : Colors.green,
                       fontFamily: 'monospace',
                       fontSize: 10,
                       letterSpacing: 1,
@@ -321,14 +333,22 @@ class _NetworkScreenState extends State<NetworkScreen>
   Widget _buildSettingsSheet() {
     return StatefulBuilder(
       builder: (context, setSheetState) {
+        // Calculate download progress
+        final totalChannels = networkChannels.length;
+        final downloadedCount = _downloadService.downloadedCount;
+        final isDownloading = _downloadService.isDownloadingAny;
+        final downloadingCount = _downloadService.downloadingCount;
+        final progress = totalChannels > 0 ? downloadedCount / totalChannels : 0.0;
+
         return Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               const Text(
-                'NETWORK SETTINGS',
+                'NETWORK DOWNLOADS',
                 style: TextStyle(
                   color: Colors.white,
                   fontFamily: 'monospace',
@@ -339,28 +359,117 @@ class _NetworkScreenState extends State<NetworkScreen>
               ),
               const SizedBox(height: 24),
 
-              // Auto-cache toggle
-              SwitchListTile(
-                value: _downloadService.autoCacheEnabled,
-                onChanged: (value) async {
-                  await _downloadService.setAutoCacheEnabled(value);
-                  setSheetState(() {});
-                  setState(() {});
-                },
-                title: const Text(
-                  'Save for Offline',
-                  style: TextStyle(color: Colors.white, fontFamily: 'monospace'),
+              // Download all section
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white24),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                subtitle: const Text(
-                  'Automatically save channels when played',
-                  style: TextStyle(color: Colors.white54, fontFamily: 'monospace', fontSize: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '$downloadedCount / $totalChannels channels',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'monospace',
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '${(progress * 100).toStringAsFixed(0)}%',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontFamily: 'monospace',
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: Colors.grey[800],
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          isDownloading ? Colors.blue : Colors.green,
+                        ),
+                        minHeight: 8,
+                      ),
+                    ),
+                    if (isDownloading) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Downloading $downloadingCount channel${downloadingCount > 1 ? 's' : ''}...',
+                        style: const TextStyle(
+                          color: Colors.blue,
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: downloadedCount >= totalChannels
+                                ? null
+                                : () async {
+                                    await _downloadService.downloadAllChannels();
+                                    setSheetState(() {});
+                                    setState(() {});
+                                  },
+                            icon: Icon(
+                              downloadedCount >= totalChannels
+                                  ? Icons.check_circle
+                                  : Icons.download,
+                              size: 18,
+                            ),
+                            label: Text(
+                              downloadedCount >= totalChannels
+                                  ? 'ALL DOWNLOADED'
+                                  : 'DOWNLOAD ALL',
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 12,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: downloadedCount >= totalChannels
+                                  ? Colors.green
+                                  : Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        if (isDownloading) ...[
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: () {
+                              _downloadService.cancelAllDownloads();
+                              setSheetState(() {});
+                              setState(() {});
+                            },
+                            icon: const Icon(Icons.stop, color: Colors.red),
+                            tooltip: 'Cancel downloads',
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
                 ),
-                activeTrackColor: Colors.green,
-                inactiveTrackColor: Colors.grey[800],
-                contentPadding: EdgeInsets.zero,
               ),
 
-              const Divider(color: Colors.white24),
+              const SizedBox(height: 16),
 
               // Storage info
               FutureBuilder<NetworkStorageStats>(
@@ -375,13 +484,13 @@ class _NetworkScreenState extends State<NetworkScreen>
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text(
-                          'Saved Channels',
+                          'Storage Used',
                           style: TextStyle(color: Colors.white, fontFamily: 'monospace'),
                         ),
                         subtitle: Text(
                           stats != null
-                              ? '${stats.channelCount} channels (${stats.formattedTotal})'
-                              : 'Loading...',
+                              ? '${stats.formattedTotal} (${stats.formattedAudio} audio, ${stats.formattedImages} images)'
+                              : 'Calculating...',
                           style: const TextStyle(color: Colors.white54, fontFamily: 'monospace', fontSize: 12),
                         ),
                         trailing: stats != null && stats.channelCount > 0
@@ -484,7 +593,7 @@ class _NetworkScreenState extends State<NetworkScreen>
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 8),
                           child: Text(
-                            'No channels saved yet. Enable "Save for Offline" and play channels to build your collection.',
+                            'No channels downloaded yet. Tap "Download All" to save all channels for offline listening.',
                             style: TextStyle(
                               color: Colors.white38,
                               fontFamily: 'monospace',
@@ -545,7 +654,8 @@ class _NetworkScreenState extends State<NetworkScreen>
               ),
 
               const SizedBox(height: 16),
-            ],
+              ],
+            ),
           ),
         );
       },

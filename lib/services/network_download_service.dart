@@ -531,6 +531,16 @@ class NetworkDownloadService extends ChangeNotifier {
   int get downloadedCount =>
       _downloads.values.where((d) => d.isDownloaded).length;
 
+  /// Check if any downloads are in progress.
+  bool get isDownloadingAny =>
+      _downloadQueue.isNotEmpty ||
+      _downloads.values.any((d) => d.status == NetworkDownloadStatus.downloading);
+
+  /// Get count of channels currently downloading.
+  int get downloadingCount =>
+      _downloadQueue.length +
+      _downloads.values.where((d) => d.status == NetworkDownloadStatus.downloading).length;
+
   /// Get download progress for a channel (0.0 to 1.0).
   double getDownloadProgress(int channelNumber) {
     return _downloads[channelNumber]?.progress ?? 0.0;
@@ -787,6 +797,21 @@ class NetworkDownloadService extends ChangeNotifier {
       _downloads.remove(channelNumber);
       notifyListeners();
     }
+  }
+
+  /// Cancel all pending and in-progress downloads.
+  void cancelAllDownloads() {
+    _downloadQueue.clear();
+    final toRemove = <int>[];
+    for (final entry in _downloads.entries) {
+      if (entry.value.status == NetworkDownloadStatus.downloading) {
+        toRemove.add(entry.key);
+      }
+    }
+    for (final key in toRemove) {
+      _downloads.remove(key);
+    }
+    notifyListeners();
   }
 
   /// Get storage statistics.

@@ -29,6 +29,16 @@
 
 ## 📋 Changelog
 
+### v5.6.3 - Network Channel Verification
+- **121 Total Channels**: Expanded Network with complete channel mapping from other-people.network
+- **Server-Verified Audio**: All audio filenames verified against actual server directory listing
+- **Server-Verified Images**: All artwork filenames verified against actual server directory listing
+- **Fixed 8 Audio Mappings**: Corrected audio for Traffic Princess, Fucking Classics, The Rejects AM, The Object Spoke to Me, History Has a Way With Words, Mirrors Still Reflect, Radio 333
+- **8 Image-Only Channels**: Mashcast, Science Needs a Clown, Everyone Gets Into Heaven, Young Me With Young You, Un Coup de Dés, Live from Las Vegas, Life Radio (artwork displays, no audio on website)
+- **Download All Feature**: Bulk download all Network channels for complete offline experience
+- **Master List Documentation**: Complete `network list.md` tracking all channel states
+- **11 Extra Channels**: Bonus channels not on website preserved (Ambient Set, Cumbia Mix, Gospel Radio, etc.)
+
 ### v5.6.2 - Performance Optimizations
 - **Image Memory Reduction**: Added `memCacheHeight` to image cache, reducing memory usage by ~50%
 - **Duration Caching**: Cached track duration to avoid repeated async queries on every position update
@@ -270,6 +280,121 @@ When offline, only your saved channels appear in the list. The app shows an "OFF
 Network downloads are stored separately from your Jellyfin library:
 - **Linux**: `~/Documents/nautune/network/audio/`
 - **iOS**: `Documents/network/audio/`
+
+### Available Channels
+
+112 channels from the Other People Network catalog:
+
+- the network
+- traffic princess
+- chance fm
+- you don't know what love is
+- pomegranates in the sky
+- hardcore ambient
+- work in progress
+- waves and sirens
+- feet fm
+- i shoot like i talk
+- heaven's floor
+- we weren't made for these times
+- water in heaven
+- system of a downey
+- the answer is in the question
+- the answer starts with the word ideology
+- in the face of defeat fm
+- present choice
+- bible fm
+- the rejects am
+- the rejects fm
+- this house is on fire!
+- red bull sponsored revolution
+- our god flag fm
+- naked bieber fm
+- fucking classics
+- pop harvey
+- labour of love
+- vito's room
+- radio radio
+- tv buddha
+- century of the self
+- the vacuum has no symmetry
+- eternal inflation
+- condensed matter systems
+- multiverse fm
+- the object spoke to me
+- hot jungle
+- spells of angels
+- science needs a clown
+- questions the shadow knew
+- slaughter fm
+- jane said of my idol that art was doing its job, tearing away its dead flesh
+- cnn
+- billionaire fm
+- the tennis underground
+- history has a way with words
+- the future has no birds
+- red flag
+- the eternal has an accent
+- the revolver on the left
+- american dream radio
+- young me with young you
+- everyone gets into heaven
+- un coup de dés jamais n'abolira le hasard
+- deep symmetry
+- america is perfect
+- ad me to you
+- mirrors still reflect if they break
+- let's change the system
+- mashcast
+- playing with you
+- make america great again
+- code fm
+- la resistencia de ayer es la resistencia de hoy
+- sex radio
+- standard model
+- super symmetry
+- whose world is this?
+- our world
+- famous heart
+- fallacy
+- live from gaza
+- voices fm
+- jump radio
+- the whole world is watching
+- flood fm
+- live from las vegas
+- yankee yankee yankee cuidado!!!
+- pray fm
+- it sounded like the finale of the 4th of july
+- a new kind of kool aid
+- mini infiniti
+- spa theory
+- near a burning flame
+- resist stance
+- niar lirpa
+- matta clark demolitions
+- you can be young forever
+- silence fm
+- vtgnike is free!!!
+- against all logic
+- home
+- los colores no existen
+- other people radio
+- geography of heaven
+- everywhere i go
+- change your name
+- life radio
+- elegy for the empyre
+- took me out
+- the number and the siren
+- aesthetic of resistance or resistance of aesthetic
+- pomegranates
+- regular hypnosis
+- what made you made me
+- radio 333
+- nymphs
+- sirens
+- sirens (digital)
 
 ### Listening Stats
 
