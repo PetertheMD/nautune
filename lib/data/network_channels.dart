@@ -792,7 +792,7 @@ const List<NetworkChannel> networkChannels = [
     number: 276,
     name: 'VTGNike Is Free',
     artist: 'Nicolas Jaar',
-    audioFile: 'vtgnike is free.mp3',
+    audioFile: '01 Stimulate.mp3',
     imageFile: 'VIF.FM.jpg',
   ),
 
