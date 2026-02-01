@@ -1,10 +1,16 @@
-### v5.7.4 - Essential Mix iOS Performance Fix
-- **iOS Visualizer Throttling**: FFT updates now throttled to ~30fps, preventing excessive widget rebuilds that caused lag
-- **RepaintBoundary Isolation**: Visualizer and waveform wrapped in RepaintBoundary to prevent cascading repaints
-- **Portrait Mode Clipping Fix**: Essential Mix visualizer now fits within container bounds instead of extending 20% beyond
-- **AnimatedBuilder Optimization**: Essential Mix visualizer repaints driven by animation controller instead of setState calls
-- **iOS FFT Parity**: Removed 0.8x intensity reduction on iOS FFT - now matches Linux output
-- **iOS Portrait Bar Scaling**: Spectrum Bars and Mirror Bars visualizers now scale appropriately in iOS portrait mode (capped to 0.8x width ratio)
+### v5.7.4 - Essential Mix Enhanced Visualizer & iOS Performance
+- **Gradient Bar Colors**: Visualizer bars now use theme-based gradient colors (hue shifts ±40° around your primary color)
+- **Glow Effect**: Soft blur glow behind bars for a premium neon look
+- **Bass Pulse Ring**: Sonar-style pulsing ring on bass hits (nautical theme)
+- **Double Ring on Heavy Bass**: Second outer ring appears on strong bass hits
+- **iOS Visualizer Throttling**: FFT updates throttled to ~30fps, preventing lag
+- **RepaintBoundary Isolation**: Visualizer and waveform isolated to prevent cascading repaints
+- **Portrait Mode Clipping Fix**: Visualizer fits within container bounds
+- **Pre-computed Geometry**: Trig values and weights computed once, reused every frame
+- **Reduced Bar Count on iOS**: 32 bars on iOS vs 48 on desktop for smoother animation
+- **Smart Glow on iOS**: Glow effect only renders when amplitude > 0.3 on iOS (performance)
+- **iOS FFT Parity**: Removed intensity reduction - iOS FFT now matches Linux output
+- **iOS Portrait Bar Scaling**: Spectrum Bars and Mirror Bars scale appropriately in portrait mode
 
 ### v5.7.3 - Readme Update
 

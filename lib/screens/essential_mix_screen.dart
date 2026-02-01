@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' show min;
+import 'dart:math' show min, cos, sin, pi;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -52,7 +52,7 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
   double _smoothBass = 0.0;
   double _smoothMid = 0.0;
   double _smoothTreble = 0.0;
-  static const double _smoothingFactor = 0.08; // Lower = smoother
+  static const double _smoothingFactor = 0.18; // Higher = more reactive
 
   // Frame rate throttling for FFT updates (~30fps)
   DateTime _lastFrameTime = DateTime.now();
@@ -797,7 +797,7 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
                 RepaintBoundary(
                   child: AnimatedBuilder(
                     animation: _artworkController,
-                    builder: (context, child) {
+                    builder: (context, _) {
                       return CustomPaint(
                         size: Size(visualizerSize, visualizerSize),
                         painter: _RadialVisualizerPainter(
@@ -805,8 +805,9 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
                           mid: _smoothMid,
                           treble: _smoothTreble,
                           color: theme.colorScheme.primary,
-                          innerRadius: artworkSize / 2 + 6, // Start just outside artwork
+                          innerRadius: artworkSize / 2 + 6,
                           maxBarLength: maxBarLength,
+                          rotation: _artworkController.value * 2 * pi, // Slow rotation
                         ),
                       );
                     },
@@ -1216,7 +1217,8 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
   }
 }
 
-/// Radial visualizer painter - draws bars radiating outward from center circle
+/// Enhanced radial visualizer with gradient colors, bass pulse ring, and smooth rotation
+/// Optimized for performance - no blur effects, pre-computed geometry and colors
 class _RadialVisualizerPainter extends CustomPainter {
   final double bass;
   final double mid;
@@ -1224,9 +1226,23 @@ class _RadialVisualizerPainter extends CustomPainter {
   final Color color;
   final double innerRadius;
   final double maxBarLength;
+  final double rotation; // Slow rotation from animation controller
 
-  static const int _barCount = 64;
-  static const double _pi = 3.14159265359;
+  // Bar count
+  static final int _barCount = Platform.isIOS ? 32 : 48;
+
+  // Pre-computed static geometry (computed once, reused across all instances)
+  static List<double>? _baseAngles; // Base angles without rotation
+  static List<_BarWeights>? _weights;
+  static int _cachedBarCount = 0;
+
+  // Cached gradient colors (recomputed only when primary color changes)
+  static Color? _cachedPrimaryColor;
+  static List<Color>? _gradientColors;
+
+  // Reusable paint objects
+  late final Paint _barPaint;
+  late final Paint _ringPaint;
 
   _RadialVisualizerPainter({
     required this.bass,
@@ -1235,77 +1251,139 @@ class _RadialVisualizerPainter extends CustomPainter {
     required this.color,
     required this.innerRadius,
     required this.maxBarLength,
-  });
+    required this.rotation,
+  }) {
+    _barPaint = Paint()
+      ..strokeWidth = Platform.isIOS ? 4.0 : 3.5
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
+    _ringPaint = Paint()
+      ..style = PaintingStyle.stroke;
 
-    final angleStep = (2 * _pi) / _barCount;
-    final barWidth = 3.0;
+    // Initialize static geometry cache if needed
+    if (_baseAngles == null || _cachedBarCount != _barCount) {
+      _initGeometryCache();
+    }
 
-    for (int i = 0; i < _barCount; i++) {
-      // Smooth distribution: each bar blends bass/mid/treble based on position
-      final position = i / _barCount;
-      final amplitude = _getAmplitudeForPosition(position);
-
-      final barLength = amplitude * maxBarLength + 6; // Min 6px
-      final angle = i * angleStep - _pi / 2; // Start from top
-
-      final cosA = _cos(angle);
-      final sinA = _sin(angle);
-
-      final startX = center.dx + innerRadius * cosA;
-      final startY = center.dy + innerRadius * sinA;
-      final endX = center.dx + (innerRadius + barLength) * cosA;
-      final endY = center.dy + (innerRadius + barLength) * sinA;
-
-      final paint = Paint()
-        ..color = color.withValues(alpha: 0.6 + amplitude * 0.4)
-        ..strokeWidth = barWidth
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke;
-
-      canvas.drawLine(Offset(startX, startY), Offset(endX, endY), paint);
+    // Cache gradient colors when primary color changes
+    if (_cachedPrimaryColor != color) {
+      _cacheGradientColors(color);
     }
   }
 
-  // Smooth amplitude based on position around circle
-  // No random variation - just smooth interpolation
-  double _getAmplitudeForPosition(double position) {
-    // Sine-wave distribution for smooth visual
-    // Bass dominates bottom (position ~0.75-1.0 and 0-0.25)
-    // Treble dominates top (position ~0.25-0.75)
-    // Mid blends in between
+  /// Pre-compute base angles and weights (only done once)
+  static void _initGeometryCache() {
+    _cachedBarCount = _barCount;
+    _baseAngles = List<double>.filled(_barCount, 0.0);
+    _weights = List<_BarWeights>.filled(_barCount, const _BarWeights(0, 0, 0, 1));
 
-    final bassWeight = _cos(position * 2 * _pi).clamp(0.0, 1.0);
-    final trebleWeight = (-_cos(position * 2 * _pi)).clamp(0.0, 1.0);
-    final midWeight = _sin(position * 2 * _pi).abs();
+    final angleStep = (2 * pi) / _barCount;
 
-    final total = bassWeight + midWeight + trebleWeight;
-    if (total == 0) return (bass + mid + treble) / 3;
+    for (int i = 0; i < _barCount; i++) {
+      _baseAngles![i] = i * angleStep - pi / 2; // Start from top
 
-    return ((bass * bassWeight + mid * midWeight + treble * trebleWeight) / total)
-        .clamp(0.0, 1.0);
+      // Pre-compute bass/mid/treble weights for this position
+      final position = i / _barCount;
+      final bassWeight = cos(position * 2 * pi).clamp(0.0, 1.0);
+      final trebleWeight = (-cos(position * 2 * pi)).clamp(0.0, 1.0);
+      final midWeight = sin(position * 2 * pi).abs();
+      final total = bassWeight + midWeight + trebleWeight;
+      _weights![i] = _BarWeights(bassWeight, midWeight, trebleWeight, total);
+    }
   }
 
-  static double _cos(double x) {
-    x = x % (2 * _pi);
-    if (x > _pi) x -= 2 * _pi;
-    final x2 = x * x;
-    return 1 - x2 / 2 + x2 * x2 / 24 - x2 * x2 * x2 / 720 + x2 * x2 * x2 * x2 / 40320;
+  /// Pre-compute gradient colors for each bar position (only when color changes)
+  static void _cacheGradientColors(Color primaryColor) {
+    _cachedPrimaryColor = primaryColor;
+    _gradientColors = List<Color>.filled(_barCount, primaryColor);
+
+    final hsl = HSLColor.fromColor(primaryColor);
+    final baseHue = hsl.hue;
+    final baseSaturation = hsl.saturation;
+    final baseLightness = hsl.lightness;
+
+    for (int i = 0; i < _barCount; i++) {
+      final position = i / _barCount;
+      final hueShift = -40 + (position * 80); // -40 to +40 degrees
+      final newHue = (baseHue + hueShift) % 360;
+      final saturation = (baseSaturation * 0.95).clamp(0.0, 1.0);
+      final lightness = (baseLightness * 1.1).clamp(0.35, 0.8);
+
+      _gradientColors![i] = HSLColor.fromAHSL(1.0, newHue, saturation, lightness).toColor();
+    }
   }
 
-  static double _sin(double x) {
-    return _cos(x - _pi / 2);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final centerX = size.width / 2;
+    final centerY = size.height / 2;
+    final center = Offset(centerX, centerY);
+
+    // === Bass pulse ring (sonar ping effect) ===
+    if (bass > 0.15) {
+      final ringRadius = innerRadius - 2 + (bass * 10);
+      _ringPaint
+        ..color = color.withValues(alpha: bass * 0.5)
+        ..strokeWidth = 2.0 + bass * 2;
+      canvas.drawCircle(center, ringRadius, _ringPaint);
+
+      // Second outer ring on strong bass
+      if (bass > 0.4) {
+        final outerRingRadius = innerRadius + maxBarLength * bass * 0.4;
+        _ringPaint
+          ..color = color.withValues(alpha: (bass - 0.4) * 0.4)
+          ..strokeWidth = 1.5;
+        canvas.drawCircle(center, outerRingRadius, _ringPaint);
+      }
+    }
+
+    // === Draw bars with gradient colors and rotation ===
+    for (int i = 0; i < _barCount; i++) {
+      final w = _weights![i];
+      final amplitude = w.total == 0
+          ? (bass + mid + treble) / 3
+          : ((bass * w.bass + mid * w.mid + treble * w.treble) / w.total).clamp(0.0, 1.0);
+
+      final barLength = amplitude * maxBarLength + 4;
+
+      // Apply rotation to base angle
+      final angle = _baseAngles![i] + rotation;
+      final cosA = cos(angle);
+      final sinA = sin(angle);
+
+      final startX = centerX + innerRadius * cosA;
+      final startY = centerY + innerRadius * sinA;
+      final endX = centerX + (innerRadius + barLength) * cosA;
+      final endY = centerY + (innerRadius + barLength) * sinA;
+
+      // Gradient color with amplitude-based alpha
+      _barPaint.color = _gradientColors![i].withValues(alpha: 0.6 + amplitude * 0.4);
+      canvas.drawLine(Offset(startX, startY), Offset(endX, endY), _barPaint);
+    }
   }
 
   @override
   bool shouldRepaint(covariant _RadialVisualizerPainter oldDelegate) {
-    return bass != oldDelegate.bass ||
-        mid != oldDelegate.mid ||
-        treble != oldDelegate.treble;
+    // Always repaint when rotation changes (smooth animation)
+    // Small tolerance for FFT values
+    const tolerance = 0.005;
+    return rotation != oldDelegate.rotation ||
+        (bass - oldDelegate.bass).abs() > tolerance ||
+        (mid - oldDelegate.mid).abs() > tolerance ||
+        (treble - oldDelegate.treble).abs() > tolerance ||
+        color != oldDelegate.color;
   }
+}
+
+/// Pre-computed bass/mid/treble weights for a bar position
+class _BarWeights {
+  final double bass;
+  final double mid;
+  final double treble;
+  final double total;
+
+  const _BarWeights(this.bass, this.mid, this.treble, this.total);
 }
 
 /// Waveform painter
