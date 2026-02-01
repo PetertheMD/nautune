@@ -25,6 +25,20 @@ public class AudioFFTPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     // Singleton for callback access
     private static var sharedInstance: AudioFFTPlugin?
 
+    // Pre-allocated buffers for FFT processing (avoids allocation every callback)
+    private var samplesBuffer: [Float]
+    private var filteredBuffer: [Float]
+    private var processedBuffer: [Float]
+    private var hanningWindow: [Float]
+    private var realpBuffer: [Float]
+    private var imagpBuffer: [Float]
+    private var magnitudesBuffer: [Float]
+    private var spectrumBuffer: [Float]
+
+    // Throttling at native level (~30fps max)
+    private var lastEmitTime: CFTimeInterval = 0
+    private let minEmitInterval: CFTimeInterval = 0.033  // ~30fps
+
     public static func register(with registrar: FlutterPluginRegistrar) {
         let instance = AudioFFTPlugin()
         sharedInstance = instance
@@ -47,9 +61,22 @@ public class AudioFFTPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     }
 
     override init() {
+        // Pre-allocate all FFT buffers once (avoids 40KB+ allocation per callback)
+        samplesBuffer = [Float](repeating: 0, count: fftSize)
+        filteredBuffer = [Float](repeating: 0, count: fftSize)
+        processedBuffer = [Float](repeating: 0, count: fftSize)
+        hanningWindow = [Float](repeating: 0, count: fftSize)
+        realpBuffer = [Float](repeating: 0, count: fftSize / 2)
+        imagpBuffer = [Float](repeating: 0, count: fftSize / 2)
+        magnitudesBuffer = [Float](repeating: 0, count: fftSize / 2)
+        spectrumBuffer = [Float](repeating: 0, count: fftSize / 2)
+
         super.init()
         log2n = vDSP_Length(log2(Float(fftSize)))
         fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2))
+
+        // Pre-compute Hanning window (never changes)
+        vDSP_hann_window(&hanningWindow, vDSP_Length(fftSize), Int32(vDSP_HANN_NORM))
     }
 
     deinit {
@@ -300,6 +327,10 @@ public class AudioFFTPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     fileprivate func processAudioBuffer(_ bufferList: UnsafeMutablePointer<AudioBufferList>, frames: CMItemCount) {
         guard let setup = fftSetup, isCapturing else { return }
 
+        // Throttle at native level - skip if we emitted too recently (~30fps max)
+        let now = CACurrentMediaTime()
+        guard now - lastEmitTime >= minEmitInterval else { return }
+
         let buffer = bufferList.pointee.mBuffers
         guard let data = buffer.mData else { return }
 
@@ -307,28 +338,26 @@ public class AudioFFTPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
         let frameCount = Int(frames)
         guard frameCount >= fftSize else { return }
 
-        // Get samples
-        var samples = [Float](repeating: 0, count: fftSize)
+        // Copy samples to pre-allocated buffer (no allocation)
         for i in 0..<fftSize {
-            samples[i] = floatData[i]
+            samplesBuffer[i] = floatData[i]
         }
 
         // === PREPROCESSING (matches Linux) ===
 
         // 1. DC offset removal
         var mean: Float = 0
-        vDSP_meanv(samples, 1, &mean, vDSP_Length(fftSize))
+        vDSP_meanv(samplesBuffer, 1, &mean, vDSP_Length(fftSize))
 
-        // 2. High-pass filter + find peak
-        var filtered = [Float](repeating: 0, count: fftSize)
+        // 2. High-pass filter + find peak (uses pre-allocated filteredBuffer)
         var localPeak: Float = 0.001
 
         for i in 0..<fftSize {
-            let x = samples[i] - mean
+            let x = samplesBuffer[i] - mean
             let y = 0.98 * (lastY + x - lastX)
             lastX = x
             lastY = y
-            filtered[i] = y
+            filteredBuffer[i] = y
             localPeak = max(localPeak, abs(y))
         }
 
@@ -347,28 +376,22 @@ public class AudioFFTPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
             gain *= gateFactor
         }
 
-        // 5. Apply gain
-        var processed = [Float](repeating: 0, count: fftSize)
+        // 5. Apply gain (uses pre-allocated processedBuffer)
         for i in 0..<fftSize {
-            processed[i] = min(max(filtered[i] * gain, -1.0), 1.0)
+            processedBuffer[i] = min(max(filteredBuffer[i] * gain, -1.0), 1.0)
         }
 
         // === FFT ===
 
-        // Apply Hanning window
-        var window = [Float](repeating: 0, count: fftSize)
-        vDSP_hann_window(&window, vDSP_Length(fftSize), Int32(vDSP_HANN_NORM))
-        vDSP_vmul(processed, 1, window, 1, &processed, 1, vDSP_Length(fftSize))
+        // Apply pre-computed Hanning window (no allocation)
+        vDSP_vmul(processedBuffer, 1, hanningWindow, 1, &processedBuffer, 1, vDSP_Length(fftSize))
 
-        // Prepare for FFT
-        var realp = [Float](repeating: 0, count: fftSize / 2)
-        var imagp = [Float](repeating: 0, count: fftSize / 2)
-
-        realp.withUnsafeMutableBufferPointer { realPtr in
-            imagp.withUnsafeMutableBufferPointer { imagPtr in
+        // Use pre-allocated buffers for FFT
+        realpBuffer.withUnsafeMutableBufferPointer { realPtr in
+            imagpBuffer.withUnsafeMutableBufferPointer { imagPtr in
                 var splitComplex = DSPSplitComplex(realp: realPtr.baseAddress!, imagp: imagPtr.baseAddress!)
 
-                processed.withUnsafeBufferPointer { samplesPtr in
+                processedBuffer.withUnsafeBufferPointer { samplesPtr in
                     samplesPtr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: fftSize / 2) { complexPtr in
                         vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(fftSize / 2))
                     }
@@ -377,15 +400,13 @@ public class AudioFFTPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
                 // Perform FFT
                 vDSP_fft_zrip(setup, &splitComplex, 1, self.log2n, FFTDirection(FFT_FORWARD))
 
-                // Calculate magnitudes
-                var magnitudes = [Float](repeating: 0, count: fftSize / 2)
-                vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(fftSize / 2))
+                // Calculate magnitudes (uses pre-allocated magnitudesBuffer)
+                vDSP_zvmags(&splitComplex, 1, &self.magnitudesBuffer, 1, vDSP_Length(self.fftSize / 2))
 
-                // Scale and sqrt for magnitude
-                let spectrumSize = fftSize / 2
-                var spectrum = [Float](repeating: 0, count: spectrumSize)
+                // Scale and sqrt for magnitude (uses pre-allocated spectrumBuffer)
+                let spectrumSize = self.fftSize / 2
                 for i in 0..<spectrumSize {
-                    spectrum[i] = sqrt(magnitudes[i]) / Float(spectrumSize)
+                    self.spectrumBuffer[i] = sqrt(self.magnitudesBuffer[i]) / Float(spectrumSize)
                 }
 
                 // === FREQUENCY BANDS (matched to Linux: 4%, 20%) ===
@@ -393,16 +414,17 @@ public class AudioFFTPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
                 let midEnd = Int(Float(spectrumSize) * 0.20)    // 4-20% (~180-2000Hz)
 
                 // RMS averaging (matches Linux)
-                let bass = self.rmsAverage(spectrum, start: 0, end: max(1, bassEnd)) * 30.0
-                let mid = self.rmsAverage(spectrum, start: bassEnd, end: midEnd) * 40.0
-                let treble = self.rmsAverage(spectrum, start: midEnd, end: spectrumSize) * 80.0
+                let bass = self.rmsAverage(self.spectrumBuffer, start: 0, end: max(1, bassEnd)) * 30.0
+                let mid = self.rmsAverage(self.spectrumBuffer, start: bassEnd, end: midEnd) * 40.0
+                let treble = self.rmsAverage(self.spectrumBuffer, start: midEnd, end: spectrumSize) * 80.0
 
                 // RMS amplitude
                 var rms: Float = 0
-                vDSP_rmsqv(processed, 1, &rms, vDSP_Length(self.fftSize))
+                vDSP_rmsqv(self.processedBuffer, 1, &rms, vDSP_Length(self.fftSize))
                 let amplitude = min(rms * 2.0, 1.0)
 
-                // Send to Flutter
+                // Mark emit time and send to Flutter
+                self.lastEmitTime = now
                 self.sendFFTData(
                     bass: min(bass, 1.0),
                     mid: min(mid, 1.0),

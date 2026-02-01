@@ -1,3 +1,13 @@
+### v5.7.8 - iOS Native FFT Critical Performance Fix
+- **Native FFT Buffer Reuse**: Pre-allocate all FFT buffers once (was allocating 40KB+ per audio callback causing GC pressure)
+  - 8 arrays totaling ~40KB now allocated once at init, reused every frame
+  - Eliminates memory allocation in the hot path completely
+- **Native FFT Throttling**: Added ~30fps throttle at native level (was sending 40-50 events/sec before Dart throttle)
+  - Skips processing entirely when emitting too fast
+  - Reduces event channel flooding
+- **Pre-computed Hanning Window**: Window function computed once at init (was recreated every callback)
+- **Result**: Essential Mix visualizer should now be smooth on iOS (was laggy due to GC pauses)
+
 ### v5.7.5 - iOS Visualizer Performance Overhaul
 - **Essential Mix iOS Performance**: Complete performance overhaul for smooth playback on iOS
   - **Critical Fix**: FFT updates now use ValueNotifier instead of setState - only visualizer rebuilds, not entire screen
