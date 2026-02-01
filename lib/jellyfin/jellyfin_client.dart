@@ -776,8 +776,8 @@ class JellyfinClient {
   }) async {
     final queryParams = <String, String>{
       'UserId': credentials.userId,
-      if (parentId != null) 'ParentId': parentId,
-      if (searchTerm != null) 'SearchTerm': searchTerm,
+      'ParentId': ?parentId,
+      'SearchTerm': ?searchTerm,
       if (limit != null) 'Limit': limit.toString(),
       'Recursive': 'true',
     };

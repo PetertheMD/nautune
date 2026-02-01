@@ -5,6 +5,8 @@ let flutterEngine = FlutterEngine(name: "SharedEngine", project: nil, allowHeadl
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
+  var backgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -24,5 +26,23 @@ let flutterEngine = FlutterEngine(name: "SharedEngine", project: nil, allowHeadl
     // Return true directly for CarPlay compatibility
     // super.application() can interfere with CarPlay initialization
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  override func applicationDidEnterBackground(_ application: UIApplication) {
+    // Request background time to ensure Flutter can save playback state
+    backgroundTaskIdentifier = application.beginBackgroundTask(withName: "SavePlaybackState") { [weak self] in
+      self?.endBackgroundTask()
+    }
+
+    // Allow 3 seconds for Flutter to save state
+    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+      self?.endBackgroundTask()
+    }
+  }
+
+  private func endBackgroundTask() {
+    guard backgroundTaskIdentifier != .invalid else { return }
+    UIApplication.shared.endBackgroundTask(backgroundTaskIdentifier)
+    backgroundTaskIdentifier = .invalid
   }
 }

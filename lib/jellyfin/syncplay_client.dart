@@ -377,7 +377,7 @@ class SyncPlayClient {
       uri,
       headers: _defaultHeaders(credentials),
       body: jsonEncode({
-        if (playlistItemId != null) 'PlaylistItemId': playlistItemId,
+        'PlaylistItemId': ?playlistItemId,
       }),
     );
 
@@ -401,7 +401,7 @@ class SyncPlayClient {
       uri,
       headers: _defaultHeaders(credentials),
       body: jsonEncode({
-        if (playlistItemId != null) 'PlaylistItemId': playlistItemId,
+        'PlaylistItemId': ?playlistItemId,
       }),
     );
 
@@ -433,7 +433,7 @@ class SyncPlayClient {
         'IsPlaying': isPlaying,
         'PositionTicks': positionTicks,
         'When': DateTime.now().toUtc().toIso8601String(),
-        if (playlistItemId != null) 'PlaylistItemId': playlistItemId,
+        'PlaylistItemId': ?playlistItemId,
       }),
     );
 
@@ -463,7 +463,7 @@ class SyncPlayClient {
         'IsPlaying': isPlaying,
         'PositionTicks': positionTicks,
         'When': DateTime.now().toUtc().toIso8601String(),
-        if (playlistItemId != null) 'PlaylistItemId': playlistItemId,
+        'PlaylistItemId': ?playlistItemId,
       }),
     );
 

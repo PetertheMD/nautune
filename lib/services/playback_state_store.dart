@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../jellyfin/jellyfin_track.dart';
@@ -57,19 +58,36 @@ class PlaybackStateStore {
   }
 
   Future<void> _persist(PlaybackState state) async {
-    final box = await _box();
-    await box.put(_key, state.toJson());
-    // Flush to ensure data is written to disk immediately
-    // Critical for iOS where app may be terminated shortly after going to background
-    await box.flush();
+    const maxRetries = 3;
+    for (int attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        final box = await _box();
+        await box.put(_key, state.toJson());
+        // Flush to ensure data is written to disk immediately
+        // Critical for iOS where app may be terminated shortly after going to background
+        await box.flush();
+        return;
+      } catch (e) {
+        debugPrint('Hive persist attempt ${attempt + 1} failed: $e');
+        if (attempt < maxRetries - 1) {
+          await Future.delayed(const Duration(milliseconds: 50));
+        }
+      }
+    }
+    debugPrint('Hive persist failed after $maxRetries attempts');
   }
 
   Future<void> save(PlaybackState state) => _persist(state);
 
   Future<void> update(PlaybackState Function(PlaybackState) transform) async {
     // Simple mutex to prevent race conditions during read-modify-write cycles
-    while (_activeLock != null) {
-      await _activeLock!.future;
+    if (_activeLock != null) {
+      try {
+        await _activeLock!.future.timeout(const Duration(seconds: 2));
+      } catch (e) {
+        debugPrint('Hive update lock timeout - proceeding');
+        _activeLock = null;
+      }
     }
     final lock = Completer<void>();
     _activeLock = lock;

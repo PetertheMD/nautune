@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../models/loop_state.dart';
 import '../tui_theme.dart';
 
 /// An ASCII-style progress bar widget.
 /// Renders as: [=========>          ] 2:34 / 4:12
+/// With loop: [====|--[====]--|=====>       ] 2:34 / 4:12 [LOOP A:1:00-B:2:00]
 class TuiProgressBar extends StatelessWidget {
   const TuiProgressBar({
     super.key,
@@ -11,12 +13,14 @@ class TuiProgressBar extends StatelessWidget {
     required this.duration,
     this.width = 30,
     this.showTime = true,
+    this.loopState,
   });
 
   final Duration position;
   final Duration duration;
   final int width;
   final bool showTime;
+  final LoopState? loopState;
 
   @override
   Widget build(BuildContext context) {
@@ -29,12 +33,45 @@ class TuiProgressBar extends StatelessWidget {
     final filledCount = (progress * innerWidth).floor();
     final hasHead = filledCount < innerWidth;
 
-    final filled = TuiChars.progressFilled * filledCount;
-    final head = hasHead ? TuiChars.progressHead : '';
-    final empty = TuiChars.progressEmpty * (innerWidth - filledCount - (hasHead ? 1 : 0));
+    // Build bar with loop markers if present
+    final loop = loopState;
+    String bar;
 
-    final bar =
-        '${TuiChars.progressLeft}$filled$head$empty${TuiChars.progressRight}';
+    if (loop != null && loop.hasValidLoop && duration.inMilliseconds > 0) {
+      // Calculate loop marker positions
+      final loopStartPos = (loop.start!.inMilliseconds / duration.inMilliseconds * innerWidth).floor();
+      final loopEndPos = (loop.end!.inMilliseconds / duration.inMilliseconds * innerWidth).floor();
+
+      // Build bar with loop region
+      final buffer = StringBuffer();
+      buffer.write(TuiChars.progressLeft);
+
+      for (int i = 0; i < innerWidth; i++) {
+        final isLoopStart = i == loopStartPos;
+        final isLoopEnd = i == loopEndPos;
+        final inLoop = i >= loopStartPos && i <= loopEndPos;
+
+        if (isLoopStart) {
+          buffer.write('[');
+        } else if (isLoopEnd) {
+          buffer.write(']');
+        } else if (i == filledCount && i < innerWidth) {
+          buffer.write(TuiChars.progressHead);
+        } else if (i < filledCount) {
+          buffer.write(inLoop && loop.isActive ? '▓' : TuiChars.progressFilled);
+        } else {
+          buffer.write(inLoop && loop.isActive ? '░' : TuiChars.progressEmpty);
+        }
+      }
+
+      buffer.write(TuiChars.progressRight);
+      bar = buffer.toString();
+    } else {
+      final filled = TuiChars.progressFilled * filledCount;
+      final head = hasHead ? TuiChars.progressHead : '';
+      final empty = TuiChars.progressEmpty * (innerWidth - filledCount - (hasHead ? 1 : 0));
+      bar = '${TuiChars.progressLeft}$filled$head$empty${TuiChars.progressRight}';
+    }
 
     if (!showTime) {
       return Text(bar, style: TuiTextStyles.normal);
@@ -43,12 +80,19 @@ class TuiProgressBar extends StatelessWidget {
     final posStr = _formatDuration(position);
     final durStr = _formatDuration(duration);
 
+    // Add loop indicator if active
+    final loopIndicator = (loop != null && loop.isActive)
+        ? ' [LOOP ${loop.formattedStart}-${loop.formattedEnd}]'
+        : '';
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(bar, style: TuiTextStyles.accent),
         const SizedBox(width: 8),
         Text('$posStr / $durStr', style: TuiTextStyles.dim),
+        if (loopIndicator.isNotEmpty)
+          Text(loopIndicator, style: TuiTextStyles.accent.copyWith(color: TuiColors.primary)),
       ],
     );
   }

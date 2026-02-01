@@ -44,6 +44,10 @@ enum TuiAction {
   toggleHelp,
   cycleSection,
   cycleTheme,
+  // A-B loop actions
+  setLoopStart,
+  setLoopEnd,
+  clearLoop,
 }
 
 /// Vim-style key binding handler with multi-key sequence support.
@@ -259,6 +263,14 @@ class TuiKeyBindings extends ChangeNotifier {
       // Theme cycling
       case 'T':
         return TuiAction.cycleTheme;
+
+      // A-B loop controls
+      case '[':
+        return TuiAction.setLoopStart;
+      case ']':
+        return TuiAction.setLoopEnd;
+      case r'\':
+        return TuiAction.clearLoop;
 
       default:
         return TuiAction.none;

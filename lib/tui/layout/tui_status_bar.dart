@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../app_state.dart';
 import '../../jellyfin/jellyfin_track.dart';
+import '../../models/loop_state.dart';
 import '../../services/audio_player_service.dart';
 import '../tui_theme.dart';
 import '../widgets/tui_progress_bar.dart';
@@ -81,49 +82,57 @@ class _NowPlayingRow extends StatelessWidget {
                   builder: (context, durSnapshot) {
                     final duration = durSnapshot.data ?? track.duration ?? Duration.zero;
 
-                    return Row(
-                      children: [
-                        // Status icon
-                        Text(
-                          '${isPlaying ? TuiChars.playing : TuiChars.paused} ',
-                          style: isPlaying ? TuiTextStyles.playing : TuiTextStyles.dim,
-                        ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                track.name,
-                                style: TuiTextStyles.normal,
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
+                    return StreamBuilder<LoopState>(
+                      stream: audioService.loopStateStream,
+                      builder: (context, loopSnapshot) {
+                        final loopState = loopSnapshot.data;
+
+                        return Row(
+                          children: [
+                            // Status icon
+                            Text(
+                              '${isPlaying ? TuiChars.playing : TuiChars.paused} ',
+                              style: isPlaying ? TuiTextStyles.playing : TuiTextStyles.dim,
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    track.name,
+                                    style: TuiTextStyles.normal,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                  Text(
+                                    track.displayArtist,
+                                    style: TuiTextStyles.dim,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                ],
                               ),
-                              Text(
-                                track.displayArtist,
-                                style: TuiTextStyles.dim,
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        // Progress bar
-                        TuiProgressBar(
-                          position: position,
-                          duration: duration,
-                          width: 25,
-                        ),
-                        const SizedBox(width: 16),
-                        // Volume
-                        StreamBuilder<double>(
-                          stream: audioService.volumeStream,
-                          builder: (context, volSnapshot) {
-                            final volume = volSnapshot.data ?? 1.0;
-                            return TuiVolumeBar(volume: volume, width: 8);
-                          },
-                        ),
-                      ],
+                            ),
+                            const SizedBox(width: 16),
+                            // Progress bar with loop state
+                            TuiProgressBar(
+                              position: position,
+                              duration: duration,
+                              width: 25,
+                              loopState: loopState,
+                            ),
+                            const SizedBox(width: 16),
+                            // Volume
+                            StreamBuilder<double>(
+                              stream: audioService.volumeStream,
+                              builder: (context, volSnapshot) {
+                                final volume = volSnapshot.data ?? 1.0;
+                                return TuiVolumeBar(volume: volume, width: 8);
+                              },
+                            ),
+                          ],
+                        );
+                      },
                     );
                   },
                 );
@@ -160,6 +169,10 @@ class _ControlsHint extends StatelessWidget {
           _hint('r/t', 'seek'),
           const SizedBox(width: 12),
           _hint('f', 'fav'),
+          const SizedBox(width: 12),
+          _hint('[/]', 'loop A/B'),
+          const SizedBox(width: 12),
+          _hint(r'\', 'clear loop'),
           const SizedBox(width: 12),
           _hint('T', 'theme'),
           const SizedBox(width: 12),

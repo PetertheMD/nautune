@@ -18,6 +18,7 @@ import '../jellyfin/jellyfin_user.dart';
 import '../providers/session_provider.dart';
 import '../services/listenbrainz_service.dart';
 import '../services/listening_analytics_service.dart';
+import '../services/essential_mix_service.dart';
 import '../services/network_download_service.dart';
 import '../services/rewind_service.dart';
 import 'rewind_screen.dart';
@@ -369,6 +370,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _networkTotalPlays = 0;
   int _networkTotalSeconds = 0;
 
+  // Essential Mix easter egg stats
+  EssentialMixService? _essentialMixService;
+  int _essentialMixListenSeconds = 0;
+  bool _essentialMixDownloaded = false;
+
   @override
   void initState() {
     super.initState();
@@ -376,6 +382,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadStats();
     _loadLocalAnalytics();
     _loadNetworkStats();
+    _loadEssentialMixStats();
     _loadLibraryOverview();
   }
 
@@ -393,9 +400,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  void _loadEssentialMixStats() {
+    _essentialMixService = EssentialMixService.instance;
+    _essentialMixService!.addListener(_onEssentialMixStatsChanged);
+    // Load initial state
+    _onEssentialMixStatsChanged();
+  }
+
+  void _onEssentialMixStatsChanged() {
+    if (!mounted || _essentialMixService == null) return;
+    setState(() {
+      _essentialMixListenSeconds = _essentialMixService!.listenTimeSeconds;
+      _essentialMixDownloaded = _essentialMixService!.isDownloaded;
+    });
+  }
+
   @override
   void dispose() {
     _networkService?.removeListener(_onNetworkStatsChanged);
+    _essentialMixService?.removeListener(_onEssentialMixStatsChanged);
     super.dispose();
   }
 
@@ -949,6 +972,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   // Network Radio Stats (if any plays)
                   if (_networkTotalPlays > 0) ...[
                     _buildNetworkStatsSection(theme),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Essential Mix Stats (if any listen time)
+                  if (_essentialMixListenSeconds > 0) ...[
+                    _buildEssentialMixBadge(theme),
                     const SizedBox(height: 12),
                   ],
 
@@ -1636,6 +1665,306 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final hours = seconds ~/ 3600;
     final mins = (seconds % 3600) ~/ 60;
     return '${hours}h ${mins}m';
+  }
+
+  /// BBC Radio 1 Essential Mix badge - archive.org inspired aesthetic
+  Widget _buildEssentialMixBadge(ThemeData theme) {
+    // Format listen time
+    String formattedTime;
+    if (_essentialMixListenSeconds < 60) {
+      formattedTime = '${_essentialMixListenSeconds}s';
+    } else if (_essentialMixListenSeconds < 3600) {
+      formattedTime = '${_essentialMixListenSeconds ~/ 60}m';
+    } else {
+      final hours = _essentialMixListenSeconds ~/ 3600;
+      final mins = (_essentialMixListenSeconds % 3600) ~/ 60;
+      formattedTime = '${hours}h ${mins}m';
+    }
+
+    // Archive.org inspired colors - deep blue/teal with vintage feel
+    const archiveBlue = Color(0xFF428BCA);
+    const archiveDark = Color(0xFF1A3A5C);
+    const archiveGold = Color(0xFFD4A574);
+    const bbcRed = Color(0xFFBB1919);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            archiveDark,
+            Color(0xFF234567),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: archiveBlue.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: archiveBlue.withValues(alpha: 0.2),
+            blurRadius: 12,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row with BBC-style branding
+          Row(
+            children: [
+              // BBC Radio 1 style badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: bbcRed,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.radio,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'BBC',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Radio 1',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      'Essential Mix',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: archiveGold,
+                        fontWeight: FontWeight.w500,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Archive badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(color: archiveGold.withValues(alpha: 0.5)),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.archive,
+                      color: archiveGold,
+                      size: 12,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'archive.org',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: archiveGold,
+                        fontSize: 9,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Main content - Soulwax / 2ManyDJs
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: archiveBlue.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
+              children: [
+                // Vinyl/record icon
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        Colors.grey[800]!,
+                        Colors.black,
+                      ],
+                    ),
+                    border: Border.all(
+                      color: archiveGold.withValues(alpha: 0.3),
+                      width: 2,
+                    ),
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Vinyl grooves
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.grey[700]!,
+                            width: 0.5,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.grey[700]!,
+                            width: 0.5,
+                          ),
+                        ),
+                      ),
+                      // Center label
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: bbcRed.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Soulwax / 2ManyDJs',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'May 20, 2017',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Stats
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      formattedTime,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        color: archiveGold,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_essentialMixDownloaded)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Icon(
+                              Icons.download_done,
+                              color: Colors.green[400],
+                              size: 12,
+                            ),
+                          ),
+                        Text(
+                          'listened',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: Colors.white54,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Footer - vintage archive feel
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'PRESERVED FOR POSTERITY',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: archiveBlue.withValues(alpha: 0.6),
+                  fontSize: 9,
+                  letterSpacing: 2,
+                  fontFamily: 'monospace',
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.headphones,
+                    color: archiveBlue.withValues(alpha: 0.6),
+                    size: 12,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '2h mix',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: archiveBlue.withValues(alpha: 0.6),
+                      fontSize: 9,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSyncStatusBanner(ThemeData theme) {

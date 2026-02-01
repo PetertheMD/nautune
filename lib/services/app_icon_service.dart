@@ -13,7 +13,7 @@ class AppIconService extends ChangeNotifier {
   static const String _boxName = 'nautune_app_icon';
   static const String _selectedIconKey = 'selected_icon';
 
-  static const List<String> supportedIcons = ['default', 'orange'];
+  static const List<String> supportedIcons = ['default', 'orange', 'red', 'green'];
 
   String _currentIcon = 'default';
 
@@ -24,6 +24,10 @@ class AppIconService extends ChangeNotifier {
     switch (_currentIcon) {
       case 'orange':
         return 'assets/iconorange.png';
+      case 'red':
+        return 'assets/iconred.png';
+      case 'green':
+        return 'assets/icongreen.png';
       case 'default':
       default:
         return 'assets/icon.png';
@@ -35,6 +39,10 @@ class AppIconService extends ChangeNotifier {
     switch (_currentIcon) {
       case 'orange':
         return 'assets/iconorange.png';
+      case 'red':
+        return 'assets/iconred.png';
+      case 'green':
+        return 'assets/icongreen.png';
       case 'default':
       default:
         return 'assets/icon.png';
@@ -46,6 +54,10 @@ class AppIconService extends ChangeNotifier {
     switch (_currentIcon) {
       case 'orange':
         return 'Sunset';
+      case 'red':
+        return 'Crimson';
+      case 'green':
+        return 'Emerald';
       case 'default':
       default:
         return 'Classic';

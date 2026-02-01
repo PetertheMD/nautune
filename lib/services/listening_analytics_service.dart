@@ -279,11 +279,13 @@ class ListeningAnalyticsService {
   static const _streakKey = 'streak_data';
   static const _relaxModeKey = 'relax_mode_stats';
   static const _networkDiscoveredKey = 'network_discovered';
+  static const _essentialMixDiscoveredKey = 'essential_mix_discovered';
 
   Box? _box;
   List<PlayEvent> _events = [];
   RelaxModeStats _relaxModeStats = RelaxModeStats();
   bool _networkDiscovered = false;
+  bool _essentialMixDiscovered = false;
   bool _initialized = false;
 
   /// Singleton instance
@@ -302,6 +304,7 @@ class ListeningAnalyticsService {
       await _loadEvents();
       await _loadRelaxModeStats();
       await _loadNetworkDiscovered();
+      await _loadEssentialMixDiscovered();
       _initialized = true;
       debugPrint('ListeningAnalyticsService: Initialized with ${_events.length} events');
     } catch (e) {
@@ -318,6 +321,7 @@ class ListeningAnalyticsService {
         _saveEvents(),
         _saveRelaxModeStats(),
         _saveNetworkDiscovered(),
+        _saveEssentialMixDiscovered(),
       ]);
       debugPrint('ListeningAnalyticsService: Analytics saved');
     } catch (e) {
@@ -402,6 +406,27 @@ class ListeningAnalyticsService {
     _networkDiscovered = true;
     await _saveNetworkDiscovered();
     debugPrint('ListeningAnalyticsService: Network easter egg discovered!');
+  }
+
+  // Essential Mix Easter Egg discovery tracking
+  Future<void> _loadEssentialMixDiscovered() async {
+    _essentialMixDiscovered = _box?.get(_essentialMixDiscoveredKey) as bool? ?? false;
+  }
+
+  Future<void> _saveEssentialMixDiscovered() async {
+    if (_box == null) return;
+    await _box!.put(_essentialMixDiscoveredKey, _essentialMixDiscovered);
+  }
+
+  /// Check if Essential Mix easter egg has been discovered
+  bool get essentialMixDiscovered => _essentialMixDiscovered;
+
+  /// Mark Essential Mix easter egg as discovered (for milestone)
+  Future<void> markEssentialMixDiscovered() async {
+    if (_essentialMixDiscovered) return;
+    _essentialMixDiscovered = true;
+    await _saveEssentialMixDiscovered();
+    debugPrint('ListeningAnalyticsService: Essential Mix easter egg discovered!');
   }
 
   Future<void> _loadEvents() async {
@@ -1286,6 +1311,16 @@ class ListeningAnalyticsService {
         targetValue: 1,
         currentValue: _networkDiscovered ? 1 : 0,
       ),
+
+      // Essential Mix milestone - Hidden easter egg discovery
+      ListeningMilestone(
+        id: 'essential_mix',
+        name: 'Essential Discovery',
+        description: 'Find the Essential Mix easter egg',
+        iconType: IconType.special,
+        targetValue: 1,
+        currentValue: _essentialMixDiscovered ? 1 : 0,
+      ),
     ];
 
     return ListeningMilestones(all: milestones);
@@ -1382,6 +1417,7 @@ class ListeningAnalyticsService {
       'play_events': _events.map((e) => e.toJson()).toList(),
       'relax_mode_stats': _relaxModeStats.toJson(),
       'network_discovered': _networkDiscovered,
+      'essential_mix_discovered': _essentialMixDiscovered,
     });
   }
 
@@ -1460,12 +1496,19 @@ class ListeningAnalyticsService {
         _networkDiscovered = true;
       }
 
+      // Import essential mix discovered flag (keep true if either is true)
+      final essentialMixDiscovered = jsonData['essential_mix_discovered'] as bool?;
+      if (essentialMixDiscovered == true) {
+        _essentialMixDiscovered = true;
+      }
+
       // Save all imported data
-      if (importedCount > 0 || relaxJson != null || networkDiscovered == true) {
+      if (importedCount > 0 || relaxJson != null || networkDiscovered == true || essentialMixDiscovered == true) {
         await Future.wait([
           _saveEvents(),
           _saveRelaxModeStats(),
           _saveNetworkDiscovered(),
+          _saveEssentialMixDiscovered(),
         ]);
         debugPrint('ListeningAnalyticsService: Imported $importedCount events');
       }

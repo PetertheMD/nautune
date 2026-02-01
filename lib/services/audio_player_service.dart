@@ -27,6 +27,7 @@ import 'ios_fft_service.dart';
 import 'pulseaudio_fft_service.dart';
 import 'connectivity_service.dart';
 import 'waveform_service.dart';
+import '../models/loop_state.dart';
 
 enum RepeatMode {
   off,      // No repeat
@@ -158,6 +159,11 @@ class AudioPlayerService {
   Duration _lastPosition = Duration.zero;
   bool _lastPlayingState = false;
   RepeatMode _repeatMode = RepeatMode.off;
+
+  // A-B Loop state
+  LoopState _loopState = LoopState.empty;
+  final _loopStateController = BehaviorSubject<LoopState>.seeded(LoopState.empty);
+
   final StreamController<double> _volumeController = StreamController<double>.broadcast();
   final StreamController<bool> _shuffleController = StreamController<bool>.broadcast();
   final StreamController<List<double>> _visualizerController = StreamController<List<double>>.broadcast();
@@ -435,6 +441,7 @@ class AudioPlayerService {
   Stream<List<double>> get visualizerStream => _visualizerController.stream;
   Stream<Duration> get sleepTimerStream => _sleepTimerController.stream;
   Stream<FrequencyBands> get frequencyBandsStream => _frequencyBandsController.stream;
+  Stream<LoopState> get loopStateStream => _loopStateController.stream;
 
   /// A stream that combines position, buffered position, and duration into a single snapshot.
   /// This is the "Silver Bullet" for smooth progress bars.
@@ -474,6 +481,7 @@ class AudioPlayerService {
   bool get isSleepTimerActive => _sleepTimer != null || _sleepTracksRemaining > 0;
   Duration get sleepTimeRemaining => _sleepTimeRemaining;
   int get sleepTracksRemaining => _sleepTracksRemaining;
+  LoopState get loopState => _loopState;
 
   /// Updates the current track (e.g., for favorite status changes)
   void updateCurrentTrack(JellyfinTrack track) {
@@ -618,6 +626,8 @@ class AudioPlayerService {
       if (player.state == PlayerState.playing) {
         _emitVisualizerFrame(position);
       }
+      // Check A-B loop boundary
+      _checkLoopBoundary(position);
       // Check if we should start crossfade
       _checkCrossfadeTrigger(position);
       // Check if we should pre-load next track
@@ -804,8 +814,22 @@ class AudioPlayerService {
         }
       } catch (e) {
         debugPrint('❌ Gapless transition failed: $e');
-        // If playTrack failed, maybe try the next one? 
-        // For now, at least we reset _isTransitioning so the user can try again
+        // Recovery: try to play next track without gapless optimization
+        if (_currentIndex + 1 < _queue.length) {
+          _currentIndex++;
+          try {
+            await playTrack(
+              _queue[_currentIndex],
+              queueContext: _queue,
+              fromShuffle: _isShuffleEnabled,
+            );
+          } catch (retryError) {
+            debugPrint('❌ Recovery also failed: $retryError');
+            await stop();
+          }
+        } else {
+          await stop();
+        }
       } finally {
         _isTransitioning = false;
         _saveCurrentPosition();
@@ -986,6 +1010,7 @@ class AudioPlayerService {
     _currentTrackController.add(track);
     _cachedDuration = track.duration; // Initialize cached duration from track metadata
     _lyricsPrefetched = false; // Reset lyrics prefetch flag for new track
+    clearLoop(); // Clear A-B loop markers on track change
     _analyzeTrackForVisualizer(track); // Configure visualizer for track
 
     // Track play count
@@ -1659,7 +1684,85 @@ class AudioPlayerService {
     debugPrint('🔁 Repeat mode: $_repeatMode');
     unawaited(_stateStore.savePlaybackSnapshot(repeatMode: _repeatMode.name));
   }
-  
+
+  // A-B Loop functionality
+  // Only works for local/cached tracks (not streaming)
+
+  /// Check if the current track supports looping (is local or cached)
+  bool get isLoopAvailable {
+    if (_currentTrack == null) return false;
+    final localPath = _downloadService?.getLocalPath(_currentTrack!.id);
+    return localPath != null;
+  }
+
+  /// Set the loop start marker (A) at the current position
+  void setLoopStart() {
+    if (!isLoopAvailable) {
+      debugPrint('🔁 Loop: Not available for streaming tracks');
+      return;
+    }
+    _loopState = _loopState.copyWith(
+      start: _lastPosition,
+      clearEnd: true, // Clear end when setting new start
+      isActive: false,
+    );
+    _loopStateController.add(_loopState);
+    debugPrint('🔁 Loop: Set A marker at ${_loopState.formattedStart}');
+  }
+
+  /// Set the loop end marker (B) at the current position and activate loop
+  void setLoopEnd() {
+    if (!isLoopAvailable) {
+      debugPrint('🔁 Loop: Not available for streaming tracks');
+      return;
+    }
+    if (_loopState.start == null) {
+      debugPrint('🔁 Loop: Cannot set B without A');
+      return;
+    }
+    if (_lastPosition <= _loopState.start!) {
+      debugPrint('🔁 Loop: B must be after A');
+      return;
+    }
+    _loopState = _loopState.copyWith(
+      end: _lastPosition,
+      isActive: true,
+    );
+    _loopStateController.add(_loopState);
+    debugPrint('🔁 Loop: Set B marker at ${_loopState.formattedEnd}, loop active');
+  }
+
+  /// Set loop markers at specific positions (for UI drag/drop)
+  void setLoopMarkers(Duration start, Duration end) {
+    if (!isLoopAvailable) return;
+    if (end <= start) return;
+    _loopState = LoopState(
+      start: start,
+      end: end,
+      isActive: true,
+    );
+    _loopStateController.add(_loopState);
+    debugPrint('🔁 Loop: Set markers ${_loopState.formattedStart} - ${_loopState.formattedEnd}');
+  }
+
+  /// Toggle loop on/off (only if markers are set)
+  void toggleLoop() {
+    if (!_loopState.hasValidLoop) {
+      debugPrint('🔁 Loop: No valid loop markers set');
+      return;
+    }
+    _loopState = _loopState.copyWith(isActive: !_loopState.isActive);
+    _loopStateController.add(_loopState);
+    debugPrint('🔁 Loop: ${_loopState.isActive ? "activated" : "deactivated"}');
+  }
+
+  /// Clear all loop markers
+  void clearLoop() {
+    _loopState = LoopState.empty;
+    _loopStateController.add(_loopState);
+    debugPrint('🔁 Loop: Cleared');
+  }
+
   void shuffleQueue() {
     if (_queue.isEmpty) return;
     
@@ -1985,10 +2088,24 @@ class AudioPlayerService {
     );
     debugPrint('💾 Full playback state saved: ${_currentTrack?.name} @ ${_lastPosition.inSeconds}s');
   }
-  
-  
+
+
+  // ========== A-B LOOP METHODS ==========
+
+  /// Check if position has reached loop end and seek back to start
+  void _checkLoopBoundary(Duration position) {
+    if (!_loopState.isActive || !_loopState.hasValidLoop) return;
+
+    // Check if we've passed the loop end point
+    if (position >= _loopState.end!) {
+      // Seek back to loop start
+      debugPrint('🔁 Loop: Reached end, seeking to start');
+      unawaited(seek(_loopState.start!));
+    }
+  }
+
   // ========== CROSSFADE METHODS ==========
-  
+
   /// Check if we should trigger crossfade based on current position
   void _checkCrossfadeTrigger(Duration position) async {
     if (!_crossfadeEnabled || _isCrossfading || _crossfadeDurationSeconds == 0) {

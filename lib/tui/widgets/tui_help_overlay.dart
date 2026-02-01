@@ -42,6 +42,8 @@ class TuiHelpOverlay extends StatelessWidget {
                       const SizedBox(height: 16),
                       _buildSection('Seek', _seekBindings),
                       const SizedBox(height: 16),
+                      _buildSection('A-B Loop', _loopBindings),
+                      const SizedBox(height: 16),
                       _buildSection('Other', _otherBindings),
                     ],
                   ),
@@ -154,6 +156,12 @@ class TuiHelpOverlay extends StatelessWidget {
   static const List<_KeyBinding> _seekBindings = [
     _KeyBinding('r / t', 'Seek -5s / +5s'),
     _KeyBinding(', / .', 'Seek -60s / +60s'),
+  ];
+
+  static const List<_KeyBinding> _loopBindings = [
+    _KeyBinding('[', 'Set loop start (A)'),
+    _KeyBinding(']', 'Set loop end (B)'),
+    _KeyBinding(r'\', 'Clear loop markers'),
   ];
 
   static const List<_KeyBinding> _otherBindings = [

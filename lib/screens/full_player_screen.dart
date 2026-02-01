@@ -123,6 +123,10 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
   bool _userIsScrolling = false;
   Timer? _userScrollTimer;
 
+  // A-B loop controls state
+  StreamSubscription? _loopSub;
+  bool _showLoopControls = false;
+
   @override
   void initState() {
     super.initState();
@@ -153,6 +157,9 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
         if (mounted) setState(() {});
       });
       _playingSub = _audioService.playingStream.listen((_) {
+        if (mounted) setState(() {});
+      });
+      _loopSub = _audioService.loopStateStream.listen((_) {
         if (mounted) setState(() {});
       });
 
@@ -576,9 +583,17 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     _trackSub?.cancel();
     _positionSub?.cancel();
     _playingSub?.cancel();
+    _loopSub?.cancel();
     _lyricsScrollController.dispose();
     _userScrollTimer?.cancel();
     super.dispose();
+  }
+
+  void _toggleLoopControls() {
+    if (!_audioService.isLoopAvailable) return;
+    setState(() {
+      _showLoopControls = !_showLoopControls;
+    });
   }
 
   void _handleKeyEvent(KeyEvent event) {
@@ -1883,7 +1898,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                       Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Progress Slider
+                          // Progress Slider with A-B Loop support
                           StreamBuilder<PositionData>(
                         stream: _audioService.positionDataStream,
                         builder: (context, snapshot) {
@@ -1898,51 +1913,152 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                           final progress = positionData.duration.inMilliseconds > 0
                               ? positionData.position.inMilliseconds / positionData.duration.inMilliseconds
                               : 0.0;
+                          final loopState = _audioService.loopState;
+                          final isLoopAvailable = _audioService.isLoopAvailable;
+
                           return Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 24.0,
                             ),
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                return Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    // Waveform layer (disabled for Sailors - no cached audio file)
-                                    if (track != null && !widget.sailorMode)
-                                      Positioned(
-                                        left: 0,
-                                        right: 0,
-                                        top: -16,
-                                        height: 40,
-                                        child: TrackWaveform(
-                                          trackId: track.id,
-                                          progress: progress.clamp(0.0, 1.0),
-                                          width: constraints.maxWidth,
-                                          height: 40,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // A-B Loop controls overlay
+                                if (_showLoopControls && isLoopAvailable)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        // Set A button
+                                        _LoopMarkerButton(
+                                          label: 'A',
+                                          isSet: loopState.start != null,
+                                          time: loopState.formattedStart,
+                                          onTap: () => _audioService.setLoopStart(),
+                                          color: theme.colorScheme.primary,
                                         ),
-                                      ),
-                                    // Progress bar on top
-                                    ProgressBar(
-                                      progress: positionData.position,
-                                      buffered: positionData.bufferedPosition,
-                                      total: positionData.duration,
-                                      onSeek: _audioService.seek,
-                                      barHeight: 4.0,
-                                      thumbRadius: 8.0,
-                                      thumbGlowRadius: 20.0,
-                                      progressBarColor: theme.colorScheme.secondary,
-                                      baseBarColor: theme.colorScheme.secondary
-                                          .withValues(alpha: 0.2),
-                                      bufferedBarColor: theme.colorScheme.secondary
-                                          .withValues(alpha: 0.1),
-                                      thumbColor: theme.colorScheme.secondary,
-                                      timeLabelLocation: TimeLabelLocation.below,
-                                      timeLabelPadding: 8.0,
-                                      timeLabelTextStyle: theme.textTheme.bodySmall,
+                                        const SizedBox(width: 12),
+                                        // Set B button
+                                        _LoopMarkerButton(
+                                          label: 'B',
+                                          isSet: loopState.end != null,
+                                          time: loopState.formattedEnd,
+                                          onTap: loopState.start != null
+                                              ? () => _audioService.setLoopEnd()
+                                              : null,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        // Toggle loop active
+                                        if (loopState.hasValidLoop)
+                                          IconButton(
+                                            icon: Icon(
+                                              loopState.isActive
+                                                  ? Icons.repeat_one
+                                                  : Icons.repeat_one_outlined,
+                                              color: loopState.isActive
+                                                  ? theme.colorScheme.primary
+                                                  : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                            ),
+                                            onPressed: () => _audioService.toggleLoop(),
+                                            tooltip: loopState.isActive ? 'Disable loop' : 'Enable loop',
+                                          ),
+                                        const SizedBox(width: 4),
+                                        // Clear loop
+                                        if (loopState.hasMarkers)
+                                          IconButton(
+                                            icon: Icon(
+                                              Icons.clear,
+                                              color: theme.colorScheme.error,
+                                            ),
+                                            onPressed: () => _audioService.clearLoop(),
+                                            tooltip: 'Clear loop markers',
+                                          ),
+                                        const Spacer(),
+                                        // Done button
+                                        TextButton(
+                                          onPressed: _toggleLoopControls,
+                                          child: Text(
+                                            'Done',
+                                            style: TextStyle(
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                );
-                              },
+                                  ),
+                                // Progress bar with loop visualization
+                                GestureDetector(
+                                  onLongPress: isLoopAvailable ? _toggleLoopControls : null,
+                                  behavior: HitTestBehavior.translucent,
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      return Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          // Loop region overlay
+                                          if (loopState.hasValidLoop && positionData.duration.inMilliseconds > 0)
+                                            Positioned(
+                                              left: (loopState.start!.inMilliseconds / positionData.duration.inMilliseconds) * constraints.maxWidth,
+                                              top: -2,
+                                              width: ((loopState.end!.inMilliseconds - loopState.start!.inMilliseconds) / positionData.duration.inMilliseconds) * constraints.maxWidth,
+                                              height: 8,
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  color: loopState.isActive
+                                                      ? theme.colorScheme.primary.withValues(alpha: 0.3)
+                                                      : theme.colorScheme.onSurface.withValues(alpha: 0.15),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: loopState.isActive
+                                                        ? theme.colorScheme.primary
+                                                        : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          // Waveform layer (disabled for Sailors - no cached audio file)
+                                          if (track != null && !widget.sailorMode)
+                                            Positioned(
+                                              left: 0,
+                                              right: 0,
+                                              top: -16,
+                                              height: 40,
+                                              child: TrackWaveform(
+                                                trackId: track.id,
+                                                progress: progress.clamp(0.0, 1.0),
+                                                width: constraints.maxWidth,
+                                                height: 40,
+                                              ),
+                                            ),
+                                          // Progress bar on top
+                                          ProgressBar(
+                                            progress: positionData.position,
+                                            buffered: positionData.bufferedPosition,
+                                            total: positionData.duration,
+                                            onSeek: _audioService.seek,
+                                            barHeight: 4.0,
+                                            thumbRadius: 8.0,
+                                            thumbGlowRadius: 20.0,
+                                            progressBarColor: theme.colorScheme.secondary,
+                                            baseBarColor: theme.colorScheme.secondary
+                                                .withValues(alpha: 0.2),
+                                            bufferedBarColor: theme.colorScheme.secondary
+                                                .withValues(alpha: 0.1),
+                                            thumbColor: theme.colorScheme.secondary,
+                                            timeLabelLocation: TimeLabelLocation.below,
+                                            timeLabelPadding: 8.0,
+                                            timeLabelTextStyle: theme.textTheme.bodySmall,
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
                             ),
                           );
                         },
@@ -1997,6 +2113,47 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                           );
                         },
                       ),
+
+                      // Loop indicator when active
+                      if (_audioService.loopState.isActive)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: GestureDetector(
+                            onTap: _toggleLoopControls,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: theme.colorScheme.primary.withValues(alpha: 0.5),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.repeat_one,
+                                    size: 16,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '${_audioService.loopState.formattedStart} - ${_audioService.loopState.formattedEnd}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: theme.colorScheme.primary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
 
                       const SizedBox(height: 16),
 
@@ -2433,4 +2590,76 @@ class _LyricLine {
   final String text;
   final int? startTicks; // Jellyfin uses ticks (100 nanoseconds)
   final GlobalKey key = GlobalKey();
+}
+
+/// A-B loop marker button widget
+class _LoopMarkerButton extends StatelessWidget {
+  const _LoopMarkerButton({
+    required this.label,
+    required this.isSet,
+    required this.time,
+    required this.onTap,
+    required this.color,
+  });
+
+  final String label;
+  final bool isSet;
+  final String time;
+  final VoidCallback? onTap;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = onTap != null;
+    final theme = Theme.of(context);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSet
+              ? color.withValues(alpha: 0.2)
+              : theme.colorScheme.surface.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSet
+                ? color
+                : isEnabled
+                    ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.15),
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: isSet
+                    ? color
+                    : isEnabled
+                        ? theme.colorScheme.onSurface
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              time,
+              style: TextStyle(
+                fontSize: 12,
+                color: isSet
+                    ? color
+                    : isEnabled
+                        ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

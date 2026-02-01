@@ -15,7 +15,6 @@ class CarPlayService {
   bool _isConnected = false;
   StreamSubscription? _playbackSubscription;
   Timer? _refreshDebounceTimer;
-  bool _isPlaybackInProgress = false;
 
   // Pagination limits for CarPlay (prevents performance issues with large libraries)
   static const int _maxItemsPerPage = 100;
@@ -83,7 +82,6 @@ class CarPlayService {
   }
   
   void _onAppStateChanged() {
-    if (_isPlaybackInProgress) return;
     if (_isConnected && _isAtRootLevel) {
       _refreshDebounceTimer?.cancel();
       _refreshDebounceTimer = Timer(const Duration(milliseconds: 500), () {
@@ -95,7 +93,6 @@ class CarPlayService {
   }
   
   void _onPlaybackChanged(JellyfinTrack? track) {
-    if (_isPlaybackInProgress) return;
     if (track != null && _isConnected) {
       updateNowPlaying(
         trackId: track.id,
@@ -486,7 +483,7 @@ class CarPlayService {
           text: track.name,
           detailText: track.artists.join(', '),
           onPress: (complete, self) async {
-            _isPlaybackInProgress = true;
+            complete();  // Signal CarPlay immediately
             try {
               await appState.audioPlayerService.playTrack(
                 track,
@@ -495,9 +492,6 @@ class CarPlayService {
               );
             } catch (e) {
               debugPrint('CarPlay playback error: $e');
-            } finally {
-              _isPlaybackInProgress = false;
-              complete();
             }
           },
         );
@@ -588,7 +582,7 @@ class CarPlayService {
           text: track.name,
           detailText: track.artists.join(', '),
           onPress: (complete, self) async {
-            _isPlaybackInProgress = true;
+            complete();  // Signal CarPlay immediately
             try {
               await appState.audioPlayerService.playTrack(
                 track,
@@ -597,9 +591,6 @@ class CarPlayService {
               );
             } catch (e) {
               debugPrint('CarPlay playback error: $e');
-            } finally {
-              _isPlaybackInProgress = false;
-              complete();
             }
           },
         );
@@ -650,7 +641,7 @@ class CarPlayService {
         text: track.name,
         detailText: '${track.artists.join(', ')} • ${track.album}',
         onPress: (complete, self) async {
-          _isPlaybackInProgress = true;
+          complete();  // Signal CarPlay immediately
           try {
             await appState.audioPlayerService.playTrack(
               track,
@@ -659,9 +650,6 @@ class CarPlayService {
             );
           } catch (e) {
             debugPrint('CarPlay playback error: $e');
-          } finally {
-            _isPlaybackInProgress = false;
-            complete();
           }
         },
       )).toList();
@@ -727,7 +715,7 @@ class CarPlayService {
         text: track.name,
         detailText: '${track.artists.join(', ')} • ${track.album}',
         onPress: (complete, self) async {
-          _isPlaybackInProgress = true;
+          complete();  // Signal CarPlay immediately
           try {
             await appState.audioPlayerService.playTrack(
               track,
@@ -736,9 +724,6 @@ class CarPlayService {
             );
           } catch (e) {
             debugPrint('CarPlay playback error: $e');
-          } finally {
-            _isPlaybackInProgress = false;
-            complete();
           }
         },
       )).toList();
@@ -791,7 +776,7 @@ class CarPlayService {
         text: download.track.name,
         detailText: '${download.track.artists.join(', ')} • ${download.track.album}',
         onPress: (complete, self) async {
-          _isPlaybackInProgress = true;
+          complete();  // Signal CarPlay immediately
           try {
             await appState.audioPlayerService.playTrack(
               download.track,
@@ -800,9 +785,6 @@ class CarPlayService {
             );
           } catch (e) {
             debugPrint('CarPlay playback error: $e');
-          } finally {
-            _isPlaybackInProgress = false;
-            complete();
           }
         },
       )).toList();

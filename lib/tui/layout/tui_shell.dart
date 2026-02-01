@@ -471,6 +471,23 @@ class _TuiShellState extends State<TuiShell> with SingleTickerProviderStateMixin
       case TuiAction.cycleSection:
         _handleCycleSection();
         break;
+
+      // A-B loop controls
+      case TuiAction.setLoopStart:
+        if (audioService.isLoopAvailable) {
+          audioService.setLoopStart();
+        }
+        break;
+
+      case TuiAction.setLoopEnd:
+        if (audioService.isLoopAvailable) {
+          audioService.setLoopEnd();
+        }
+        break;
+
+      case TuiAction.clearLoop:
+        audioService.clearLoop();
+        break;
     }
   }
 

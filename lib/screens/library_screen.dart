@@ -31,6 +31,7 @@ import 'artist_detail_screen.dart';
 import 'genre_detail_screen.dart';
 import 'offline_library_screen.dart';
 import 'collab_playlist_screen.dart';
+import 'essential_mix_screen.dart';
 import 'relax_mode_screen.dart';
 import 'network_screen.dart';
 import 'playlist_detail_screen.dart';
@@ -4294,6 +4295,7 @@ class _SearchTabState extends State<_SearchTab> {
   bool _isLoading = false;
   bool _showRelaxEasterEgg = false;
   bool _showNetworkEasterEgg = false;
+  bool _showEssentialEasterEgg = false;
   List<JellyfinAlbum> _albumResults = const [];
   List<JellyfinArtist> _artistResults = const [];
   List<JellyfinTrack> _trackResults = const [];
@@ -4379,6 +4381,7 @@ class _SearchTabState extends State<_SearchTab> {
         _isLoading = false;
         _showRelaxEasterEgg = false;
         _showNetworkEasterEgg = false;
+        _showEssentialEasterEgg = false;
       });
       return;
     }
@@ -4388,6 +4391,7 @@ class _SearchTabState extends State<_SearchTab> {
       // Easter eggs: show special cards when searching certain keywords
       _showRelaxEasterEgg = lowerQuery.contains('relax');
       _showNetworkEasterEgg = lowerQuery.contains('network');
+      _showEssentialEasterEgg = lowerQuery.contains('essential');
     });
     unawaited(_rememberQuery(trimmed));
 
@@ -4661,7 +4665,8 @@ class _SearchTabState extends State<_SearchTab> {
                       _artistResults.isNotEmpty ||
                       _trackResults.isNotEmpty ||
                       _showRelaxEasterEgg ||
-                      _showNetworkEasterEgg;
+                      _showNetworkEasterEgg ||
+                      _showEssentialEasterEgg;
 
     if (!hasResults) {
       return Center(
@@ -4682,6 +4687,9 @@ class _SearchTabState extends State<_SearchTab> {
         // Easter egg: Network radio card
         if (_showNetworkEasterEgg)
           _buildNetworkModeCard(theme),
+        // Easter egg: Essential Mix card
+        if (_showEssentialEasterEgg)
+          _buildEssentialMixCard(theme),
         // Artists section
         if (_artistResults.isNotEmpty) ...[
           _buildSectionHeader(theme, 'Artists', Icons.person, _artistResults.length),
@@ -4747,6 +4755,28 @@ class _SearchTabState extends State<_SearchTab> {
         trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white54),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (context) => const NetworkScreen()),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEssentialMixCard(ThemeData theme) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      color: const Color(0xFF1A1A2E),
+      child: ListTile(
+        leading: const Icon(Icons.album, color: Colors.deepPurple),
+        title: const Text(
+          'Essential Mix',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        subtitle: const Text(
+          'Soulwax / 2ManyDJs • BBC Radio 1',
+          style: TextStyle(color: Colors.white70),
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white54),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const EssentialMixScreen()),
         ),
       ),
     );

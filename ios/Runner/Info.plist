@@ -118,6 +118,24 @@
 				<key>UIPrerenderedIcon</key>
 				<false/>
 			</dict>
+			<key>red</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>AppIconRed60x60</string>
+				</array>
+				<key>UIPrerenderedIcon</key>
+				<false/>
+			</dict>
+			<key>green</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>AppIconGreen60x60</string>
+				</array>
+				<key>UIPrerenderedIcon</key>
+				<false/>
+			</dict>
 		</dict>
 	</dict>
 	<key>CFBundleIcons~ipad</key>
@@ -140,6 +158,28 @@
 					<string>AppIconOrange60x60</string>
 					<string>AppIconOrange76x76</string>
 					<string>AppIconOrange83.5x83.5</string>
+				</array>
+				<key>UIPrerenderedIcon</key>
+				<false/>
+			</dict>
+			<key>red</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>AppIconRed60x60</string>
+					<string>AppIconRed76x76</string>
+					<string>AppIconRed83.5x83.5</string>
+				</array>
+				<key>UIPrerenderedIcon</key>
+				<false/>
+			</dict>
+			<key>green</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>AppIconGreen60x60</string>
+					<string>AppIconGreen76x76</string>
+					<string>AppIconGreen83.5x83.5</string>
 				</array>
 				<key>UIPrerenderedIcon</key>
 				<false/>
