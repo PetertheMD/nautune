@@ -44,15 +44,15 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
   late AnimationController _artworkController;
 
   // FFT for visualizer (with smoothing)
+  // Using ValueNotifier to avoid full widget rebuilds on FFT updates (iOS performance)
   StreamSubscription? _fftSubscription;
-  double _bassLevel = 0.0;
-  double _midLevel = 0.0;
-  double _trebleLevel = 0.0;
-  // Smoothed values for less twitchy animation
+  final ValueNotifier<_FFTData> _fftNotifier = ValueNotifier(const _FFTData(0, 0, 0, 0));
   double _smoothBass = 0.0;
   double _smoothMid = 0.0;
   double _smoothTreble = 0.0;
+  double _visualizerRotation = 0.0;
   static const double _smoothingFactor = 0.18; // Higher = more reactive
+  static const double _rotationSpeed = 0.02; // Radians per FFT frame
 
   // Frame rate throttling for FFT updates (~30fps)
   DateTime _lastFrameTime = DateTime.now();
@@ -61,10 +61,6 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
   // Throttle position updates on iOS to reduce rebuilds
   DateTime _lastPositionUpdate = DateTime.now();
   static const _positionUpdateInterval = Duration(milliseconds: 250); // 4 updates/sec on iOS
-
-  // Rotation for visualizer (updated with FFT, not animation controller)
-  double _visualizerRotation = 0.0;
-  static const double _rotationSpeed = 0.02; // Radians per FFT frame
 
   // Waveform data
   WaveformData? _waveformData;
@@ -209,9 +205,10 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
   @override
   void dispose() {
     _recordListenTime();
-    _stopFFT(resetLevels: false); // Don't call setState during dispose
+    _stopFFT(resetLevels: false);
     _powerModeSubscription?.cancel();
     _artworkController.dispose();
+    _fftNotifier.dispose();
     _audioPlayer.dispose();
     _service.removeListener(_onServiceChanged);
     super.dispose();
@@ -237,17 +234,14 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
         if (now.difference(_lastFrameTime) < _frameInterval) return;
         _lastFrameTime = now;
 
-        // Update target values and smoothed values, then trigger rebuild
-        setState(() {
-          _bassLevel = data.bass;
-          _midLevel = data.mid;
-          _trebleLevel = data.treble;
-          _smoothBass += (_bassLevel - _smoothBass) * _smoothingFactor;
-          _smoothMid += (_midLevel - _smoothMid) * _smoothingFactor;
-          _smoothTreble += (_trebleLevel - _smoothTreble) * _smoothingFactor;
-          // Update rotation with FFT frame, not animation controller (saves CPU)
-          _visualizerRotation += _rotationSpeed;
-        });
+        // Update smoothed values and notify visualizer ONLY (no setState = no full rebuild)
+        _smoothBass += (data.bass - _smoothBass) * _smoothingFactor;
+        _smoothMid += (data.mid - _smoothMid) * _smoothingFactor;
+        _smoothTreble += (data.treble - _smoothTreble) * _smoothingFactor;
+        _visualizerRotation += _rotationSpeed;
+
+        // Only updates the visualizer widget, not the entire screen
+        _fftNotifier.value = _FFTData(_smoothBass, _smoothMid, _smoothTreble, _visualizerRotation);
       });
     } else if (Platform.isLinux) {
       // Linux FFT using PulseAudio
@@ -260,17 +254,14 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
         if (now.difference(_lastFrameTime) < _frameInterval) return;
         _lastFrameTime = now;
 
-        // Update target values and smoothed values, then trigger rebuild
-        setState(() {
-          _bassLevel = data.bass;
-          _midLevel = data.mid;
-          _trebleLevel = data.treble;
-          _smoothBass += (_bassLevel - _smoothBass) * _smoothingFactor;
-          _smoothMid += (_midLevel - _smoothMid) * _smoothingFactor;
-          _smoothTreble += (_trebleLevel - _smoothTreble) * _smoothingFactor;
-          // Update rotation with FFT frame, not animation controller
-          _visualizerRotation += _rotationSpeed;
-        });
+        // Update smoothed values and notify visualizer ONLY (no setState = no full rebuild)
+        _smoothBass += (data.bass - _smoothBass) * _smoothingFactor;
+        _smoothMid += (data.mid - _smoothMid) * _smoothingFactor;
+        _smoothTreble += (data.treble - _smoothTreble) * _smoothingFactor;
+        _visualizerRotation += _rotationSpeed;
+
+        // Only updates the visualizer widget, not the entire screen
+        _fftNotifier.value = _FFTData(_smoothBass, _smoothMid, _smoothTreble, _visualizerRotation);
       });
     }
   }
@@ -285,16 +276,13 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
       PulseAudioFFTService.instance.stopCapture();
     }
 
-    // Only reset levels and call setState if widget is still mounted
-    // and we're not being called from dispose
-    if (resetLevels && mounted) {
-      _bassLevel = 0.0;
-      _midLevel = 0.0;
-      _trebleLevel = 0.0;
+    // Reset FFT values (no setState needed - notifier handles visualizer update)
+    if (resetLevels) {
       _smoothBass = 0.0;
       _smoothMid = 0.0;
       _smoothTreble = 0.0;
-      setState(() {});
+      _visualizerRotation = 0.0;
+      _fftNotifier.value = const _FFTData(0, 0, 0, 0);
     }
   }
 
@@ -819,22 +807,27 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
             alignment: Alignment.center,
             children: [
               // Radial FFT visualizer (behind artwork) - wrapped in RepaintBoundary
-              // On iOS: rotation tied to FFT updates (~30fps) to avoid 60fps repaints
-              // On Linux: use animation controller for smooth 60fps rotation
+              // On iOS: ValueListenableBuilder isolates rebuilds to visualizer only
+              // On Linux: AnimatedBuilder for smooth 60fps rotation
               if (showVisualizer)
                 RepaintBoundary(
                   child: Platform.isIOS
-                      ? CustomPaint(
-                          size: Size(visualizerSize, visualizerSize),
-                          painter: _RadialVisualizerPainter(
-                            bass: _smoothBass,
-                            mid: _smoothMid,
-                            treble: _smoothTreble,
-                            color: theme.colorScheme.primary,
-                            innerRadius: artworkSize / 2 + 6,
-                            maxBarLength: maxBarLength,
-                            rotation: _visualizerRotation,
-                          ),
+                      ? ValueListenableBuilder<_FFTData>(
+                          valueListenable: _fftNotifier,
+                          builder: (context, fft, _) {
+                            return CustomPaint(
+                              size: Size(visualizerSize, visualizerSize),
+                              painter: _RadialVisualizerPainter(
+                                bass: fft.bass,
+                                mid: fft.mid,
+                                treble: fft.treble,
+                                color: theme.colorScheme.primary,
+                                innerRadius: artworkSize / 2 + 6,
+                                maxBarLength: maxBarLength,
+                                rotation: fft.rotation,
+                              ),
+                            );
+                          },
                         )
                       : AnimatedBuilder(
                           animation: _artworkController,
@@ -842,9 +835,9 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
                             return CustomPaint(
                               size: Size(visualizerSize, visualizerSize),
                               painter: _RadialVisualizerPainter(
-                                bass: _smoothBass,
-                                mid: _smoothMid,
-                                treble: _smoothTreble,
+                                bass: _fftNotifier.value.bass,
+                                mid: _fftNotifier.value.mid,
+                                treble: _fftNotifier.value.treble,
                                 color: theme.colorScheme.primary,
                                 innerRadius: artworkSize / 2 + 6,
                                 maxBarLength: maxBarLength,
@@ -1491,4 +1484,14 @@ class _WaveformPainter extends CustomPainter {
         playedColor != oldDelegate.playedColor ||
         unplayedColor != oldDelegate.unplayedColor;
   }
+}
+
+/// Immutable FFT data for ValueNotifier (avoids full widget rebuilds on iOS)
+class _FFTData {
+  final double bass;
+  final double mid;
+  final double treble;
+  final double rotation;
+
+  const _FFTData(this.bass, this.mid, this.treble, this.rotation);
 }

@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:math' show max;
 import 'package:flutter/material.dart';
 import 'base_visualizer.dart';
@@ -158,7 +159,10 @@ class _SpectrumBarsPainter extends CustomPainter {
     final totalSpacing = spacing * (barCount - 1);
     final barWidth = (size.width - totalSpacing) / barCount;
 
-    final effectiveHeight = size.height;
+    // iOS portrait: cap at 80% height to prevent bars from overwhelming the UI
+    final effectiveHeight = Platform.isIOS && size.height > size.width
+        ? size.height * 0.8
+        : size.height;
 
     // Bass-reactive height multiplier - bars grow taller on bass hits
     final bassBoost = 1.0 + bass * 0.4;

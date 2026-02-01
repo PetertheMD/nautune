@@ -530,9 +530,11 @@ flutter analyze
 
 | Feature | Platform | Status |
 |---------|----------|--------|
+| Android Build | Android | 🔜 Planned |
 | Desktop Remote Control | iOS → Linux | 🔜 Planned |
 | Additional Visualizers | All | ✅ Complete |
 
+- **Android Build**: Native Android app with full feature parity (visualizers, offline, CarPlay equivalent via Android Auto).
 - **Desktop Remote Control**: Control desktop playback from iOS device over local network.
 
 ## 🙏 Acknowledgments

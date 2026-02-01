@@ -1,3 +1,19 @@
+### v5.7.5 - iOS Visualizer Performance Overhaul
+- **Essential Mix iOS Performance**: Complete performance overhaul for smooth playback on iOS
+  - **Critical Fix**: FFT updates now use ValueNotifier instead of setState - only visualizer rebuilds, not entire screen
+  - AnimationController disabled on iOS (was running 60fps idle)
+  - Visualizer uses ValueListenableBuilder for isolated 30fps updates
+  - Position updates throttled to 4/sec on iOS (was ~10/sec)
+  - Artwork shadow reduced (blur 20 vs 40, spread 4 vs 10)
+  - Play button shadow reduced (blur 10 vs 20)
+  - Scrubber shadows removed entirely on iOS
+  - Waveform repaint tolerance added (0.2% threshold)
+- **Spectrum Bars iOS Portrait**: Fixed height scaling to 80% in portrait mode (was using broken width-based formula)
+- **Mirror Bars iOS Portrait**: Fixed height scaling to 80% in portrait mode (was using broken width-based formula)
+- **Spectrum Bars Performance**: Added tolerance-based shouldRepaint (0.005 threshold)
+- **Mirror Bars Performance**: Added tolerance-based shouldRepaint, HSL color caching, gradient shader caching
+- **Waveform Painter Optimization**: Cached Paint objects instead of creating new ones per bar
+
 ### v5.7.4 - Essential Mix Enhanced Visualizer & iOS Performance
 - **Gradient Bar Colors**: Visualizer bars now use theme-based gradient colors (hue shifts ±40° around your primary color)
 - **Glow Effect**: Soft blur glow behind bars for a premium neon look
