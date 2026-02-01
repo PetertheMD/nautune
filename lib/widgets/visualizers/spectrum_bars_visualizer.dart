@@ -1,4 +1,5 @@
-import 'dart:math' show max;
+import 'dart:io' show Platform;
+import 'dart:math' show max, min;
 import 'package:flutter/material.dart';
 import 'base_visualizer.dart';
 
@@ -158,6 +159,12 @@ class _SpectrumBarsPainter extends CustomPainter {
     final totalSpacing = spacing * (barCount - 1);
     final barWidth = (size.width - totalSpacing) / barCount;
 
+    // On iOS portrait, height can be very tall - cap effective height to width ratio
+    // This prevents bars from looking giant in fullscreen portrait mode
+    final effectiveHeight = Platform.isIOS
+        ? min(size.height, size.width * 0.8)
+        : size.height;
+
     // Bass-reactive height multiplier - bars grow taller on bass hits
     final bassBoost = 1.0 + bass * 0.4;
 
@@ -167,7 +174,7 @@ class _SpectrumBarsPainter extends CustomPainter {
       if (value < 0.03) continue;
 
       final x = i * (barWidth + spacing);
-      final barHeight = value * size.height * 0.9 * bassBoost;
+      final barHeight = value * effectiveHeight * 0.9 * bassBoost;
       final color = _getBarColor(i, barCount, value);
 
       // Glow intensity increases with bass
@@ -190,7 +197,7 @@ class _SpectrumBarsPainter extends CustomPainter {
     for (int i = 0; i < barCount; i++) {
       final value = bars[i];
       final x = i * (barWidth + spacing);
-      final barHeight = max(3.0, value * size.height * 0.85 * bassBoost);
+      final barHeight = max(3.0, value * effectiveHeight * 0.85 * bassBoost);
       final color = _getBarColor(i, barCount, value);
 
       // Create gradient from bottom to top
@@ -217,7 +224,7 @@ class _SpectrumBarsPainter extends CustomPainter {
       if (peakValue < 0.05) continue;
 
       final x = i * (barWidth + spacing);
-      final peakY = size.height - (peakValue * size.height * 0.85);
+      final peakY = size.height - (peakValue * effectiveHeight * 0.85);
       final color = _getBarColor(i, barCount, peakValue);
 
       _peakPaint.color = color.withValues(alpha: opacity * 0.9);
@@ -231,7 +238,7 @@ class _SpectrumBarsPainter extends CustomPainter {
 
     // Bottom glow on bass hits
     if (bass > 0.3) {
-      final glowHeight = size.height * 0.15;
+      final glowHeight = effectiveHeight * 0.15;
       final bottomRect = Rect.fromLTWH(0, size.height - glowHeight, size.width, glowHeight);
 
       final gradient = LinearGradient(

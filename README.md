@@ -200,7 +200,7 @@ A hidden feature to play the legendary 2-hour Soulwax/2ManyDJs BBC Essential Mix
 - **2-Hour Mix**: The full Soulwax/2ManyDJs BBC Radio 1 Essential Mix
 - **Download for Offline**: Download the 233MB audio file for offline listening
 - **Demo Mode Support**: Works in demo mode and airplane mode if downloaded while online
-- **Radial Visualizer**: FFT bars radiate around album art with smooth, non-twitchy animations
+- **Radial Visualizer**: FFT bars radiate around album art with smooth 30fps animations and RepaintBoundary isolation
 - **Seekable Waveform**: Waveform doubles as progress bar - tap or drag to seek
 - **Profile Badge**: BBC Radio 1 Essential Mix badge with archive.org aesthetic appears in your Profile
 - **iOS Low Power Mode**: Visualizer auto-disables when Low Power Mode is enabled to save battery

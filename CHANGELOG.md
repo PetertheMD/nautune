@@ -1,3 +1,13 @@
+### v5.7.4 - Essential Mix iOS Performance Fix
+- **iOS Visualizer Throttling**: FFT updates now throttled to ~30fps, preventing excessive widget rebuilds that caused lag
+- **RepaintBoundary Isolation**: Visualizer and waveform wrapped in RepaintBoundary to prevent cascading repaints
+- **Portrait Mode Clipping Fix**: Essential Mix visualizer now fits within container bounds instead of extending 20% beyond
+- **AnimatedBuilder Optimization**: Essential Mix visualizer repaints driven by animation controller instead of setState calls
+- **iOS FFT Parity**: Removed 0.8x intensity reduction on iOS FFT - now matches Linux output
+- **iOS Portrait Bar Scaling**: Spectrum Bars and Mirror Bars visualizers now scale appropriately in iOS portrait mode (capped to 0.8x width ratio)
+
+### v5.7.3 - Readme Update
+
 ### v5.7.2 - A-B Loop Improvements & Saved Loops
 - **Save Loops**: Tap the active loop indicator to save the current A-B loop for later recall
 - **Saved Loops Management**: View and manage all saved loops in Settings > Storage Management > Loops tab

@@ -1,4 +1,5 @@
-import 'dart:math' show max;
+import 'dart:io' show Platform;
+import 'dart:math' show max, min;
 import 'package:flutter/material.dart';
 import 'base_visualizer.dart';
 
@@ -127,9 +128,15 @@ class _SpectrumMirrorPainter extends CustomPainter {
     final barWidth = (size.width - totalSpacing) / barCount;
     final centerY = size.height / 2;
 
+    // On iOS portrait, height can be very tall - cap effective height to width ratio
+    // This prevents bars from looking giant in fullscreen portrait mode
+    final effectiveHeight = Platform.isIOS
+        ? min(size.height, size.width * 0.8)
+        : size.height;
+
     // Bass-reactive height - bars extend further on bass hits
     final bassBoost = 1.0 + bass * 0.5;
-    final maxBarHeight = size.height * 0.45 * bassBoost;
+    final maxBarHeight = effectiveHeight * 0.45 * bassBoost;
 
     // Draw center line glow - pulses with bass
     final centerLineWidth = 2.0 + bass * 3.0;
@@ -257,9 +264,10 @@ class _SpectrumMirrorPainter extends CustomPainter {
     // Edge glow on bass hits
     if (bass > 0.4) {
       final edgeGlow = bass * 0.4;
+      final glowHeight = effectiveHeight * 0.2;
 
       // Top edge
-      final topRect = Rect.fromLTWH(0, 0, size.width, size.height * 0.2);
+      final topRect = Rect.fromLTWH(0, 0, size.width, glowHeight);
       _glowPaint.shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
@@ -271,7 +279,7 @@ class _SpectrumMirrorPainter extends CustomPainter {
       canvas.drawRect(topRect, _glowPaint);
 
       // Bottom edge
-      final bottomRect = Rect.fromLTWH(0, size.height * 0.8, size.width, size.height * 0.2);
+      final bottomRect = Rect.fromLTWH(0, size.height - glowHeight, size.width, glowHeight);
       _glowPaint.shader = LinearGradient(
         begin: Alignment.bottomCenter,
         end: Alignment.topCenter,

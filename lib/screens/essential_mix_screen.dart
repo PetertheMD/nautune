@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' show min;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -52,6 +53,10 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
   double _smoothMid = 0.0;
   double _smoothTreble = 0.0;
   static const double _smoothingFactor = 0.08; // Lower = smoother
+
+  // Frame rate throttling for FFT updates (~30fps)
+  DateTime _lastFrameTime = DateTime.now();
+  static const _frameInterval = Duration(milliseconds: 33);
 
   // Waveform data
   WaveformData? _waveformData;
@@ -203,33 +208,43 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
       IOSFFTService.instance.setAudioUrl('file://$audioPath');
       IOSFFTService.instance.startCapture();
       _fftSubscription = IOSFFTService.instance.fftStream.listen((data) {
-        if (mounted) {
-          setState(() {
-            _bassLevel = data.bass;
-            _midLevel = data.mid;
-            _trebleLevel = data.treble;
-            // Apply smoothing (lerp toward target)
-            _smoothBass += (_bassLevel - _smoothBass) * _smoothingFactor;
-            _smoothMid += (_midLevel - _smoothMid) * _smoothingFactor;
-            _smoothTreble += (_trebleLevel - _smoothTreble) * _smoothingFactor;
-          });
-        }
+        if (!mounted) return;
+
+        // Throttle updates to ~30fps to avoid excessive rebuilds
+        final now = DateTime.now();
+        if (now.difference(_lastFrameTime) < _frameInterval) return;
+        _lastFrameTime = now;
+
+        // Update target values and smoothed values, then trigger rebuild
+        setState(() {
+          _bassLevel = data.bass;
+          _midLevel = data.mid;
+          _trebleLevel = data.treble;
+          _smoothBass += (_bassLevel - _smoothBass) * _smoothingFactor;
+          _smoothMid += (_midLevel - _smoothMid) * _smoothingFactor;
+          _smoothTreble += (_trebleLevel - _smoothTreble) * _smoothingFactor;
+        });
       });
     } else if (Platform.isLinux) {
       // Linux FFT using PulseAudio
       PulseAudioFFTService.instance.startCapture();
       _fftSubscription = PulseAudioFFTService.instance.fftStream.listen((data) {
-        if (mounted) {
-          setState(() {
-            _bassLevel = data.bass;
-            _midLevel = data.mid;
-            _trebleLevel = data.treble;
-            // Apply smoothing (lerp toward target)
-            _smoothBass += (_bassLevel - _smoothBass) * _smoothingFactor;
-            _smoothMid += (_midLevel - _smoothMid) * _smoothingFactor;
-            _smoothTreble += (_trebleLevel - _smoothTreble) * _smoothingFactor;
-          });
-        }
+        if (!mounted) return;
+
+        // Throttle updates to ~30fps to avoid excessive rebuilds
+        final now = DateTime.now();
+        if (now.difference(_lastFrameTime) < _frameInterval) return;
+        _lastFrameTime = now;
+
+        // Update target values and smoothed values, then trigger rebuild
+        setState(() {
+          _bassLevel = data.bass;
+          _midLevel = data.mid;
+          _trebleLevel = data.treble;
+          _smoothBass += (_bassLevel - _smoothBass) * _smoothingFactor;
+          _smoothMid += (_midLevel - _smoothMid) * _smoothingFactor;
+          _smoothTreble += (_trebleLevel - _smoothTreble) * _smoothingFactor;
+        });
       });
     }
   }
@@ -758,13 +773,15 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
   Widget _buildArtworkWithVisualizer(ThemeData theme) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Calculate sizes - visualizer ring around artwork
-        final maxSize = constraints.maxWidth < constraints.maxHeight
-            ? constraints.maxWidth
-            : constraints.maxHeight;
+        // Calculate sizes - fit within available space (accounting for padding)
+        final availableWidth = constraints.maxWidth;
+        final availableHeight = constraints.maxHeight;
+        final maxSize = min(availableWidth, availableHeight);
+
+        // Don't exceed container - visualizer fits within maxSize
         final visualizerSize = maxSize;
-        final artworkSize = maxSize * 0.68; // Artwork size (bigger)
-        final visualizerOuterSize = maxSize * 1.2; // Bars extend 20% beyond container
+        final artworkSize = maxSize * 0.60; // Smaller artwork = more room for bars
+        final maxBarLength = (maxSize - artworkSize) / 2 - 4; // Longer bars
 
         // Show visualizer only when playing, downloaded, and enabled (not in low power mode)
         final showVisualizer = _isPlaying && _service.isDownloaded && _visualizerEnabled;
@@ -774,19 +791,25 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
           height: visualizerSize,
           child: Stack(
             alignment: Alignment.center,
-            clipBehavior: Clip.none, // Allow bars to extend beyond
             children: [
-              // Radial FFT visualizer (behind artwork)
+              // Radial FFT visualizer (behind artwork) - wrapped in RepaintBoundary
               if (showVisualizer)
-                CustomPaint(
-                  size: Size(visualizerOuterSize, visualizerOuterSize),
-                  painter: _RadialVisualizerPainter(
-                    bass: _smoothBass,
-                    mid: _smoothMid,
-                    treble: _smoothTreble,
-                    color: theme.colorScheme.primary,
-                    innerRadius: artworkSize / 2 + 6, // Start just outside artwork
-                    maxBarLength: (visualizerOuterSize - artworkSize) / 2 - 6, // Bars can be longer
+                RepaintBoundary(
+                  child: AnimatedBuilder(
+                    animation: _artworkController,
+                    builder: (context, child) {
+                      return CustomPaint(
+                        size: Size(visualizerSize, visualizerSize),
+                        painter: _RadialVisualizerPainter(
+                          bass: _smoothBass,
+                          mid: _smoothMid,
+                          treble: _smoothTreble,
+                          color: theme.colorScheme.primary,
+                          innerRadius: artworkSize / 2 + 6, // Start just outside artwork
+                          maxBarLength: maxBarLength,
+                        ),
+                      );
+                    },
                   ),
                 ),
 
@@ -813,15 +836,17 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            // Waveform
-            CustomPaint(
-              painter: _WaveformPainter(
-                waveform: _waveformData!,
-                progress: progress.clamp(0.0, 1.0),
-                playedColor: theme.colorScheme.primary,
-                unplayedColor: theme.colorScheme.primary.withValues(alpha: 0.25),
+            // Waveform - wrapped in RepaintBoundary for isolation
+            RepaintBoundary(
+              child: CustomPaint(
+                painter: _WaveformPainter(
+                  waveform: _waveformData!,
+                  progress: progress.clamp(0.0, 1.0),
+                  playedColor: theme.colorScheme.primary,
+                  unplayedColor: theme.colorScheme.primary.withValues(alpha: 0.25),
+                ),
+                size: Size(constraints.maxWidth, 56),
               ),
-              size: Size(constraints.maxWidth, 56),
             ),
             // Scrubber line
             Positioned(

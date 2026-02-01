@@ -117,15 +117,11 @@ class IOSFFTService {
       final treble = (event['treble'] as num?)?.toDouble() ?? 0.0;
       final amplitude = (event['amplitude'] as num?)?.toDouble() ?? 0.0;
 
-      // Apply 20% reduction (0.8x multiplier) to iOS FFT values
-      // This creates a calmer visual experience compared to Linux
-      const iosReduction = 0.8;
-
       _fftController.add(IOSFFTData(
-        bass: (bass * iosReduction).clamp(0.0, 1.0),
-        mid: (mid * iosReduction).clamp(0.0, 1.0),
-        treble: (treble * iosReduction).clamp(0.0, 1.0),
-        amplitude: (amplitude * iosReduction).clamp(0.0, 1.0),
+        bass: bass.clamp(0.0, 1.0),
+        mid: mid.clamp(0.0, 1.0),
+        treble: treble.clamp(0.0, 1.0),
+        amplitude: amplitude.clamp(0.0, 1.0),
       ));
     }
   }
