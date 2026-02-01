@@ -217,6 +217,56 @@ Essential Mix downloads are stored separately from your Jellyfin library:
 Audio sourced from [Internet Archive](https://archive.org/details/2017-05-20-soulwax-2manydjs-essential-mix).
 
 
+## 🎸 Frets on Fire (Easter Egg)
+
+A Guitar Hero-style rhythm game that auto-generates playable charts from any track in your library.
+
+### How to Access
+
+1. Go to **Library** tab
+2. Search for **"fire"** or **"frets"**
+3. Tap the **"Frets on Fire"** card that appears
+
+### How to Play
+
+1. **Select a track** - Only downloaded tracks are available (the game needs to analyze the audio file)
+2. **Wait for analysis** - The app decodes and analyzes the audio using spectral flux onset detection (2-10 seconds depending on track length)
+3. **Play the game**:
+   - Notes fall from the top in **5 colored lanes** (Green, Red, Yellow, Blue, Orange - like Guitar Hero)
+   - Hit notes when they cross the line at the bottom
+   - **Mobile**: Tap the lane
+   - **Desktop**: Press 1-5 or F1-F5 keys
+4. **Scoring** (matches original Frets on Fire):
+   - 50 points per note × multiplier
+   - Combo builds multiplier: 10→2x, 20→3x, 30→4x (max)
+   - Missing a note resets your combo
+   - Timing windows adjust based on track BPM
+
+### Features
+
+- **SuperFlux-Inspired Algorithm**: Moving maximum + moving average onset detection (based on academic research)
+- **BPM Detection**: Auto-detects tempo and quantizes notes to actual beat grid (16th notes)
+- **Pitch Tracking**: Spectral centroid follows the melody - notes move left/right with the song's pitch
+- **Hybrid Lane Assignment**: Bass hits use frequency bands, melodic content follows pitch contour
+- **Album Art Selection**: Track selection dialog shows album covers for easy browsing
+- **Theme-Colored Lanes**: Lane colors derived from your theme (hue shifts around primary color)
+- **Real Audio Decoding**: FFmpeg on Linux/desktop, native AVFoundation on iOS
+- **Chart Caching**: Generated charts are saved for instant replay
+- **Long Track Support**: Handles 3+ hour DJ sets (caps at 3000 notes)
+- **Profile Stats**: Total songs, plays, notes hit, and best score displayed in fire-themed card
+- **Score Tracking**: High scores and stats saved per track
+- **Accuracy Grades**: S/A/B/C/D/F based on hit percentage
+- **"Rock Star" Milestone**: Unlock a badge for discovering this easter egg
+- **Storage Management**: Manage cached charts in Settings > Data Management
+
+### Controls
+
+| Platform | Green | Red | Yellow | Blue | Orange | Pause |
+|----------|-------|-----|--------|------|--------|-------|
+| Mobile   | Tap 1 | Tap 2 | Tap 3 | Tap 4 | Tap 5 | Pause button |
+| Desktop  | 1/F1  | 2/F2  | 3/F3   | 4/F4  | 5/F5   | Escape |
+
+
 ## 🌧️ Relax Mode (Easter Egg)
 
 An ambient sound mixer for focus or relaxation, inspired by [ebithril/relax-player](https://github.com/ebithril/relax-player).

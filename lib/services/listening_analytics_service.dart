@@ -155,6 +155,7 @@ enum IconType {
   tracks,
   genres,
   special,
+  game, // For game-related milestones (Frets on Fire)
 }
 
 /// Collection of all milestones with progress
@@ -280,12 +281,14 @@ class ListeningAnalyticsService {
   static const _relaxModeKey = 'relax_mode_stats';
   static const _networkDiscoveredKey = 'network_discovered';
   static const _essentialMixDiscoveredKey = 'essential_mix_discovered';
+  static const _fretsOnFireDiscoveredKey = 'frets_on_fire_discovered';
 
   Box? _box;
   List<PlayEvent> _events = [];
   RelaxModeStats _relaxModeStats = RelaxModeStats();
   bool _networkDiscovered = false;
   bool _essentialMixDiscovered = false;
+  bool _fretsOnFireDiscovered = false;
   bool _initialized = false;
 
   /// Singleton instance
@@ -305,6 +308,7 @@ class ListeningAnalyticsService {
       await _loadRelaxModeStats();
       await _loadNetworkDiscovered();
       await _loadEssentialMixDiscovered();
+      await _loadFretsOnFireDiscovered();
       _initialized = true;
       debugPrint('ListeningAnalyticsService: Initialized with ${_events.length} events');
     } catch (e) {
@@ -427,6 +431,27 @@ class ListeningAnalyticsService {
     _essentialMixDiscovered = true;
     await _saveEssentialMixDiscovered();
     debugPrint('ListeningAnalyticsService: Essential Mix easter egg discovered!');
+  }
+
+  // Frets on Fire Easter Egg discovery tracking
+  Future<void> _loadFretsOnFireDiscovered() async {
+    _fretsOnFireDiscovered = _box?.get(_fretsOnFireDiscoveredKey) as bool? ?? false;
+  }
+
+  Future<void> _saveFretsOnFireDiscovered() async {
+    if (_box == null) return;
+    await _box!.put(_fretsOnFireDiscoveredKey, _fretsOnFireDiscovered);
+  }
+
+  /// Check if Frets on Fire easter egg has been discovered
+  bool get fretsOnFireDiscovered => _fretsOnFireDiscovered;
+
+  /// Mark Frets on Fire easter egg as discovered (for milestone)
+  Future<void> markFretsOnFireDiscovered() async {
+    if (_fretsOnFireDiscovered) return;
+    _fretsOnFireDiscovered = true;
+    await _saveFretsOnFireDiscovered();
+    debugPrint('ListeningAnalyticsService: Frets on Fire easter egg discovered!');
   }
 
   Future<void> _loadEvents() async {
@@ -1321,6 +1346,16 @@ class ListeningAnalyticsService {
         targetValue: 1,
         currentValue: _essentialMixDiscovered ? 1 : 0,
       ),
+
+      // Frets on Fire milestone - Rhythm game easter egg
+      ListeningMilestone(
+        id: 'frets_on_fire',
+        name: 'Rock Star',
+        description: 'Discover the Frets on Fire rhythm game',
+        iconType: IconType.game,
+        targetValue: 1,
+        currentValue: _fretsOnFireDiscovered ? 1 : 0,
+      ),
     ];
 
     return ListeningMilestones(all: milestones);
@@ -1418,6 +1453,7 @@ class ListeningAnalyticsService {
       'relax_mode_stats': _relaxModeStats.toJson(),
       'network_discovered': _networkDiscovered,
       'essential_mix_discovered': _essentialMixDiscovered,
+      'frets_on_fire_discovered': _fretsOnFireDiscovered,
     });
   }
 
@@ -1502,13 +1538,20 @@ class ListeningAnalyticsService {
         _essentialMixDiscovered = true;
       }
 
+      // Import frets on fire discovered flag (keep true if either is true)
+      final fretsOnFireDiscovered = jsonData['frets_on_fire_discovered'] as bool?;
+      if (fretsOnFireDiscovered == true) {
+        _fretsOnFireDiscovered = true;
+      }
+
       // Save all imported data
-      if (importedCount > 0 || relaxJson != null || networkDiscovered == true || essentialMixDiscovered == true) {
+      if (importedCount > 0 || relaxJson != null || networkDiscovered == true || essentialMixDiscovered == true || fretsOnFireDiscovered == true) {
         await Future.wait([
           _saveEvents(),
           _saveRelaxModeStats(),
           _saveNetworkDiscovered(),
           _saveEssentialMixDiscovered(),
+          _saveFretsOnFireDiscovered(),
         ]);
         debugPrint('ListeningAnalyticsService: Imported $importedCount events');
       }

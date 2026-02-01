@@ -17,6 +17,9 @@ let flutterEngine = FlutterEngine(name: "SharedEngine", project: nil, allowHeadl
     // Register Audio FFT plugin for real-time visualization
     AudioFFTPlugin.register(with: flutterEngine.registrar(forPlugin: "AudioFFTPlugin")!)
 
+    // Register Audio Decoder plugin for chart generation
+    AudioDecoderPlugin.register(with: flutterEngine.registrar(forPlugin: "AudioDecoderPlugin")!)
+
     // Register Share plugin for native file sharing (AirDrop, etc.)
     SharePlugin.register(with: flutterEngine.registrar(forPlugin: "SharePlugin")!)
 

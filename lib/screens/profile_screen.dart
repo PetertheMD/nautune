@@ -20,6 +20,7 @@ import '../services/listenbrainz_service.dart';
 import '../services/listening_analytics_service.dart';
 import '../services/essential_mix_service.dart';
 import '../services/network_download_service.dart';
+import '../services/chart_cache_service.dart';
 import '../services/rewind_service.dart';
 import 'rewind_screen.dart';
 
@@ -375,6 +376,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _essentialMixListenSeconds = 0;
   bool _essentialMixDownloaded = false;
 
+  // Frets on Fire rhythm game stats
+  ChartCacheService? _chartCacheService;
+  FretsOnFireStats? _fretsOnFireStats;
+
   @override
   void initState() {
     super.initState();
@@ -383,6 +388,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadLocalAnalytics();
     _loadNetworkStats();
     _loadEssentialMixStats();
+    _loadFretsOnFireStats();
     _loadLibraryOverview();
   }
 
@@ -415,10 +421,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  void _loadFretsOnFireStats() {
+    _chartCacheService = ChartCacheService.instance;
+    _chartCacheService!.addListener(_onFretsOnFireStatsChanged);
+    // Load initial state
+    _onFretsOnFireStatsChanged();
+  }
+
+  void _onFretsOnFireStatsChanged() {
+    if (!mounted || _chartCacheService == null) return;
+    if (!_chartCacheService!.isInitialized) return;
+    setState(() {
+      _fretsOnFireStats = _chartCacheService!.getAggregateStats();
+    });
+  }
+
   @override
   void dispose() {
     _networkService?.removeListener(_onNetworkStatsChanged);
     _essentialMixService?.removeListener(_onEssentialMixStatsChanged);
+    _chartCacheService?.removeListener(_onFretsOnFireStatsChanged);
     super.dispose();
   }
 
@@ -978,6 +1000,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   // Essential Mix Stats (if any listen time)
                   if (_essentialMixListenSeconds > 0) ...[
                     _buildEssentialMixBadge(theme),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Frets on Fire Rhythm Game Stats (if any games played)
+                  if (_fretsOnFireStats != null && _fretsOnFireStats!.totalPlayCount > 0) ...[
+                    _buildFretsOnFireStatsSection(theme),
                     const SizedBox(height: 12),
                   ],
 
@@ -1964,6 +1992,228 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Frets on Fire rhythm game stats - fire/guitar inspired aesthetic
+  Widget _buildFretsOnFireStatsSection(ThemeData theme) {
+    final stats = _fretsOnFireStats!;
+
+    // Fire/guitar colors
+    const fireOrange = Color(0xFFFF6B35);
+    const fireRed = Color(0xFFFF4D6D);
+    const fireDark = Color(0xFF1A0A0A);
+    const fireGold = Color(0xFFFFD700);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            fireDark,
+            Color(0xFF2A1010),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: fireOrange.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: fireRed.withValues(alpha: 0.2),
+            blurRadius: 12,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
+            children: [
+              // Game controller with fire effect
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      fireOrange.withValues(alpha: 0.3),
+                      fireRed.withValues(alpha: 0.2),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: fireOrange.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.sports_esports,
+                  color: fireOrange,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Frets on Fire',
+                      style: GoogleFonts.pacifico(
+                        fontSize: 18,
+                        color: fireOrange,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Rhythm Game',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white54,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Best score
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    stats.formattedHighScore,
+                    style: GoogleFonts.raleway(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: fireGold,
+                    ),
+                  ),
+                  Text(
+                    'high score',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: Colors.white54,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+          const Divider(color: Colors.white24, height: 1),
+          const SizedBox(height: 12),
+
+          // Stats grid
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildFireStatItem(
+                theme,
+                stats.totalSongsPlayed.toString(),
+                'songs',
+                Icons.music_note,
+                fireOrange,
+              ),
+              _buildFireStatItem(
+                theme,
+                stats.totalPlayCount.toString(),
+                'plays',
+                Icons.play_arrow,
+                fireRed,
+              ),
+              _buildFireStatItem(
+                theme,
+                stats.formattedNotesHit,
+                'notes',
+                Icons.touch_app,
+                fireGold,
+              ),
+              _buildFireStatItem(
+                theme,
+                'x${stats.bestMaxMultiplier}',
+                'max',
+                Icons.local_fire_department,
+                fireOrange,
+              ),
+            ],
+          ),
+
+          // Best score track (if available)
+          if (stats.bestHighScoreTrack != null) ...[
+            const SizedBox(height: 12),
+            const Divider(color: Colors.white24, height: 1),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  Icons.emoji_events,
+                  color: fireGold,
+                  size: 14,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${stats.bestHighScoreTrack}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            if (stats.bestHighScoreArtist != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 22, top: 2),
+                child: Text(
+                  stats.bestHighScoreArtist!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.white38,
+                    fontSize: 11,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFireStatItem(
+    ThemeData theme,
+    String value,
+    String label,
+    IconData icon,
+    Color color,
+  ) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 16),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: GoogleFonts.raleway(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: Colors.white54,
+            fontSize: 10,
+          ),
+        ),
+      ],
     );
   }
 
@@ -3942,6 +4192,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return Icons.navigation; // Navigation/compass for genre exploration
       case IconType.special:
         return Icons.nightlight_round; // Moon/night for time-based milestones
+      case IconType.game:
+        return Icons.sports_esports; // Video game controller
     }
   }
 
@@ -3963,6 +4215,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return const Color(0xFF06B6D4); // Cyan - navigation/compass color
       case IconType.special:
         return const Color(0xFF8B5CF6); // Violet - mystical night creatures
+      case IconType.game:
+        return const Color(0xFFFF4D6D); // Fire red/pink - for Frets on Fire
     }
   }
 

@@ -2,7 +2,7 @@ name: nautune
 description: "Nautune - Poseidon Music Player for Jellyfin"
 publish_to: 'none'
 
-version: 5.7.9+1
+version: 5.8.0+1
 
 environment:
   sdk: ^3.9.2
@@ -45,6 +45,7 @@ dependencies:
   flutter_colorpicker: ^1.1.0
   just_waveform: ^0.0.7  # iOS, macOS, Android waveform extraction
   url_launcher: ^6.2.5  # Open URLs in browser
+  fftea: ^1.1.0  # Pure Dart FFT/STFT for Frets on Fire chart generation
 
   # SyncPlay collaborative playlist
   web_socket_channel: ^3.0.1  # WebSocket for real-time sync

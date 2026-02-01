@@ -164,8 +164,9 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
     _lastFrameTime = now;
 
     // Musical smoothing: FAST attack, SLOW decay
+    // iOS needs faster decay since FFT values tend to stay elevated
     final attackFactor = useRealFFT ? 0.6 : 0.3;
-    final decayFactor = useRealFFT ? 0.12 : 0.08;
+    final decayFactor = useRealFFT ? (Platform.isIOS ? 0.25 : 0.12) : 0.08;
 
     smoothBass += (_targetBass - smoothBass) *
         (_targetBass > smoothBass ? attackFactor : decayFactor);

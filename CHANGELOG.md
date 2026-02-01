@@ -1,3 +1,23 @@
+### v5.8.0 - Frets on Fire Easter Egg + iOS Visualizer Fixes
+- **Frets on Fire**: New Guitar Hero-style rhythm game easter egg
+  - Search "fire" or "frets" in Library to discover
+  - **SuperFlux-inspired algorithm**: Uses moving maximum + moving average for accurate onset detection
+  - **BPM detection**: Auto-detects tempo and quantizes notes to actual beat grid (16th notes)
+  - **Pitch-based lane assignment**: Spectral centroid tracks melody - notes follow the song's pitch contour
+  - **Hybrid lane logic**: Bass/kick hits use frequency bands, melodic content uses pitch tracking
+  - **Album art in track selection**: See album covers when choosing which track to play
+  - **5-fret gameplay** with theme-derived colors (hue shifts from your primary color)
+  - Keyboard controls: 1-5 or F1-F5 on desktop, tap lanes on mobile
+  - **Real audio decoding**: FFmpeg on Linux/desktop, native AVFoundation on iOS
+  - Scoring matches original Frets on Fire: 50 pts per note, max 4x multiplier (at 30 combo)
+  - BPM-based timing windows (tighter at higher BPMs, like original)
+  - Charts cached for instant replay, supports 3+ hour DJ sets (caps at 3000 notes)
+  - **Profile stats**: Total songs, plays, notes hit, best score with track name displayed in fire-themed card
+  - **"Rock Star" Milestone**: Unlock a badge with game controller icon for discovering the easter egg
+- **iOS Visualizer Decay Fix**: Increased decay factor for iOS (0.25 vs 0.12) so spectrum/mirror bars properly fall back down
+- **iOS Native FFT**: Buffer pre-allocation and native throttling for smooth Essential Mix visualizer
+- **iOS Audio Decoder**: New native plugin for decoding audio files to PCM for chart generation
+
 ### v5.7.8 - iOS Native FFT Critical Performance Fix
 - **Native FFT Buffer Reuse**: Pre-allocate all FFT buffers once (was allocating 40KB+ per audio callback causing GC pressure)
   - 8 arrays totaling ~40KB now allocated once at init, reused every frame

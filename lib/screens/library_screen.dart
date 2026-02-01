@@ -32,6 +32,7 @@ import 'genre_detail_screen.dart';
 import 'offline_library_screen.dart';
 import 'collab_playlist_screen.dart';
 import 'essential_mix_screen.dart';
+import 'frets_on_fire_screen.dart';
 import 'relax_mode_screen.dart';
 import 'network_screen.dart';
 import 'playlist_detail_screen.dart';
@@ -4296,6 +4297,7 @@ class _SearchTabState extends State<_SearchTab> {
   bool _showRelaxEasterEgg = false;
   bool _showNetworkEasterEgg = false;
   bool _showEssentialEasterEgg = false;
+  bool _showFireEasterEgg = false;
   List<JellyfinAlbum> _albumResults = const [];
   List<JellyfinArtist> _artistResults = const [];
   List<JellyfinTrack> _trackResults = const [];
@@ -4382,6 +4384,7 @@ class _SearchTabState extends State<_SearchTab> {
         _showRelaxEasterEgg = false;
         _showNetworkEasterEgg = false;
         _showEssentialEasterEgg = false;
+        _showFireEasterEgg = false;
       });
       return;
     }
@@ -4392,6 +4395,7 @@ class _SearchTabState extends State<_SearchTab> {
       _showRelaxEasterEgg = lowerQuery.contains('relax');
       _showNetworkEasterEgg = lowerQuery.contains('network');
       _showEssentialEasterEgg = lowerQuery.contains('essential');
+      _showFireEasterEgg = lowerQuery.contains('fire') || lowerQuery.contains('frets');
     });
     unawaited(_rememberQuery(trimmed));
 
@@ -4666,7 +4670,8 @@ class _SearchTabState extends State<_SearchTab> {
                       _trackResults.isNotEmpty ||
                       _showRelaxEasterEgg ||
                       _showNetworkEasterEgg ||
-                      _showEssentialEasterEgg;
+                      _showEssentialEasterEgg ||
+                      _showFireEasterEgg;
 
     if (!hasResults) {
       return Center(
@@ -4690,6 +4695,9 @@ class _SearchTabState extends State<_SearchTab> {
         // Easter egg: Essential Mix card
         if (_showEssentialEasterEgg)
           _buildEssentialMixCard(theme),
+        // Easter egg: Frets on Fire card
+        if (_showFireEasterEgg)
+          _buildFretsOnFireCard(theme),
         // Artists section
         if (_artistResults.isNotEmpty) ...[
           _buildSectionHeader(theme, 'Artists', Icons.person, _artistResults.length),
@@ -4777,6 +4785,28 @@ class _SearchTabState extends State<_SearchTab> {
         trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white54),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (context) => const EssentialMixScreen()),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFretsOnFireCard(ThemeData theme) {
+    return Card(
+      color: Colors.deepOrange.shade900,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: const Icon(Icons.local_fire_department, color: Colors.orange),
+        title: const Text(
+          'Frets on Fire',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        subtitle: const Text(
+          'Guitar Hero-style rhythm game',
+          style: TextStyle(color: Colors.white70),
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white54),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const FretsOnFireScreen()),
         ),
       ),
     );
