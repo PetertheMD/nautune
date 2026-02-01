@@ -8,7 +8,7 @@
 - **ListenBrainz Integration**: Scrobble your plays and get personalized music recommendations
 - **Collaborative Playlists**: Real-time SyncPlay sessions - listen together with friends via QR code or share link
 - **Custom Color Theme**: Create your own theme with primary/secondary color picker
-- **Alternate App Icons**: Choose between Classic (purple) and Sunset (orange) icons across all platforms
+- **Alternate App Icons**: Choose between Classic (purple), Sunset (orange), Crimson (red), and Emerald (green) icons across all platforms
 - **10-Band Equalizer** (Linux): Full graphic EQ with 12 presets (Rock, Pop, Jazz, Classical, and more)
 - **5 Audio Visualizers**: Ocean Waves, Spectrum Bars, Mirror Bars, Radial, and Psychedelic styles
 - **Real-Time FFT**: True audio-reactive visualization using PulseAudio (Linux) and MTAudioProcessingTap (iOS)
@@ -191,8 +191,10 @@ A hidden feature to play the legendary 2-hour Soulwax/2ManyDJs BBC Essential Mix
 
 - **2-Hour Mix**: The full Soulwax/2ManyDJs BBC Radio 1 Essential Mix
 - **Download for Offline**: Download the 233MB audio file for offline listening
-- **Full Player Support**: Progress bar, artwork, and playback controls
-- **Visualizer Support**: FFT visualizer and waveform available when downloaded
+- **Radial Visualizer**: FFT bars radiate around album art with smooth, non-twitchy animations
+- **Seekable Waveform**: Waveform doubles as progress bar - tap or drag to seek
+- **Profile Badge**: BBC Radio 1 Essential Mix badge with archive.org aesthetic appears in your Profile
+- **iOS Low Power Mode**: Visualizer auto-disables when Low Power Mode is enabled to save battery
 - **"Essential Discovery" Milestone**: Unlock a badge for discovering this easter egg
 
 ### Storage Location

@@ -1,11 +1,15 @@
-### v5.7.0 - A-B Loop, Essential Mix & iOS FFT Tuning
+### v5.7.0 - A-B Loop, Essential Mix & Alternate Icons
 - **A-B Repeat Loop**: Set loop markers (A/B points) on downloaded/cached tracks to repeat a specific section
 - **Loop GUI Controls**: Long-press progress bar to access A/B marker buttons, visual loop region overlay, and loop toggle
 - **Loop TUI Controls**: `[` to set loop start (A), `]` to set loop end (B), `\` to clear loop markers
 - **Loop Auto-Clear**: Loop markers automatically reset when switching tracks
 - **Essential Mix Easter Egg**: Search "essential" to access the 2-hour Soulwax/2ManyDJs BBC Essential Mix (from archive.org)
-- **Essential Mix Offline**: Download the Essential Mix for offline playback with full visualizer and waveform support
+- **Essential Mix Radial Visualizer**: FFT visualizer radiates around album art with smooth animations
+- **Essential Mix Offline**: Download the Essential Mix for offline playback with visualizer, waveform, and seekable progress
+- **Essential Mix Profile Badge**: BBC Radio 1 Essential Mix badge appears in Profile with archive.org aesthetic
+- **Essential Mix Low Power Mode**: Visualizer auto-disables on iOS when Low Power Mode is enabled
 - **Essential Mix Discovery**: New "Essential Discovery" milestone unlocked when you find the easter egg
+- **New Alternate Icons**: Added Crimson (red) and Emerald (green) app icon options alongside Classic and Sunset
 - **iOS FFT Tuning**: Reduced iOS visualizer intensity by 20% for a calmer visual experience compared to Linux
 
 ### v5.6.4 - CarPlay & Background Playback Fixes
