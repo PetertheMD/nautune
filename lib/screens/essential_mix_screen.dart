@@ -59,11 +59,9 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
   static final double _decayFactor = Platform.isIOS ? 0.25 : 0.12;
   static const double _rotationSpeed = 0.02; // Radians per FFT frame
 
-  // Frame rate throttling for FFT updates
-  // iOS: 20fps (50ms) for battery optimization
-  // Other: 30fps (33ms)
+  // Frame rate throttling for FFT updates (~30fps)
   DateTime _lastFrameTime = DateTime.now();
-  static final _frameInterval = Duration(milliseconds: Platform.isIOS ? 50 : 33);
+  static const _frameInterval = Duration(milliseconds: 33);
 
   // Throttle position updates on iOS to reduce rebuilds
   DateTime _lastPositionUpdate = DateTime.now();
