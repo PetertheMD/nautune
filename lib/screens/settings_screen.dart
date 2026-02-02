@@ -178,6 +178,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _showVisualizerPicker(context),
                 ),
+              if (appState.visualizerEnabled)
+                ListTile(
+                  leading: Icon(appState.visualizerPosition.icon, color: theme.colorScheme.primary),
+                  title: const Text('Visualizer Position'),
+                  subtitle: Text(appState.visualizerPosition.description),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _showVisualizerPositionPicker(context),
+                ),
               ListTile(
                 leading: Icon(Icons.volume_up, color: theme.colorScheme.primary),
                 title: const Text('Volume Bar'),
@@ -524,6 +532,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (selected != null) {
       appState.setVisualizerType(selected);
     }
+  }
+
+  void _showVisualizerPositionPicker(BuildContext context) {
+    final appState = Provider.of<NautuneAppState>(context, listen: false);
+    final theme = Theme.of(context);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: theme.scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: 12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Visualizer Position',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            ...VisualizerPosition.values.map((position) {
+              final isSelected = position == appState.visualizerPosition;
+              return ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                        : theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    position.icon,
+                    color: isSelected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                title: Text(
+                  position.label,
+                  style: TextStyle(
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+                subtitle: Text(position.description),
+                trailing: isSelected
+                    ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
+                    : null,
+                onTap: () {
+                  appState.setVisualizerPosition(position);
+                  Navigator.pop(context);
+                },
+              );
+            }),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showThemePicker(BuildContext context) {

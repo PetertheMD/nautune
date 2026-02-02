@@ -99,6 +99,7 @@ class PlaybackState {
     // Visualizer
     this.visualizerEnabled = true,
     this.visualizerType = VisualizerType.bioluminescent,
+    this.visualizerPosition = VisualizerPosition.controlsBar,
     // Smart caching
     this.preCacheTrackCount = 3,  // 0 = off, 3, 5, or 10
     this.wifiOnlyCaching = false,
@@ -147,6 +148,7 @@ class PlaybackState {
   // Visualizer
   final bool visualizerEnabled;
   final VisualizerType visualizerType;
+  final VisualizerPosition visualizerPosition;
   // Smart caching
   final int preCacheTrackCount;  // 0 = off, 3, 5, or 10
   final bool wifiOnlyCaching;
@@ -193,6 +195,7 @@ class PlaybackState {
     bool? customThemeIsLight,
     bool? visualizerEnabled,
     VisualizerType? visualizerType,
+    VisualizerPosition? visualizerPosition,
     int? preCacheTrackCount,
     bool? wifiOnlyCaching,
     bool? isOfflineMode,
@@ -233,6 +236,7 @@ class PlaybackState {
       customThemeIsLight: customThemeIsLight ?? this.customThemeIsLight,
       visualizerEnabled: visualizerEnabled ?? this.visualizerEnabled,
       visualizerType: visualizerType ?? this.visualizerType,
+      visualizerPosition: visualizerPosition ?? this.visualizerPosition,
       preCacheTrackCount: preCacheTrackCount ?? this.preCacheTrackCount,
       wifiOnlyCaching: wifiOnlyCaching ?? this.wifiOnlyCaching,
       isOfflineMode: isOfflineMode ?? this.isOfflineMode,
@@ -276,6 +280,7 @@ class PlaybackState {
       'customThemeIsLight': customThemeIsLight,
       'visualizerEnabled': visualizerEnabled,
       'visualizerType': visualizerType.name,
+      'visualizerPosition': visualizerPosition.name,
       'preCacheTrackCount': preCacheTrackCount,
       'wifiOnlyCaching': wifiOnlyCaching,
       'isOfflineMode': isOfflineMode,
@@ -331,6 +336,7 @@ class PlaybackState {
       customThemeIsLight: json['customThemeIsLight'] as bool? ?? false,
       visualizerEnabled: json['visualizerEnabled'] as bool? ?? true,
       visualizerType: VisualizerTypeExtension.fromString(json['visualizerType'] as String?),
+      visualizerPosition: VisualizerPositionExtension.fromString(json['visualizerPosition'] as String?),
       preCacheTrackCount: (json['preCacheTrackCount'] as num?)?.toInt() ?? 3,
       wifiOnlyCaching: json['wifiOnlyCaching'] as bool? ?? false,
       isOfflineMode: json['isOfflineMode'] as bool? ?? false,
@@ -377,6 +383,7 @@ class PlaybackState {
       customThemeIsLight: customThemeIsLight,
       visualizerEnabled: visualizerEnabled, // Preserve visualizer preference
       visualizerType: visualizerType, // Preserve visualizer type
+      visualizerPosition: visualizerPosition, // Preserve visualizer position
       preCacheTrackCount: preCacheTrackCount, // Preserve smart cache settings
       wifiOnlyCaching: wifiOnlyCaching,
       gridSize: gridSize, // Preserve grid size preference

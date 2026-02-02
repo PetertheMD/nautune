@@ -76,3 +76,53 @@ extension VisualizerTypeExtension on VisualizerType {
     }
   }
 }
+
+/// Position where the visualizer can be displayed
+enum VisualizerPosition {
+  albumArt,     // Replaces album art when toggled
+  controlsBar,  // Current behavior: behind playback controls
+}
+
+extension VisualizerPositionExtension on VisualizerPosition {
+  /// Display label for the visualizer position
+  String get label {
+    switch (this) {
+      case VisualizerPosition.albumArt:
+        return 'Album Art';
+      case VisualizerPosition.controlsBar:
+        return 'Controls Bar';
+    }
+  }
+
+  /// Short description for the position option
+  String get description {
+    switch (this) {
+      case VisualizerPosition.albumArt:
+        return 'Tap album art to toggle visualizer';
+      case VisualizerPosition.controlsBar:
+        return 'Visualizer behind playback controls';
+    }
+  }
+
+  /// Icon for the visualizer position
+  IconData get icon {
+    switch (this) {
+      case VisualizerPosition.albumArt:
+        return Icons.album;
+      case VisualizerPosition.controlsBar:
+        return Icons.tune;
+    }
+  }
+
+  /// Parse from string (for persistence)
+  static VisualizerPosition fromString(String? value) {
+    switch (value) {
+      case 'albumArt':
+        return VisualizerPosition.albumArt;
+      case 'controlsBar':
+        return VisualizerPosition.controlsBar;
+      default:
+        return VisualizerPosition.controlsBar;
+    }
+  }
+}

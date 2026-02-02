@@ -15,7 +15,7 @@ import 'package:window_manager/window_manager.dart';
 import '../app_state.dart';
 import '../providers/syncplay_provider.dart';
 import '../services/lyrics_service.dart';
-import '../services/playback_state_store.dart' show StreamingQuality;
+import '../services/playback_state_store.dart' show StreamingQuality, VisualizerPosition;
 import '../jellyfin/jellyfin_album.dart';
 import '../jellyfin/jellyfin_artist.dart';
 import '../jellyfin/jellyfin_track.dart';
@@ -130,6 +130,10 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
   bool _showLoopControls = false;
   bool _showLoopButton = false; // Toggle visibility of A-B Loop button (off by default)
 
+  // Visualizer in album art toggle state
+  bool _showingVisualizerInArtwork = false;
+  String? _lastTrackIdForVisualizerReset; // Track ID to detect track changes
+
   @override
   void initState() {
     super.initState();
@@ -149,7 +153,13 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     if (_trackSub == null) {
       _trackSub = _audioService.currentTrackStream.listen((track) {
         if (mounted) {
-          setState(() {});
+          setState(() {
+            // Reset visualizer toggle on track change (show album art for new track)
+            if (track?.id != _lastTrackIdForVisualizerReset) {
+              _showingVisualizerInArtwork = false;
+              _lastTrackIdForVisualizerReset = track?.id;
+            }
+          });
           if (track != null) {
             _fetchLyrics(track);
             _extractColors(track);
@@ -769,6 +779,96 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     return '${date.day}/${date.month}/${date.year}';
   }
 
+  /// Toggle visualizer display in album art area
+  void _toggleVisualizerInArtwork() {
+    HapticService.mediumTap();
+    setState(() {
+      _showingVisualizerInArtwork = !_showingVisualizerInArtwork;
+    });
+  }
+
+  /// Build artwork container with optional visualizer toggle (when position is albumArt)
+  Widget _buildArtworkVisualizerContainer({
+    required Widget artwork,
+    required bool isDesktop,
+    required ThemeData theme,
+  }) {
+    final visualizerEnabled = _appState.visualizerEnabled;
+    final visualizerPosition = _appState.visualizerPosition;
+    final isAlbumArtPosition = visualizerPosition == VisualizerPosition.albumArt;
+
+    // If visualizer is disabled or position is controlsBar, just return the artwork
+    if (!visualizerEnabled || !isAlbumArtPosition || widget.sailorMode) {
+      return artwork;
+    }
+
+    final borderRadius = BorderRadius.circular(isDesktop ? 24 : 16);
+
+    return GestureDetector(
+      onTap: _toggleVisualizerInArtwork,
+      onHorizontalDragEnd: (details) {
+        // Toggle on swipe if velocity is sufficient
+        if (details.primaryVelocity != null && details.primaryVelocity!.abs() > 200) {
+          _toggleVisualizerInArtwork();
+        }
+      },
+      child: Stack(
+        children: [
+          // Album artwork layer with fade
+          AnimatedOpacity(
+            opacity: _showingVisualizerInArtwork ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: artwork,
+          ),
+          // Visualizer layer with fade (higher opacity when in album art position)
+          AnimatedOpacity(
+            opacity: _showingVisualizerInArtwork ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: ClipRRect(
+              borderRadius: borderRadius,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: borderRadius,
+                  color: theme.colorScheme.surface,
+                ),
+                child: RepaintBoundary(
+                  child: VisualizerFactory(
+                    type: _appState.visualizerType,
+                    audioService: _audioService,
+                    opacity: 0.9, // Higher opacity for album art position
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Mode indicator icon (bottom-right corner)
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: AnimatedOpacity(
+              opacity: 0.7,
+              duration: const Duration(milliseconds: 200),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _showingVisualizerInArtwork ? Icons.album : Icons.equalizer,
+                  color: Colors.white,
+                  size: isDesktop ? 24 : 20,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return;
 
@@ -1148,8 +1248,15 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
           );
         }
 
-        final artwork = _buildArtwork(
+        final baseArtwork = _buildArtwork(
           track: track,
+          isDesktop: isDesktop,
+          theme: theme,
+        );
+
+        // Wrap artwork with visualizer container if position is albumArt
+        final artwork = _buildArtworkVisualizerContainer(
+          artwork: baseArtwork,
           isDesktop: isDesktop,
           theme: theme,
         );
@@ -2079,8 +2186,11 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                   Stack(
                     children: [
                       // Visualizer behind controls (disabled for Sailors - no audio)
+                      // Only shown when visualizerPosition is controlsBar
                       // Wrapped in RepaintBoundary to isolate repaints from parent layout
-                      if (_appState.visualizerEnabled && !widget.sailorMode)
+                      if (_appState.visualizerEnabled &&
+                          !widget.sailorMode &&
+                          _appState.visualizerPosition == VisualizerPosition.controlsBar)
                         Positioned.fill(
                           child: RepaintBoundary(
                             child: VisualizerFactory(

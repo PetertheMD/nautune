@@ -7,7 +7,7 @@ import '../jellyfin/jellyfin_track.dart';
 import '../models/playback_state.dart';
 import '../models/visualizer_type.dart';
 export '../models/playback_state.dart' show StreamingQuality, StreamingQualityExtension;
-export '../models/visualizer_type.dart' show VisualizerType, VisualizerTypeExtension;
+export '../models/visualizer_type.dart' show VisualizerType, VisualizerTypeExtension, VisualizerPosition, VisualizerPositionExtension;
 
 class PlaybackStateStore {
   static const _boxName = 'nautune_playback';
@@ -159,6 +159,7 @@ class PlaybackStateStore {
     bool? customThemeIsLight,
     bool? visualizerEnabled,
     VisualizerType? visualizerType,
+    VisualizerPosition? visualizerPosition,
     int? preCacheTrackCount,
     bool? wifiOnlyCaching,
     bool? isOfflineMode,
@@ -192,6 +193,7 @@ class PlaybackStateStore {
         customThemeIsLight: customThemeIsLight ?? state.customThemeIsLight,
         visualizerEnabled: visualizerEnabled ?? state.visualizerEnabled,
         visualizerType: visualizerType ?? state.visualizerType,
+        visualizerPosition: visualizerPosition ?? state.visualizerPosition,
         preCacheTrackCount: preCacheTrackCount ?? state.preCacheTrackCount,
         wifiOnlyCaching: wifiOnlyCaching ?? state.wifiOnlyCaching,
         isOfflineMode: isOfflineMode ?? state.isOfflineMode,
