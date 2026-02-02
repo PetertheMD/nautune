@@ -1,3 +1,16 @@
+### v5.8.4 - Essential Mix iOS Visualizer Fix
+- **Critical iOS Fix**: Essential Mix visualizer now properly responds to music on iOS
+  - Root cause: `IOSFFTService.instance.initialize()` was never called (Essential Mix uses its own AudioPlayer, not AudioPlayerService)
+  - `setAudioUrl()` and `startCapture()` were silently returning early due to uninitialized service
+- **Low Power Mode**: Proper PowerModeService initialization with async await
+  - Visualizer ON by default, only disables when Low Power Mode is active
+  - State changes only trigger rebuild when actually changed
+- **iOS Battery Optimizations**:
+  - FFT sync timer reduced from 0.5s to 1.0s (shadow player sync, not audio)
+  - SpectrumRadialVisualizer: threshold-based shouldRepaint (was always repainting)
+  - ButterchurnVisualizer: threshold-based shouldRepaint (was always repainting)
+  - Download progress throttled to 5% increments (was rebuilding on every tick)
+
 ### v5.8.0 - Frets on Fire Easter Egg + iOS Visualizer Fixes
 - **Frets on Fire**: New Guitar Hero-style rhythm game easter egg
   - Search "fire" or "frets" in Library to discover

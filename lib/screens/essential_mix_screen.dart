@@ -175,8 +175,19 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
     // Ensure PowerModeService is initialized before checking state
     await powerService.initialize();
 
+    if (!mounted) return;
+
     // Check initial state - visualizer ON by default, OFF only if low power mode
-    _visualizerEnabled = !powerService.isLowPowerMode;
+    final isLowPower = powerService.isLowPowerMode;
+    if (isLowPower) {
+      setState(() {
+        _visualizerEnabled = false;
+      });
+      // Stop FFT if already playing
+      if (_isPlaying) {
+        _stopFFT(resetLevels: true);
+      }
+    }
 
     // Listen for changes
     _powerModeSubscription = powerService.lowPowerModeStream.listen((isLowPower) {
