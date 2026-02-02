@@ -6,6 +6,8 @@
 
 - **Your Rewind**: Spotify Wrapped-style yearly listening reports with shareable exports
 - **ListenBrainz Integration**: Scrobble your plays and get personalized music recommendations (matches via MusicBrainz IDs for reliable library matching)
+- **Popular Tracks**: Artist pages show top 5 most popular tracks globally with dynamic accent colors, album pages highlight popular songs with flame icons (powered by ListenBrainz)
+- **Artist Page Redesign**: Dynamic gradient backgrounds extracted from artist artwork, expandable bio cards, compact album grid layout
 - **Collaborative Playlists**: Real-time SyncPlay sessions - listen together with friends via QR code or share link
 - **Custom Color Theme**: Create your own theme with primary/secondary color picker
 - **Alternate App Icons**: Choose between Classic (purple), Sunset (orange), Crimson (red), and Emerald (green) icons across all platforms

@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../jellyfin/jellyfin_album.dart';
 import '../jellyfin/jellyfin_track.dart';
+import '../services/listenbrainz_service.dart';
 import '../services/share_service.dart';
 import '../widgets/add_to_playlist_dialog.dart';
 import '../widgets/jellyfin_image.dart';
@@ -70,6 +71,10 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
   bool? _previousOfflineMode;
   bool? _previousNetworkAvailable;
   bool _hasInitialized = false;
+
+  // Track popularity data from ListenBrainz (recording MBID -> listen count)
+  Map<String, int>? _trackPopularities;
+  static const int _popularityThreshold = 1000;
 
   @override
   void initState() {
@@ -234,6 +239,8 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
           _tracks = sorted;
           _isLoading = false;
         });
+        // Load track popularities in background (non-blocking)
+        _loadTrackPopularities(sorted);
       }
     } catch (error) {
       if (mounted) {
@@ -242,6 +249,43 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _loadTrackPopularities(List<JellyfinTrack> tracks) async {
+    // Skip if offline or no network
+    if (_appState == null || _appState!.isOfflineMode || !_appState!.networkAvailable) {
+      return;
+    }
+
+    // Collect MBIDs from tracks
+    final mbids = <String>[];
+    for (final track in tracks) {
+      final mbid = track.providerIds?['MusicBrainzTrack'];
+      if (mbid != null && mbid.isNotEmpty) {
+        mbids.add(mbid);
+      }
+    }
+
+    if (mbids.isEmpty) {
+      debugPrint('AlbumDetailScreen: No MusicBrainz IDs for tracks');
+      return;
+    }
+
+    try {
+      final listenbrainz = ListenBrainzService();
+      final popularities = await listenbrainz.getRecordingPopularities(
+        recordingMbids: mbids,
+      );
+
+      if (mounted && popularities.isNotEmpty) {
+        setState(() {
+          _trackPopularities = popularities;
+        });
+        debugPrint('AlbumDetailScreen: Loaded popularities for ${popularities.length} tracks');
+      }
+    } catch (e) {
+      debugPrint('AlbumDetailScreen: Error loading track popularities: $e');
     }
   }
 
@@ -617,6 +661,8 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                           track: track,
                           displayTrackNumber: displayNumber,
                           appState: _appState!,
+                          listenCount: _trackPopularities?[track.providerIds?['MusicBrainzTrack']],
+                          popularityThreshold: _popularityThreshold,
                           onTap: () async {
                             try {
                               await _appState!.audioPlayerService
@@ -671,12 +717,16 @@ class _TrackTile extends StatelessWidget {
     required this.displayTrackNumber,
     required this.onTap,
     required this.appState,
+    this.listenCount,
+    this.popularityThreshold = 1000,
   });
 
   final JellyfinTrack track;
   final String displayTrackNumber;
   final VoidCallback onTap;
   final NautuneAppState appState;
+  final int? listenCount;
+  final int popularityThreshold;
 
   @override
   Widget build(BuildContext context) {
@@ -719,7 +769,21 @@ class _TrackTile extends StatelessWidget {
                             textAlign: TextAlign.center,
                           ),
                   ),
-                  const SizedBox(width: 16),
+                  // Flame icon for popular tracks
+                  if (listenCount != null && listenCount! >= popularityThreshold)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Tooltip(
+                        message: '${_formatNumber(listenCount!)} plays on ListenBrainz',
+                        child: Icon(
+                          Icons.local_fire_department,
+                          size: 16,
+                          color: Colors.orange,
+                        ),
+                      ),
+                    )
+                  else
+                    const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1044,6 +1108,15 @@ class _TrackTile extends StatelessWidget {
       return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
     }
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  String _formatNumber(int number) {
+    if (number >= 1000000) {
+      return '${(number / 1000000).toStringAsFixed(1)}M';
+    } else if (number >= 1000) {
+      return '${(number / 1000).toStringAsFixed(1)}K';
+    }
+    return number.toString();
   }
 }
 

@@ -129,3 +129,72 @@ class ListenBrainzRecommendation {
     );
   }
 }
+
+/// A popular track from ListenBrainz global popularity data
+class PopularTrack {
+  final String recordingMbid;
+  final String recordingName;
+  final String? artistName;
+  final List<String>? artistMbids;
+  final String? releaseMbid;
+  final String? releaseName;
+  final int totalListenCount;
+  final int totalUserCount;
+  final int? lengthMs;
+  final int? caaId;
+
+  PopularTrack({
+    required this.recordingMbid,
+    required this.recordingName,
+    this.artistName,
+    this.artistMbids,
+    this.releaseMbid,
+    this.releaseName,
+    required this.totalListenCount,
+    required this.totalUserCount,
+    this.lengthMs,
+    this.caaId,
+  });
+
+  /// Get cover art URL from Cover Art Archive
+  String? get coverArtUrl => releaseMbid != null
+      ? 'https://coverartarchive.org/release/$releaseMbid/front-250'
+      : null;
+
+  Duration? get duration =>
+      lengthMs != null ? Duration(milliseconds: lengthMs!) : null;
+
+  factory PopularTrack.fromJson(Map<String, dynamic> json) {
+    final artistMbids = json['artist_mbids'];
+    List<String>? artistMbidsList;
+    if (artistMbids is List) {
+      artistMbidsList = artistMbids.whereType<String>().toList();
+    }
+
+    return PopularTrack(
+      recordingMbid: json['recording_mbid'] as String? ?? '',
+      recordingName: json['recording_name'] as String? ?? '',
+      artistName: json['artist_name'] as String?,
+      artistMbids: artistMbidsList,
+      releaseMbid: json['release_mbid'] as String?,
+      releaseName: json['release_name'] as String?,
+      totalListenCount: (json['total_listen_count'] as num?)?.toInt() ?? 0,
+      totalUserCount: (json['total_user_count'] as num?)?.toInt() ?? 0,
+      lengthMs: (json['length'] as num?)?.toInt(),
+      caaId: (json['caa_id'] as num?)?.toInt(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'recording_mbid': recordingMbid,
+    'recording_name': recordingName,
+    'artist_name': artistName,
+    'artist_mbids': artistMbids,
+    'release_mbid': releaseMbid,
+    'release_name': releaseName,
+    'total_listen_count': totalListenCount,
+    'total_user_count': totalUserCount,
+    'length': lengthMs,
+    'caa_id': caaId,
+  };
+}

@@ -1,3 +1,34 @@
+### v6.3.0 - Popular Tracks & Artist Page Redesign
+
+**Artist Page: Top Tracks Section**
+- **Top 5 Popular Tracks**: Artist pages now show a "Popular" section with the artist's most globally played songs
+- **ListenBrainz Integration**: Popularity data fetched from ListenBrainz global listening statistics
+- **Library Matching**: Popular tracks matched to your Jellyfin library by MusicBrainz ID or fuzzy name matching
+- **Play from Section**: Tap any top track to start playback with the top tracks as your queue
+- **Accent Styling**: Top 3 tracks highlighted with dynamic accent colors extracted from artist image
+
+**Artist Page: Visual Redesign**
+- **Dynamic Gradient Background**: Colors extracted from artist image create a personalized header gradient
+- **Centered Artist Info**: Clean, centered layout with artist name, stats, and genre tags
+- **Expandable Bio Card**: Artist biography in a collapsible card with smooth animation
+- **Improved Album Grid**: Compact 3-column layout with subtle shadows and refined typography
+- **Section Headers**: "Popular" and "Discography" sections with icons for better visual hierarchy
+- **Styled Action Buttons**: Back and Instant Mix buttons with semi-transparent backgrounds
+
+**Album Page: Popular Track Indicators**
+- **Flame Icons**: Popular tracks (1000+ global plays) display a flame icon next to the track number
+- **Tooltip with Play Count**: Hover or long-press the flame to see the exact play count (formatted as K/M)
+- **Batch Popularity Lookup**: All album tracks checked in a single API call for efficiency
+
+**Technical Details**
+- **Color Extraction**: Isolate-based palette extraction from artist artwork for gradient backgrounds
+- **ListenBrainz Popularity API**: Uses `/1/popularity/top-recordings-for-artist` and `/1/popularity/recording` endpoints
+- **7-Day Caching**: Popularity data cached in Hive to reduce API calls
+- **MusicBrainz Artist IDs**: Added `providerIds` field to JellyfinArtist model for MBID lookups
+- **Non-Blocking**: All loading happens in the background, doesn't slow down page rendering
+
+---
+
 ### v6.2.0 - Visualizer in Album Art
 
 **New Visualizer Position Setting**

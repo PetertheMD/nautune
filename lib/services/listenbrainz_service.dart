@@ -27,6 +27,11 @@ class ListenBrainzService {
   // Cache for MusicBrainz recording metadata (MBID -> {trackName, artistName})
   static final Map<String, Map<String, String>> _mbMetadataCache = {};
 
+  // Cache for popularity data (expires after 7 days)
+  static const _popularityCacheBoxName = 'listenbrainz_popularity_cache';
+  static const _popularityCacheTtlDays = 7;
+  Box? _popularityCacheBox;
+
   // Singleton
   static final ListenBrainzService _instance = ListenBrainzService._internal();
   factory ListenBrainzService() => _instance;
@@ -148,6 +153,7 @@ class ListenBrainzService {
 
     try {
       _box = await Hive.openBox(_boxName);
+      _popularityCacheBox = await Hive.openBox(_popularityCacheBoxName);
       await _loadConfig();
       await _loadPendingScrobbles();
       _initialized = true;
@@ -910,6 +916,268 @@ class ListenBrainzService {
     } catch (e) {
       debugPrint('ListenBrainzService: Recent listens error: $e');
       return [];
+    }
+  }
+
+  // ===== POPULARITY API METHODS =====
+
+  /// Get an artist's top tracks globally from ListenBrainz popularity API
+  /// Endpoint: GET /1/popularity/top-recordings-for-artist/{artist_mbid}
+  /// Note: This endpoint does not require authentication
+  Future<List<PopularTrack>> getArtistTopTracks({
+    required String artistMbid,
+    int limit = 10,
+  }) async {
+    if (!_initialized) await initialize();
+    if (artistMbid.isEmpty) return [];
+
+    // Check cache first
+    final cacheKey = 'artist_top_tracks_$artistMbid';
+    final cached = _getPopularityCache<List<dynamic>>(cacheKey);
+    if (cached != null) {
+      debugPrint('ListenBrainzService: Using cached top tracks for artist $artistMbid');
+      return cached
+          .whereType<Map<String, dynamic>>()
+          .map((json) => PopularTrack.fromJson(json))
+          .take(limit)
+          .toList();
+    }
+
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/popularity/top-recordings-for-artist/$artistMbid'),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> recordings;
+
+        // API can return list directly or wrapped in an object
+        if (data is List) {
+          recordings = data;
+        } else if (data is Map && data['recordings'] is List) {
+          recordings = data['recordings'] as List;
+        } else {
+          recordings = [];
+        }
+
+        // Cache the raw response
+        if (recordings.isNotEmpty) {
+          _setPopularityCache(cacheKey, recordings);
+        }
+
+        final tracks = recordings
+            .whereType<Map<String, dynamic>>()
+            .map((json) => PopularTrack.fromJson(json))
+            .take(limit)
+            .toList();
+
+        debugPrint('ListenBrainzService: Got ${tracks.length} top tracks for artist $artistMbid');
+        return tracks;
+      } else {
+        debugPrint('ListenBrainzService: Top tracks request failed: ${response.statusCode}');
+        return [];
+      }
+    } on TimeoutException {
+      debugPrint('ListenBrainzService: Top tracks request timed out');
+      return [];
+    } catch (e) {
+      debugPrint('ListenBrainzService: Top tracks error: $e');
+      return [];
+    }
+  }
+
+  /// Batch lookup track popularity by recording MBIDs
+  /// Endpoint: POST /1/popularity/recording
+  /// Returns a map of recording MBID -> total listen count
+  Future<Map<String, int>> getRecordingPopularities({
+    required List<String> recordingMbids,
+  }) async {
+    if (!_initialized) await initialize();
+    if (recordingMbids.isEmpty) return {};
+
+    // Filter out empty MBIDs
+    final validMbids = recordingMbids.where((m) => m.isNotEmpty).toList();
+    if (validMbids.isEmpty) return {};
+
+    // Check cache for each MBID and collect uncached ones
+    final result = <String, int>{};
+    final uncachedMbids = <String>[];
+
+    for (final mbid in validMbids) {
+      final cached = _getPopularityCache<int>('recording_popularity_$mbid');
+      if (cached != null) {
+        result[mbid] = cached;
+      } else {
+        uncachedMbids.add(mbid);
+      }
+    }
+
+    if (uncachedMbids.isEmpty) {
+      debugPrint('ListenBrainzService: All ${validMbids.length} recording popularities from cache');
+      return result;
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/popularity/recording'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'recording_mbids': uncachedMbids}),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> recordings;
+
+        if (data is List) {
+          recordings = data;
+        } else if (data is Map && data['recordings'] is List) {
+          recordings = data['recordings'] as List;
+        } else {
+          recordings = [];
+        }
+
+        for (final item in recordings) {
+          if (item is Map<String, dynamic>) {
+            final mbid = item['recording_mbid'] as String?;
+            final count = item['total_listen_count'];
+            if (mbid != null && count != null) {
+              final listenCount = (count is num) ? count.toInt() : 0;
+              result[mbid] = listenCount;
+              _setPopularityCache('recording_popularity_$mbid', listenCount);
+            }
+          }
+        }
+
+        debugPrint('ListenBrainzService: Got popularities for ${recordings.length} recordings');
+        return result;
+      } else {
+        debugPrint('ListenBrainzService: Recording popularity request failed: ${response.statusCode}');
+        return result;
+      }
+    } on TimeoutException {
+      debugPrint('ListenBrainzService: Recording popularity request timed out');
+      return result;
+    } catch (e) {
+      debugPrint('ListenBrainzService: Recording popularity error: $e');
+      return result;
+    }
+  }
+
+  /// Match popular tracks to Jellyfin library tracks
+  Future<List<JellyfinTrack>> matchPopularTracksToLibrary({
+    required List<PopularTrack> popularTracks,
+    required JellyfinService jellyfin,
+    required String libraryId,
+    int maxResults = 5,
+  }) async {
+    final matched = <JellyfinTrack>[];
+
+    for (final pop in popularTracks) {
+      if (matched.length >= maxResults) break;
+
+      JellyfinTrack? track;
+
+      // Try searching by track name first
+      if (pop.recordingName.isNotEmpty) {
+        final tracks = await jellyfin.searchTracks(
+          libraryId: libraryId,
+          query: pop.recordingName,
+        );
+
+        // Primary match: MBID
+        for (final t in tracks) {
+          final trackMbid = t.providerIds?['MusicBrainzTrack'];
+          if (trackMbid == pop.recordingMbid) {
+            track = t;
+            debugPrint('ListenBrainzService: ✓ MBID match for "${pop.recordingName}"');
+            break;
+          }
+        }
+
+        // Fallback: fuzzy name + artist match
+        if (track == null && pop.artistName != null) {
+          final popTrackLower = pop.recordingName.toLowerCase();
+          final popArtistLower = pop.artistName!.toLowerCase();
+
+          for (final t in tracks) {
+            final trackNameLower = t.name.toLowerCase();
+            final nameMatch = trackNameLower == popTrackLower ||
+                trackNameLower.contains(popTrackLower) ||
+                popTrackLower.contains(trackNameLower);
+
+            final artistMatch = t.artists.any((a) {
+              final aLower = a.toLowerCase();
+              return aLower == popArtistLower ||
+                  aLower.contains(popArtistLower) ||
+                  popArtistLower.contains(aLower);
+            });
+
+            if (nameMatch && artistMatch) {
+              track = t;
+              debugPrint('ListenBrainzService: ✓ Name match for "${pop.recordingName}"');
+              break;
+            }
+          }
+        }
+      }
+
+      if (track != null && !matched.any((t) => t.id == track!.id)) {
+        matched.add(track);
+      }
+    }
+
+    debugPrint('ListenBrainzService: Matched ${matched.length}/$maxResults popular tracks to library');
+    return matched;
+  }
+
+  // ===== POPULARITY CACHE HELPERS =====
+
+  T? _getPopularityCache<T>(String key) {
+    if (_popularityCacheBox == null) return null;
+
+    try {
+      final rawEntry = _popularityCacheBox!.get(key);
+      if (rawEntry == null) return null;
+
+      Map<String, dynamic> entry;
+      if (rawEntry is String) {
+        entry = Map<String, dynamic>.from(jsonDecode(rawEntry) as Map);
+      } else if (rawEntry is Map) {
+        entry = Map<String, dynamic>.from(rawEntry);
+      } else {
+        return null;
+      }
+
+      final timestamp = entry['timestamp'] as int?;
+      if (timestamp == null) return null;
+
+      final cachedAt = DateTime.fromMillisecondsSinceEpoch(timestamp);
+      final age = DateTime.now().difference(cachedAt);
+      if (age.inDays > _popularityCacheTtlDays) {
+        // Expired
+        _popularityCacheBox!.delete(key);
+        return null;
+      }
+
+      return entry['data'] as T?;
+    } catch (e) {
+      debugPrint('ListenBrainzService: Cache read error for $key: $e');
+      return null;
+    }
+  }
+
+  void _setPopularityCache(String key, dynamic data) {
+    if (_popularityCacheBox == null) return;
+
+    try {
+      final entry = {
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'data': data,
+      };
+      _popularityCacheBox!.put(key, jsonEncode(entry));
+    } catch (e) {
+      debugPrint('ListenBrainzService: Cache write error for $key: $e');
     }
   }
 }

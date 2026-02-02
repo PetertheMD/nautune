@@ -229,7 +229,7 @@ class JellyfinClient {
       'Recursive': 'true',
       'SortBy': sortBy,
       'SortOrder': sortOrder,
-      'Fields': 'PrimaryImageAspectRatio,ImageTags,Overview,Genres,ChildCount,SongCount',
+      'Fields': 'PrimaryImageAspectRatio,ImageTags,Overview,Genres,ChildCount,SongCount,ProviderIds',
       'StartIndex': startIndex.toString(),
       'Limit': limit.toString(),
     });
@@ -638,7 +638,7 @@ class JellyfinClient {
       'Recursive': 'true',
       'SearchTerm': query,
       'SortBy': 'SortName',
-      'Fields': 'ImageTags,Overview,Genres,ChildCount,SongCount',
+      'Fields': 'ImageTags,Overview,Genres,ChildCount,SongCount,ProviderIds',
     });
 
     final response = await _robustClient.get(

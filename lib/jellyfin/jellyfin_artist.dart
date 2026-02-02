@@ -8,6 +8,7 @@ class JellyfinArtist {
     this.albumCount,
     this.songCount,
     this.playCount,
+    this.providerIds,
   });
 
   final String id;
@@ -18,6 +19,7 @@ class JellyfinArtist {
   final int? albumCount;
   final int? songCount;
   final int? playCount;
+  final Map<String, String>? providerIds;
 
   factory JellyfinArtist.fromJson(Map<String, dynamic> json) {
     final imageTags = json['ImageTags'];
@@ -44,6 +46,19 @@ class JellyfinArtist {
       }
     }
 
+    // Parse provider IDs (MusicBrainz, etc.)
+    Map<String, String>? providerIds;
+    final rawProviderIds = json['ProviderIds'];
+    if (rawProviderIds is Map) {
+      providerIds = {};
+      rawProviderIds.forEach((key, value) {
+        if (key is String && value != null) {
+          providerIds![key] = value.toString();
+        }
+      });
+      if (providerIds.isEmpty) providerIds = null;
+    }
+
     return JellyfinArtist(
       id: json['Id'] is String ? json['Id'] as String : '',
       name: json['Name'] is String ? json['Name'] as String : '',
@@ -53,6 +68,7 @@ class JellyfinArtist {
       albumCount: albumCount,
       songCount: songCount,
       playCount: playCount,
+      providerIds: providerIds,
     );
   }
 
@@ -65,6 +81,7 @@ class JellyfinArtist {
       if (genres != null) 'Genres': genres,
       'ChildCount': albumCount,
       'SongCount': songCount,
+      if (providerIds != null) 'ProviderIds': providerIds,
     };
   }
 }
