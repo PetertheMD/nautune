@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'dart:math' show Random, max, pi, cos, sin;
+import 'dart:math' show Random, max;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +14,9 @@ import '../models/download_item.dart';
 import '../providers/demo_mode_provider.dart';
 import '../services/chart_cache_service.dart';
 import '../services/chart_generator_service.dart';
+import '../services/ios_fft_service.dart';
 import '../services/listening_analytics_service.dart';
+import '../services/pulseaudio_fft_service.dart';
 import '../widgets/jellyfin_image.dart';
 
 /// Frets on Fire - Guitar Hero style rhythm game easter egg.
@@ -67,8 +69,6 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
   DateTime? _hitFeedbackTime;
   int? _hitFeedbackLane;
 
-  // Particle effects
-  final List<_Particle> _particles = [];
   final Random _random = Random();
 
   // Animation
@@ -94,6 +94,13 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
   // Lane states for visual feedback (5 frets like original)
   final List<bool> _lanePressed = [false, false, false, false, false];
   final List<DateTime?> _laneHitTime = [null, null, null, null, null];
+
+  // FFT spectrum visualizer - each lane acts as a spectrum band
+  StreamSubscription? _fftSubscription;
+  final List<double> _laneBands = [0.0, 0.0, 0.0, 0.0, 0.0]; // Raw FFT values per lane
+  final List<double> _smoothBands = [0.0, 0.0, 0.0, 0.0, 0.0]; // Smoothed for display
+  static const double _fftAttack = 0.5; // Fast rise
+  static const double _fftDecay = 0.15; // Slow fall
 
   // Legendary track unlock state
   bool _showLegendaryUnlock = false;
@@ -164,6 +171,7 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
 
   @override
   void dispose() {
+    _stopFFTCapture();
     _noteController.dispose();
     _multiplierPulseController.dispose();
     _milestoneFlashController.dispose();
@@ -177,8 +185,15 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
 
     final currentMs = _position.inMilliseconds;
 
-    // Update particle effects
-    _updateParticles();
+    // Update FFT smooth bands with asymmetric smoothing (fast attack, slow decay)
+    for (int i = 0; i < 5; i++) {
+      final target = _laneBands[i].clamp(0.0, 1.0);
+      if (target > _smoothBands[i]) {
+        _smoothBands[i] += (target - _smoothBands[i]) * _fftAttack;
+      } else {
+        _smoothBands[i] += (target - _smoothBands[i]) * _fftDecay;
+      }
+    }
 
     // Check bonus expiry
     _checkBonusExpiry();
@@ -212,18 +227,6 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
     if (mounted) setState(() {});
   }
 
-  void _updateParticles() {
-    final now = DateTime.now();
-    _particles.removeWhere((p) => now.difference(p.createdAt).inMilliseconds > p.lifetimeMs);
-    for (final p in _particles) {
-      final age = now.difference(p.createdAt).inMilliseconds;
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += 0.2; // gravity
-      p.opacity = 1.0 - (age / p.lifetimeMs);
-    }
-  }
-
   void _checkBonusExpiry() {
     if (_bonusExpiry != null && DateTime.now().isAfter(_bonusExpiry!)) {
       _activeBonus = null;
@@ -245,7 +248,6 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
       if (diff <= 50 && diff >= -50) {
         // Auto-hit with perfect timing
         _hitNote(_lightningLane!, true);
-        _spawnParticles(_lightningLane!, isLightning: true);
         if (i == _nextNoteIndex) _nextNoteIndex++;
       } else if (diff > 50) {
         break;
@@ -288,28 +290,20 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
     _combo++;
     _maxCombo = max(_maxCombo, _combo);
 
-    // Spawn hit particles
-    _spawnParticles(lane);
-
     // Multiplier milestones like original: 10→2x, 20→3x, 30→4x (max 4x)
     if (_combo == 10) {
       _multiplier = 2;
       _triggerMilestone('ON FIRE!');
-      _spawnMilestoneParticles();
     } else if (_combo == 20) {
       _multiplier = 3;
       _triggerMilestone('BLAZING!');
-      _spawnMilestoneParticles();
     } else if (_combo == 30) {
       _multiplier = 4;
       _triggerMilestone('INFERNO!');
-      _spawnMilestoneParticles();
     } else if (_combo == 50) {
       _triggerMilestone('LEGENDARY!');
-      _spawnMilestoneParticles();
     } else if (_combo == 100) {
       _triggerMilestone('GODLIKE!');
-      _spawnMilestoneParticles();
     }
 
     // Start/maintain streak fire effect and multiplier pulse
@@ -328,46 +322,6 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
     _hitFeedbackColor = color;
     _hitFeedbackTime = DateTime.now();
     _hitFeedbackLane = lane;
-  }
-
-  void _spawnParticles(int lane, {bool isLightning = false}) {
-    final laneX = (lane + 0.5) / 5.0; // Normalized X position
-    final particleCount = isLightning ? 12 : 6;
-    final color = isLightning ? const Color(0xFF00BFFF) : const Color(0xFFFF6B35);
-
-    for (int i = 0; i < particleCount; i++) {
-      final angle = _random.nextDouble() * 2 * pi;
-      final speed = 2.0 + _random.nextDouble() * 4.0;
-      _particles.add(_Particle(
-        x: laneX,
-        y: 0.85, // Hit line position
-        vx: cos(angle) * speed * 0.01,
-        vy: -sin(angle).abs() * speed * 0.015, // Always go up initially
-        color: color,
-        size: isLightning ? 4.0 + _random.nextDouble() * 3.0 : 2.0 + _random.nextDouble() * 2.0,
-        lifetimeMs: 400 + _random.nextInt(200),
-        createdAt: DateTime.now(),
-      ));
-    }
-  }
-
-  void _spawnMilestoneParticles() {
-    // Spawn a burst of particles across the screen
-    for (int i = 0; i < 30; i++) {
-      final x = _random.nextDouble();
-      final angle = _random.nextDouble() * 2 * pi;
-      final speed = 3.0 + _random.nextDouble() * 5.0;
-      _particles.add(_Particle(
-        x: x,
-        y: 0.5,
-        vx: cos(angle) * speed * 0.015,
-        vy: sin(angle) * speed * 0.015,
-        color: Color.lerp(const Color(0xFFFF6B35), const Color(0xFFFFD700), _random.nextDouble())!,
-        size: 3.0 + _random.nextDouble() * 4.0,
-        lifetimeMs: 600 + _random.nextInt(400),
-        createdAt: DateTime.now(),
-      ));
-    }
   }
 
   void _collectBonus(BonusType bonusType) {
@@ -410,22 +364,6 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
         _bonusExpiry = DateTime.now().add(const Duration(seconds: 3));
         _triggerMilestone('MAGNET!');
         break;
-    }
-
-    // Spawn golden particles for bonus
-    for (int i = 0; i < 20; i++) {
-      final angle = _random.nextDouble() * 2 * pi;
-      final speed = 2.0 + _random.nextDouble() * 6.0;
-      _particles.add(_Particle(
-        x: 0.5,
-        y: 0.5,
-        vx: cos(angle) * speed * 0.02,
-        vy: sin(angle) * speed * 0.02,
-        color: const Color(0xFFFFD700),
-        size: 4.0 + _random.nextDouble() * 4.0,
-        lifetimeMs: 800 + _random.nextInt(400),
-        createdAt: DateTime.now(),
-      ));
     }
   }
 
@@ -619,8 +557,16 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
     _doublePointsActive = false;
     _noteMagnetActive = false;
     _bonusesCollected = 0;
-    _particles.clear();
     _hitFeedbackText = null;
+
+    // Reset FFT bands
+    for (int i = 0; i < 5; i++) {
+      _laneBands[i] = 0.0;
+      _smoothBands[i] = 0.0;
+    }
+
+    // Start FFT capture for spectrum visualization
+    await _startFFTCapture();
 
     // Start audio
     await _gamePlayer.play(DeviceFileSource(_selectedTrackPath!));
@@ -628,6 +574,48 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
     setState(() => _gameState = GameState.playing);
     _noteController.repeat();
     _focusNode.requestFocus();
+  }
+
+  Future<void> _startFFTCapture() async {
+    // Cancel any existing subscription
+    await _fftSubscription?.cancel();
+
+    if (Platform.isIOS) {
+      // iOS: Set audio URL and start capture
+      await IOSFFTService.instance.setAudioUrl('file://$_selectedTrackPath');
+      await IOSFFTService.instance.startCapture();
+      _fftSubscription = IOSFFTService.instance.fftStream.listen((data) {
+        // Map bass/mid/treble to 5 lanes
+        // Lanes 0-1: bass, Lane 2: mid, Lanes 3-4: treble
+        _laneBands[0] = data.bass * 1.2; // Boost bass slightly
+        _laneBands[1] = data.bass * 0.8 + data.mid * 0.2; // Bass/mid blend
+        _laneBands[2] = data.mid;
+        _laneBands[3] = data.mid * 0.2 + data.treble * 0.8; // Mid/treble blend
+        _laneBands[4] = data.treble * 1.2; // Boost treble slightly
+      });
+    } else if (Platform.isLinux) {
+      // Linux: PulseAudio captures system audio
+      await PulseAudioFFTService.instance.startCapture();
+      _fftSubscription = PulseAudioFFTService.instance.fftStream.listen((data) {
+        // Always use bass/mid/treble - more reliable than raw spectrum
+        // These values are already processed with gain control
+        _laneBands[0] = (data.bass * 1.5).clamp(0.0, 1.0);
+        _laneBands[1] = ((data.bass * 0.6 + data.mid * 0.4) * 1.3).clamp(0.0, 1.0);
+        _laneBands[2] = (data.mid * 1.2).clamp(0.0, 1.0);
+        _laneBands[3] = ((data.mid * 0.4 + data.treble * 0.6) * 1.3).clamp(0.0, 1.0);
+        _laneBands[4] = (data.treble * 1.5).clamp(0.0, 1.0);
+      });
+    }
+  }
+
+  void _stopFFTCapture() {
+    _fftSubscription?.cancel();
+    _fftSubscription = null;
+    if (Platform.isIOS) {
+      IOSFFTService.instance.stopCapture();
+    } else if (Platform.isLinux) {
+      PulseAudioFFTService.instance.stopCapture();
+    }
   }
 
   void _pauseGame() {
@@ -646,6 +634,7 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
   void _endGame() {
     _noteController.stop();
     _gamePlayer.stop();
+    _stopFFTCapture();
 
     // Check for remaining notes as missed
     while (_nextNoteIndex < (_chart?.notes.length ?? 0)) {
@@ -881,13 +870,18 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
     }
   }
 
-  /// Cheat: Press F to activate fire mode instantly
+  /// Cheat: Press F to activate lightning lane (auto-hits a random lane)
   void _activateFireMode() {
     if (_gameState != GameState.playing) return;
 
-    // Boost combo to trigger max multiplier
-    _combo = 30;
-    _multiplier = 4;
+    // Activate lightning lane - auto-hits all notes in one random lane
+    _lightningLane = _random.nextInt(5);
+    _activeBonus = BonusType.lightningLane;
+    _bonusExpiry = DateTime.now().add(const Duration(seconds: 5));
+
+    // Also boost to fire mode
+    if (_combo < 10) _combo = 10;
+    if (_multiplier < 2) _multiplier = 2;
     _showStreakFire = true;
 
     // Start the pulse animation
@@ -896,7 +890,7 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
     }
 
     // Show the message
-    _triggerMilestone('IGNITED!');
+    _triggerMilestone('LIGHTNING!');
 
     setState(() {});
   }
@@ -1098,11 +1092,11 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
           showStreakFire: _showStreakFire,
           combo: _combo,
           lightningLane: _lightningLane,
-          particles: _particles,
           hitFeedbackText: _hitFeedbackText,
           hitFeedbackColor: _hitFeedbackColor,
           hitFeedbackTime: _hitFeedbackTime,
           hitFeedbackLane: _hitFeedbackLane,
+          spectrumBands: _smoothBands,
         ),
         // Score display with Nautune font
         Positioned(
@@ -1215,6 +1209,36 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
                 },
               ),
             ],
+          ),
+        ),
+        // Lightning cheat button (tap to activate lightning lane - F key equivalent for mobile)
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 60,
+          right: 16,
+          child: GestureDetector(
+            onTap: _activateFireMode,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _lightningLane != null
+                    ? const Color(0xFF00BFFF).withValues(alpha: 0.3)
+                    : Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _lightningLane != null
+                      ? const Color(0xFF00BFFF)
+                      : Colors.white24,
+                  width: 1,
+                ),
+              ),
+              child: Icon(
+                Icons.bolt,
+                color: _lightningLane != null
+                    ? const Color(0xFF00BFFF)
+                    : Colors.white54,
+                size: 24,
+              ),
+            ),
           ),
         ),
         // Milestone flash overlay - stays visible for 70% of animation, then fades
@@ -1590,30 +1614,6 @@ enum GameState {
   ended,
 }
 
-/// Particle effect for visual feedback
-class _Particle {
-  double x;
-  double y;
-  double vx;
-  double vy;
-  final Color color;
-  final double size;
-  final int lifetimeMs;
-  final DateTime createdAt;
-  double opacity;
-
-  _Particle({
-    required this.x,
-    required this.y,
-    required this.vx,
-    required this.vy,
-    required this.color,
-    required this.size,
-    required this.lifetimeMs,
-    required this.createdAt,
-  }) : opacity = 1.0;
-}
-
 class _InfoChip extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -1680,11 +1680,11 @@ class _NoteHighway extends StatelessWidget {
   final bool showStreakFire;
   final int combo;
   final int? lightningLane;
-  final List<_Particle> particles;
   final String? hitFeedbackText;
   final Color? hitFeedbackColor;
   final DateTime? hitFeedbackTime;
   final int? hitFeedbackLane;
+  final List<double> spectrumBands;
 
   const _NoteHighway({
     required this.chart,
@@ -1697,11 +1697,11 @@ class _NoteHighway extends StatelessWidget {
     this.showStreakFire = false,
     this.combo = 0,
     this.lightningLane,
-    this.particles = const [],
     this.hitFeedbackText,
     this.hitFeedbackColor,
     this.hitFeedbackTime,
     this.hitFeedbackLane,
+    this.spectrumBands = const [0.0, 0.0, 0.0, 0.0, 0.0],
   });
 
   @override
@@ -1742,11 +1742,11 @@ class _NoteHighway extends StatelessWidget {
               showStreakFire: showStreakFire,
               combo: combo,
               lightningLane: lightningLane,
-              particles: particles,
               hitFeedbackText: hitFeedbackText,
               hitFeedbackColor: hitFeedbackColor,
               hitFeedbackTime: hitFeedbackTime,
               hitFeedbackLane: hitFeedbackLane,
+              spectrumBands: spectrumBands,
             ),
             size: Size(constraints.maxWidth, constraints.maxHeight),
           ),
@@ -1768,11 +1768,11 @@ class _NoteHighwayPainter extends CustomPainter {
   final bool showStreakFire;
   final int combo;
   final int? lightningLane;
-  final List<_Particle> particles;
   final String? hitFeedbackText;
   final Color? hitFeedbackColor;
   final DateTime? hitFeedbackTime;
   final int? hitFeedbackLane;
+  final List<double> spectrumBands;
 
   _NoteHighwayPainter({
     required this.notes,
@@ -1786,11 +1786,11 @@ class _NoteHighwayPainter extends CustomPainter {
     this.showStreakFire = false,
     this.combo = 0,
     this.lightningLane,
-    this.particles = const [],
     this.hitFeedbackText,
     this.hitFeedbackColor,
     this.hitFeedbackTime,
     this.hitFeedbackLane,
+    this.spectrumBands = const [0.0, 0.0, 0.0, 0.0, 0.0],
   });
 
   @override
@@ -1830,6 +1830,52 @@ class _NoteHighwayPainter extends CustomPainter {
         Offset(i * laneWidth, size.height),
         lanePaint,
       );
+    }
+
+    // Draw FFT spectrum - each lane fills from bottom with color based on FFT
+    // Drawn BEHIND notes so dots are always visible
+    for (int i = 0; i < 5; i++) {
+      final band = spectrumBands[i].clamp(0.0, 1.0);
+      // Draw even small values (threshold lowered)
+      if (band > 0.005) {
+        final laneLeft = i * laneWidth;
+        // Minimum bar height of 20 pixels so always visible when there's any signal
+        final minHeight = 20.0;
+        final barHeight = minHeight + (hitLineY - minHeight) * band;
+
+        // Full lane width spectrum bar from bottom up
+        final barRect = Rect.fromLTWH(
+          laneLeft,
+          hitLineY - barHeight,
+          laneWidth,
+          barHeight,
+        );
+
+        // Gradient fill - visible opacity
+        final baseAlpha = 0.3 + 0.4 * band; // 30-70% opacity based on intensity
+        final barPaint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [
+              laneColors[i].withValues(alpha: baseAlpha),
+              laneColors[i].withValues(alpha: baseAlpha * 0.5),
+              laneColors[i].withValues(alpha: baseAlpha * 0.1),
+            ],
+          ).createShader(barRect);
+        canvas.drawRect(barRect, barPaint);
+
+        // Glow at the top edge of the bar
+        if (band > 0.1) {
+          final glowPaint = Paint()
+            ..color = laneColors[i].withValues(alpha: 0.4 * band)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 * scaleFactor);
+          canvas.drawRect(
+            Rect.fromLTWH(laneLeft, hitLineY - barHeight - 6, laneWidth, 12),
+            glowPaint,
+          );
+        }
+      }
     }
 
     // Draw hit line (with fire effect when on streak)
@@ -1906,23 +1952,116 @@ class _NoteHighwayPainter extends CustomPainter {
       }
     }
 
-    // Draw lightning lane effect
+    // Draw lightning lane effect - electrifying with animated sparks!
     if (lightningLane != null) {
-      final lightningPaint = Paint()
-        ..color = const Color(0xFF00BFFF).withValues(alpha: 0.15)
-        ..style = PaintingStyle.fill;
+      final laneLeft = lightningLane! * laneWidth;
+      final laneCenterX = laneLeft + laneWidth / 2;
+
+      // Animation phase based on time (cycles every 500ms)
+      final animPhase = (currentTimeMs % 500) / 500.0;
+      final pulsePhase = (currentTimeMs % 300) / 300.0;
+      final pulseIntensity = 0.7 + 0.3 * (0.5 + 0.5 * (pulsePhase * 3.14159 * 2).abs());
+
+      // Outer glow - pulsing edge effect
+      final edgeGlowPaint = Paint()
+        ..color = const Color(0xFF00BFFF).withValues(alpha: 0.2 + 0.15 * pulseIntensity)
+        ..strokeWidth = (3 + pulseIntensity) * scaleFactor
+        ..style = PaintingStyle.stroke
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, (10 + 4 * pulseIntensity) * scaleFactor);
       canvas.drawRect(
-        Rect.fromLTWH(lightningLane! * laneWidth, 0, laneWidth, size.height),
-        lightningPaint,
+        Rect.fromLTWH(laneLeft, 0, laneWidth, hitLineY),
+        edgeGlowPaint,
       );
 
-      // Lightning bolt line down the center
+      // Inner fill - electric blue tint
+      final fillPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF00BFFF).withValues(alpha: 0.05),
+            const Color(0xFF00BFFF).withValues(alpha: 0.15 + 0.1 * pulseIntensity),
+            const Color(0xFF00BFFF).withValues(alpha: 0.25 + 0.1 * pulseIntensity),
+          ],
+        ).createShader(Rect.fromLTWH(laneLeft, 0, laneWidth, hitLineY));
+      canvas.drawRect(
+        Rect.fromLTWH(laneLeft, 0, laneWidth, hitLineY),
+        fillPaint,
+      );
+
+      // Draw zigzag lightning bolt down the center
       final boltPaint = Paint()
-        ..color = const Color(0xFF00BFFF).withValues(alpha: 0.6)
-        ..strokeWidth = 3
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 8 * scaleFactor);
-      final boltX = lightningLane! * laneWidth + laneWidth / 2;
-      canvas.drawLine(Offset(boltX, 0), Offset(boltX, hitLineY), boltPaint);
+        ..color = const Color(0xFF00BFFF)
+        ..strokeWidth = 3 * scaleFactor
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+
+      final boltGlowPaint = Paint()
+        ..color = const Color(0xFF00BFFF).withValues(alpha: 0.5 + 0.2 * pulseIntensity)
+        ..strokeWidth = 8 * scaleFactor
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 6 * scaleFactor);
+
+      // Create zigzag path with slight animated jitter
+      final boltPath = Path();
+      final zigzagWidth = laneWidth * 0.25;
+      final segmentHeight = hitLineY / 12;
+      boltPath.moveTo(laneCenterX, 0);
+      for (int i = 0; i < 12; i++) {
+        final y = (i + 1) * segmentHeight;
+        // Add slight jitter based on time for electric feel
+        final jitter = ((currentTimeMs + i * 37) % 100) / 100.0 * 4 - 2;
+        final xOffset = (i.isEven ? zigzagWidth : -zigzagWidth) + jitter;
+        boltPath.lineTo(laneCenterX + xOffset, y);
+      }
+
+      // Draw glow first, then bolt
+      canvas.drawPath(boltPath, boltGlowPaint);
+      canvas.drawPath(boltPath, boltPaint);
+
+      // Core bright white line
+      final corePaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.7 + 0.3 * pulseIntensity)
+        ..strokeWidth = 1.5 * scaleFactor
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round;
+      canvas.drawPath(boltPath, corePaint);
+
+      // Animated traveling sparks down the bolt (3 sparks at different positions)
+      for (int sparkIdx = 0; sparkIdx < 3; sparkIdx++) {
+        // Each spark travels at different phase offset
+        final sparkPhase = (animPhase + sparkIdx * 0.33) % 1.0;
+        final sparkY = sparkPhase * hitLineY;
+        // Calculate X position along the zigzag
+        final segmentIdx = (sparkPhase * 12).floor().clamp(0, 11);
+        final segmentProgress = (sparkPhase * 12) - segmentIdx;
+        final prevX = laneCenterX + (segmentIdx.isEven ? -zigzagWidth : zigzagWidth);
+        final nextX = laneCenterX + (segmentIdx.isEven ? zigzagWidth : -zigzagWidth);
+        final sparkX = prevX + (nextX - prevX) * segmentProgress;
+
+        // Bright white spark with glow
+        final travelSparkGlow = Paint()
+          ..color = Colors.white.withValues(alpha: 0.6)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 8 * scaleFactor);
+        canvas.drawCircle(Offset(sparkX, sparkY), 6 * scaleFactor, travelSparkGlow);
+
+        final travelSpark = Paint()
+          ..color = Colors.white;
+        canvas.drawCircle(Offset(sparkX, sparkY), 3 * scaleFactor, travelSpark);
+      }
+
+      // Electric sparks at hit line (animated positions)
+      final sparkPaint = Paint()
+        ..color = Colors.white
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4 * scaleFactor);
+      for (int i = 0; i < 5; i++) {
+        final sparkOffset = ((currentTimeMs + i * 50) % 200) / 200.0 * 10 - 5;
+        final sparkX = laneLeft + (laneWidth * (0.2 + i * 0.15)) + sparkOffset;
+        final sparkSize = 2 + ((currentTimeMs + i * 30) % 100) / 100.0 * 2;
+        canvas.drawCircle(Offset(sparkX, hitLineY - 5), sparkSize * scaleFactor, sparkPaint);
+      }
     }
 
     // Draw notes
@@ -1972,18 +2111,6 @@ class _NoteHighwayPainter extends CustomPainter {
         notePaint.color = Colors.white.withValues(alpha: 0.4);
         canvas.drawCircle(Offset(noteX - highlightOffset, noteY - highlightOffset), highlightRadius, notePaint);
       }
-    }
-
-    // Draw particles
-    for (final particle in particles) {
-      final particlePaint = Paint()
-        ..color = particle.color.withValues(alpha: particle.opacity)
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(
-        Offset(particle.x * size.width, particle.y * size.height),
-        particle.size,
-        particlePaint,
-      );
     }
 
     // Draw hit feedback text

@@ -262,11 +262,29 @@ A Guitar Hero-style rhythm game that auto-generates playable charts from any tra
 
 ### Visual Feedback
 
+- **FFT Spectrum Visualizer**: Each lane fills up like a spectrum analyzer in real-time
+  - Lanes 0-1: Bass frequencies (left side)
+  - Lane 2: Mid frequencies (center)
+  - Lanes 3-4: Treble frequencies (right side)
+  - Full-lane gradient bars pulse with the music, theme-colored
+  - Works on iOS (MTAudioProcessingTap) and Linux (PulseAudio)
 - **PERFECT/GOOD Hit Text**: Floating feedback text on note hits (gold for PERFECT, white for GOOD)
-- **Fire Particle Effects**: Sparks fly on successful hits, enhanced particles on milestone achievements
-- **Lightning Effects**: Blue lightning visual for Lightning Lane bonus
+- **Lightning Effects**: Animated blue lightning with traveling sparks for Lightning Lane bonus
 - **Streak Fire Glow**: Fire effect on hit line when combo reaches 10+
 - **Milestone Flashes**: "ON FIRE!", "BLAZING!", "INFERNO!", "LEGENDARY!", "GODLIKE!" celebrations
+
+### Controls
+
+**Desktop:**
+| Key | Action |
+|-----|--------|
+| 1-5 or F1-F5 | Hit lanes 1-5 |
+| F | Activate Lightning Lane (cheat) |
+| Escape | Pause game |
+
+**Mobile/iOS:**
+- Tap lanes to hit notes
+- Tap the **⚡ bolt icon** (top-right during gameplay) to activate Lightning Lane cheat
 
 ### Bonus Power-Ups
 

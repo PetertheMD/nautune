@@ -1,3 +1,37 @@
+### v6.1.0 - ListenBrainz Discovery + Frets on Fire Polish
+
+**ListenBrainz Discover New Music**
+- **Discover Section**: New "Discover New Music" shelf on Home shows ListenBrainz recommendations NOT in your library
+  - Browse music you might like but don't own yet
+  - Album art fetched from Cover Art Archive using MusicBrainz Release IDs
+  - Compact cards show track name, artist, and album art
+- **Tuned Recommendations**: Improved recommendation fetching
+  - Changed maxFetch from 100 to 50 for faster loading
+  - Increased targetMatches from 15 to 20 for longer playlists
+
+**Frets on Fire Polish**
+- **Removed Particle Effects**: Cleaned up visual clutter from note hit particles
+- **F Key / Lightning Button**: Press F (desktop) or tap the bolt icon (mobile) to activate Lightning Lane
+- **Electrifying Lightning Lane**: Completely redesigned lightning effect with:
+  - Glowing edge border around the lane
+  - Gradient electric blue fill
+  - Animated zigzag lightning bolt with jitter
+  - Traveling white sparks that flow down the bolt
+  - Pulsing glow intensity
+  - Electric sparks dancing at the hit line
+
+**FFT Spectrum Visualizer**
+- **Real-time audio visualization**: Each lane fills up like a spectrum analyzer
+  - Lanes 0-1 (left): Bass frequencies
+  - Lane 2 (center): Mid frequencies
+  - Lanes 3-4 (right): Treble frequencies
+  - Full lane width gradient bars pulse with the music
+- **Platform support**: Works on both iOS (MTAudioProcessingTap) and Linux (PulseAudio)
+- **Smooth animation**: Fast attack, slow decay for responsive yet smooth visuals
+- **Theme-colored**: Gradient bars match your chosen theme colors with glowing tops
+
+---
+
 ### v6.0.0 - CarPlay/Lock Screen Sync + Frets on Fire Power-Ups
 
 **CarPlay & Lock Screen Fixes**
@@ -18,9 +52,6 @@
 - **PERFECT/GOOD Hit Text**: Floating feedback text appears on note hits
   - Gold text for PERFECT timing, white text for GOOD timing
   - Animates upward and fades out
-- **Fire Particle Effects**: Sparks fly on successful note hits
-  - Enhanced particle burst on milestone achievements (10/20/30/50/100 combo)
-  - Color-coded particles match the fire theme
 
 **Frets on Fire Bonus Power-Ups**
 - **Golden Bonus Notes**: Random power-up notes spawn during gameplay (~1 per 30-60 seconds)
