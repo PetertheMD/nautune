@@ -119,8 +119,7 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
       if (Platform.isIOS) {
         final now = DateTime.now();
         if (now.difference(_lastPositionUpdate) < _positionUpdateInterval) {
-          _positionNotifier.value = position; // Update notifier but don't rebuild screen
-          return;
+          return; // Skip this update - don't trigger any rebuilds
         }
         _lastPositionUpdate = now;
       }
@@ -226,16 +225,19 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
 
   // ==================== FFT Integration ====================
 
-  void _startFFT() {
+  void _startFFT() async {
     if (!_service.isPlayingOffline) return;
-    if (!_visualizerEnabled) return; // Disabled in low power mode
+    if (!_visualizerEnabled) return;
 
     final audioPath = _service.getPlaybackUrl();
 
     if (Platform.isIOS) {
       // iOS FFT using MTAudioProcessingTap
-      IOSFFTService.instance.setAudioUrl('file://$audioPath');
-      IOSFFTService.instance.startCapture();
+      // IMPORTANT: Must initialize before using - Essential Mix uses its own AudioPlayer,
+      // not AudioPlayerService which normally initializes the FFT service
+      await IOSFFTService.instance.initialize();
+      await IOSFFTService.instance.setAudioUrl('file://$audioPath');
+      await IOSFFTService.instance.startCapture();
       _fftSubscription = IOSFFTService.instance.fftStream.listen((data) {
         if (!mounted) return;
 
