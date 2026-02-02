@@ -746,6 +746,15 @@ class NautuneAppState extends ChangeNotifier {
 
   /// Initialize Low Power Mode listener (iOS only)
   void _initPowerModeListener() {
+    // Check INITIAL state - if already in low power mode, disable visualizer
+    if (PowerModeService.instance.isLowPowerMode && _visualizerEnabled) {
+      _visualizerSuppressedByLowPower = true;
+      _visualizerEnabled = false;
+      notifyListeners();
+      debugPrint('🔋 Visualizer disabled (Low Power Mode - initial state)');
+    }
+
+    // Listen for CHANGES
     _powerModeSub = PowerModeService.instance.lowPowerModeStream.listen((isLowPower) {
       if (isLowPower) {
         // Entering Low Power Mode - save current state and disable visualizer

@@ -1,15 +1,28 @@
-### v5.8.4 - Essential Mix iOS Visualizer Fix
+### v5.8.7 - Essential Mix iOS Fixes + Low Power Mode
+- **Architectural Refactor**: Essential Mix now uses AudioPlayerService instead of its own AudioPlayer
+  - Same audio pipeline as fullscreen player = same iOS performance
+  - Virtual JellyfinTrack bridges Essential Mix with centralized audio service
+  - Eliminates duplicate audio code paths and iOS-specific edge cases
+- **Linux Playback Fix**: `assetPathOverride` now correctly uses `DeviceFileSource` (was using `UrlSource`)
+  - Fixes "Invalid URI" error when playing Essential Mix on Linux
+  - Also fixes gapless pre-loading for tracks with asset path overrides
+- **Skip Jellyfin Reporting for Virtual Tracks**: Non-Jellyfin tracks (Essential Mix) no longer try to report to server
+  - Fixes 400 errors for playback start, progress, and stop reporting
 - **Critical iOS Fix**: Essential Mix visualizer now properly responds to music on iOS
   - Root cause: `IOSFFTService.instance.initialize()` was never called (Essential Mix uses its own AudioPlayer, not AudioPlayerService)
   - `setAudioUrl()` and `startCapture()` were silently returning early due to uninitialized service
-- **Low Power Mode**: Proper PowerModeService initialization with async await
-  - Visualizer ON by default, only disables when Low Power Mode is active
-  - State changes only trigger rebuild when actually changed
+- **Seek Fix**: FFT shadow player now syncs position when seeking in Essential Mix (was stopping after seek)
+- **Low Power Mode Fix**: Both fullscreen and Essential Mix now properly disable visualizer
+  - Fullscreen: App state now checks initial low power mode state on startup (was only listening for changes)
+  - Essential Mix: Properly calls setState when initial state is low power mode
+  - Visualizer ON by default, auto-disables when Low Power Mode is active
+- **Essential Mix UI Performance**:
+  - Storage stats now cached (was doing file I/O every time download sheet opened)
+  - Download progress throttled to 5% increments (was rebuilding on every tick)
 - **iOS Battery Optimizations**:
-  - FFT sync timer reduced from 0.5s to 1.0s (shadow player sync, not audio)
+  - FFT sync timer reduced from 0.5s to 1.0s (shadow player sync, not audio playback)
   - SpectrumRadialVisualizer: threshold-based shouldRepaint (was always repainting)
   - ButterchurnVisualizer: threshold-based shouldRepaint (was always repainting)
-  - Download progress throttled to 5% increments (was rebuilding on every tick)
 
 ### v5.8.0 - Frets on Fire Easter Egg + iOS Visualizer Fixes
 - **Frets on Fire**: New Guitar Hero-style rhythm game easter egg

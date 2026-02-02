@@ -6,6 +6,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import '../jellyfin/jellyfin_track.dart';
 import '../models/essential_mix_track.dart';
 
 /// Download status for the Essential Mix.
@@ -128,6 +129,9 @@ class EssentialMixService extends ChangeNotifier {
   bool _isInitialized = false;
   bool _isCancelled = false;
   int _listenTimeSeconds = 0;
+
+  // Cached storage stats to avoid repeated file I/O
+  EssentialMixStorageStats? _cachedStats;
 
   final EssentialMixTrack track = const EssentialMixTrack();
 
@@ -253,6 +257,33 @@ class EssentialMixService extends ChangeNotifier {
   /// Check if using local file.
   bool get isPlayingOffline => _state.isDownloaded && _state.audioPath != null;
 
+  /// Create a virtual JellyfinTrack for use with AudioPlayerService.
+  /// Returns null if not downloaded (Essential Mix requires download).
+  JellyfinTrack? getVirtualTrack() {
+    if (!isPlayingOffline) return null;
+
+    // 2 hours in ticks (10,000,000 ticks per second)
+    const twoHoursInTicks = 2 * 60 * 60 * 10000000;
+
+    return JellyfinTrack(
+      id: track.id,
+      name: track.name,
+      album: track.album,
+      artists: [track.artist],
+      runTimeTicks: twoHoursInTicks,
+      assetPathOverride: _state.audioPath,
+      // No server/token needed - using local file
+      serverUrl: null,
+      token: null,
+      userId: null,
+      container: 'MP3',
+      codec: 'MP3',
+      bitrate: 256000, // Approximate
+      sampleRate: 44100,
+      channels: 2,
+    );
+  }
+
   /// Start downloading the Essential Mix.
   Future<void> startDownload() async {
     if (_state.isDownloading) return;
@@ -371,12 +402,18 @@ class EssentialMixService extends ChangeNotifier {
     _state = const EssentialMixDownloadState(
       status: EssentialMixDownloadStatus.notDownloaded,
     );
+    _cachedStats = null; // Clear cached stats
     await _saveState();
     notifyListeners();
   }
 
-  /// Get storage statistics.
+  /// Get storage statistics (cached to avoid repeated file I/O).
   Future<EssentialMixStorageStats> getStorageStats() async {
+    // Return cached stats if available and still downloaded
+    if (_cachedStats != null && _state.isDownloaded) {
+      return _cachedStats!;
+    }
+
     int audioBytes = 0;
     int artworkBytes = 0;
 
@@ -398,11 +435,12 @@ class EssentialMixService extends ChangeNotifier {
       } catch (_) {}
     }
 
-    return EssentialMixStorageStats(
+    _cachedStats = EssentialMixStorageStats(
       totalBytes: audioBytes + artworkBytes,
       audioBytes: audioBytes,
       artworkBytes: artworkBytes,
     );
+    return _cachedStats!;
   }
 
   /// Download a file with progress callback.

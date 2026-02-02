@@ -668,10 +668,10 @@ class AudioPlayerService {
       final isPlaying = state == PlayerState.playing;
       _playingController.add(isPlaying);
       
-      // Report state change to Jellyfin
+      // Report state change to Jellyfin (only for real Jellyfin tracks)
       if (_lastPlayingState != isPlaying && _currentTrack != null) {
         _lastPlayingState = isPlaying;
-        if (_reportingService != null) {
+        if (_reportingService != null && _currentTrack!.serverUrl != null) {
           _reportingService?.reportPlaybackProgress(
             _currentTrack!,
             _lastPosition,
@@ -1126,6 +1126,8 @@ class AudioPlayerService {
         }
       } else if (track.assetPathOverride != null) {
         activeUrl = track.assetPathOverride;
+        isLocalFile = true;  // Asset path override is a local file
+        debugPrint('🎵 Using asset path override: ${track.assetPathOverride}');
       }
     }
 
@@ -1181,8 +1183,8 @@ class AudioPlayerService {
 
       await applySourceAndPlay();
 
-      // Report playback start to Jellyfin
-      if (_reportingService != null) {
+      // Report playback start to Jellyfin (only for real Jellyfin tracks)
+      if (_reportingService != null && track.serverUrl != null) {
         debugPrint('🎵 Reporting playback start to Jellyfin: ${track.name}');
         await _reportingService?.reportPlaybackStart(
           track,
@@ -1228,8 +1230,8 @@ class AudioPlayerService {
           activeUrl = fallbackUrl;
           await applySourceAndPlay();
 
-          // Report transcoded playback
-          if (_reportingService != null) {
+          // Report transcoded playback (only for real Jellyfin tracks)
+          if (_reportingService != null && track.serverUrl != null) {
             await _reportingService?.reportPlaybackStart(
               track,
               playMethod: 'Transcode',
@@ -1520,8 +1522,8 @@ class AudioPlayerService {
       debugPrint('Error clearing playback state: $e');
     }
     
-    // Report stop to Jellyfin
-    if (_currentTrack != null && _reportingService != null) {
+    // Report stop to Jellyfin (only for real Jellyfin tracks)
+    if (_currentTrack != null && _reportingService != null && _currentTrack!.serverUrl != null) {
       _reportingService?.reportPlaybackStopped(
         _currentTrack!,
         _lastPosition,
@@ -2379,13 +2381,17 @@ class AudioPlayerService {
         }
       }
 
-      Future<bool> trySetAssetSource(String? assetPath) async {
+      Future<bool> trySetAssetPathOverride(String? assetPath) async {
         if (assetPath == null) return false;
-        final normalized = assetPath.startsWith('assets/')
-            ? assetPath.substring('assets/'.length)
-            : assetPath;
         try {
-          await _nextPlayer.setSource(AssetSource(normalized));
+          if (assetPath.startsWith('assets/')) {
+            // Flutter bundled asset
+            final normalized = assetPath.substring('assets/'.length);
+            await _nextPlayer.setSource(AssetSource(normalized));
+          } else {
+            // Local file path (e.g., Essential Mix download)
+            await _nextPlayer.setSource(DeviceFileSource(assetPath));
+          }
           return true;
         } on PlatformException {
           return false;
@@ -2432,10 +2438,10 @@ class AudioPlayerService {
           } else {
             debugPrint('✅ Pre-loaded from stream (${_streamingQuality.label}): ${track.name}');
           }
-        } else if (await trySetAssetSource(track.assetPathOverride)) {
+        } else if (await trySetAssetPathOverride(track.assetPathOverride)) {
           loaded = true;
-          isLocal = true; // Asset files are local
-          debugPrint('✅ Pre-loaded from asset: ${track.name}');
+          isLocal = true; // Asset/local files are local
+          debugPrint('✅ Pre-loaded from asset path override: ${track.name}');
         }
       }
 
