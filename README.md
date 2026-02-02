@@ -5,7 +5,7 @@
 ## ✨ Key Features
 
 - **Your Rewind**: Spotify Wrapped-style yearly listening reports with shareable exports
-- **ListenBrainz Integration**: Scrobble your plays and get personalized music recommendations
+- **ListenBrainz Integration**: Scrobble your plays and get personalized music recommendations (matches via MusicBrainz IDs for reliable library matching)
 - **Collaborative Playlists**: Real-time SyncPlay sessions - listen together with friends via QR code or share link
 - **Custom Color Theme**: Create your own theme with primary/secondary color picker
 - **Alternate App Icons**: Choose between Classic (purple), Sunset (orange), Crimson (red), and Emerald (green) icons across all platforms

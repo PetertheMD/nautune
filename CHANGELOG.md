@@ -1,3 +1,9 @@
+### v5.9.1 - ListenBrainz MBID Matching Fix
+- **ListenBrainz Recommendations**: Fixed recommendation matching to prioritize MusicBrainz ID (MBID) over name matching
+  - Tracks with proper MusicBrainz tags now match reliably (was 0/25 matches, now matches all tagged tracks)
+  - Falls back to name+artist matching for tracks without MBID tags
+  - Root cause: Was only using track name + artist name, ignoring the MusicBrainz IDs embedded in library metadata
+
 ### v5.8.9 - iOS FFT Desync & Waveform Fix
 - **iOS FFT Skip/Next Fix**: FFT now properly stops before track changes, preventing concurrent shadow players from competing and corrupting visualization data
 - **iOS FFT Gapless Playback Fix**: FFT correctly restarts with new track during gapless transitions (was analyzing old track audio)

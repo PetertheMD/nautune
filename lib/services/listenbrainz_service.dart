@@ -531,8 +531,19 @@ class ListenBrainzService {
           query: '${rec.artistName} ${rec.trackName}',
         );
 
-        // Find best match
+        // Find best match - prefer MBID match, fallback to name match
         for (final track in tracks) {
+          // First priority: MusicBrainz ID match (most reliable)
+          final mbidMatch = track.providerIds?['MusicBrainzTrack'] == rec.recordingMbid;
+
+          if (mbidMatch) {
+            matchedRecommendations.add(rec.withJellyfinMatch(track.id));
+            matched = true;
+            debugPrint('ListenBrainzService: MBID match for "${rec.trackName}"');
+            break;
+          }
+
+          // Second priority: exact name + artist match
           final nameMatch = track.name.toLowerCase() == rec.trackName!.toLowerCase();
           final artistMatch = track.artists.any(
             (a) => a.toLowerCase() == rec.artistName!.toLowerCase(),
@@ -541,6 +552,7 @@ class ListenBrainzService {
           if (nameMatch && artistMatch) {
             matchedRecommendations.add(rec.withJellyfinMatch(track.id));
             matched = true;
+            debugPrint('ListenBrainzService: Name match for "${rec.trackName}"');
             break;
           }
         }
