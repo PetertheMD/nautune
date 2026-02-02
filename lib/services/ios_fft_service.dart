@@ -99,6 +99,12 @@ class IOSFFTService {
     }
   }
 
+  /// Reset URL tracking (call before setting new track)
+  /// This ensures setAudioUrl will actually update even if same track is replayed
+  void resetUrl() {
+    _currentUrl = null;
+  }
+
   /// Sync shadow player position with main player
   Future<void> syncPosition(double positionSeconds) async {
     if (!_isCapturing || !Platform.isIOS) return;

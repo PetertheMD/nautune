@@ -1298,8 +1298,14 @@ class _RadialVisualizerPainter extends CustomPainter {
   static Color? _cachedPrimaryColor;
   static List<Color>? _gradientColors;
 
-  late final Paint _barPaint;
-  late final Paint _ringPaint;
+  // Cached Paint objects to avoid allocation per frame
+  static final Paint _barPaint = Paint()
+    ..strokeWidth = Platform.isIOS ? 4.0 : 3.5
+    ..strokeCap = StrokeCap.round
+    ..style = PaintingStyle.stroke;
+
+  static final Paint _ringPaint = Paint()
+    ..style = PaintingStyle.stroke;
 
   _RadialVisualizerPainter({
     required this.bass,
@@ -1310,14 +1316,6 @@ class _RadialVisualizerPainter extends CustomPainter {
     required this.maxBarLength,
     required this.rotation,
   }) {
-    _barPaint = Paint()
-      ..strokeWidth = Platform.isIOS ? 4.0 : 3.5
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    _ringPaint = Paint()
-      ..style = PaintingStyle.stroke;
-
     if (_baseAngles == null || _cachedBarCount != _barCount) {
       _initGeometryCache();
     }
@@ -1436,27 +1434,25 @@ class _WaveformPainter extends CustomPainter {
   final Color playedColor;
   final Color unplayedColor;
 
-  late final Paint _playedPaint;
-  late final Paint _unplayedPaint;
+  // Cached Paint objects - colors set in paint() method
+  static final Paint _playedPaint = Paint()..style = PaintingStyle.fill;
+  static final Paint _unplayedPaint = Paint()..style = PaintingStyle.fill;
 
   _WaveformPainter({
     required this.waveform,
     required this.progress,
     required this.playedColor,
     required this.unplayedColor,
-  }) {
-    _playedPaint = Paint()
-      ..color = playedColor
-      ..style = PaintingStyle.fill;
-    _unplayedPaint = Paint()
-      ..color = unplayedColor
-      ..style = PaintingStyle.fill;
-  }
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final amplitudes = waveform.amplitudes;
     if (amplitudes.isEmpty) return;
+
+    // Set colors on cached paint objects
+    _playedPaint.color = playedColor;
+    _unplayedPaint.color = unplayedColor;
 
     final barWidth = size.width / amplitudes.length;
     final progressIndex = (progress * amplitudes.length).floor();

@@ -446,6 +446,19 @@ Now you can:
 | Linux | PulseAudio `parec` loopback | ✅ Instant |
 | iOS (downloaded) | MTAudioProcessingTap + vDSP | ✅ Instant |
 | iOS (streaming) | Cache then tap | ✅ After cache |
+| iOS (gapless) | Auto-restart on transition | ✅ Seamless |
+
+**iOS FFT Reliability**: FFT shadow players are properly stopped before skip/next operations and correctly restarted during gapless playback transitions, ensuring visualizers stay in sync with the currently playing track.
+
+## 🌊 Waveform Support
+
+| Source | Waveform Extraction | Status |
+|--------|---------------------|--------|
+| Downloaded tracks | Direct extraction | ✅ Instant |
+| Cached tracks | Direct extraction | ✅ Instant |
+| Streaming tracks | Cache then extract | ✅ After cache |
+
+Waveforms are extracted for all tracks - downloaded, cached, and streaming - enabling the seekable waveform progress bar across all playback scenarios.
 
 ---
 

@@ -1,3 +1,13 @@
+### v5.8.9 - iOS FFT Desync & Waveform Fix
+- **iOS FFT Skip/Next Fix**: FFT now properly stops before track changes, preventing concurrent shadow players from competing and corrupting visualization data
+- **iOS FFT Gapless Playback Fix**: FFT correctly restarts with new track during gapless transitions (was analyzing old track audio)
+- **iOS FFT URL Reset**: Added `resetUrl()` to ensure FFT URL is always refreshed on track changes, even when replaying the same track
+- **Essential Mix Visualizer**: FFT fixes restore proper frame rate for radial visualizer (was receiving corrupted data from desync)
+- **Essential Mix Performance**: Cached Paint objects in visualizer and waveform painters to eliminate per-frame allocations (~120 objects/sec saved)
+- **Waveform for Local Files**: Downloaded and cached tracks now get waveform extraction immediately (was only triggering for streaming tracks)
+- **Waveform Extraction Deduplication**: Fixed duplicate waveform extraction triggers when replaying the same track multiple times
+- **Root Cause**: Skip/next operations were calling `playTrack()` without stopping the previous FFT first, resulting in two concurrent MTAudioProcessingTap shadow players
+
 ### v5.8.8 - Relax Mode Expansion + Essential Mix Performance
 - **Relax Mode**: Added 2 new ambient sounds
   - **Ocean Waves**: Soothing beach waves for coastal ambiance
