@@ -239,8 +239,29 @@ class SmartPlaylistService {
   /// Get all tracks that match a specific mood
   Future<List<JellyfinTrack>> getTracksByMood(Mood mood, {int limit = 50}) async {
     try {
+      debugPrint('SmartPlaylist: Fetching tracks for libraryId: $_libraryId');
+
       // Get all tracks from the library
       final allTracks = await _jellyfinService.getAllTracks(libraryId: _libraryId);
+      debugPrint('SmartPlaylist: Fetched ${allTracks.length} total tracks');
+
+      // Debug: Check how many tracks have genres
+      final tracksWithGenres = allTracks.where((t) => t.genres != null && t.genres!.isNotEmpty).length;
+      final tracksWithTags = allTracks.where((t) => t.tags != null && t.tags!.isNotEmpty).length;
+      debugPrint('SmartPlaylist: $tracksWithGenres tracks have genres, $tracksWithTags have tags');
+
+      // Debug: Show some sample genres
+      if (allTracks.isNotEmpty) {
+        final sampleGenres = <String>{};
+        for (final track in allTracks.take(50)) {
+          if (track.genres != null) {
+            sampleGenres.addAll(track.genres!);
+          }
+        }
+        if (sampleGenres.isNotEmpty) {
+          debugPrint('SmartPlaylist: Sample genres: ${sampleGenres.take(10).join(', ')}');
+        }
+      }
 
       // Filter by mood
       final matchingTracks = <JellyfinTrack>[];

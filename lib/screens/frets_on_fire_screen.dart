@@ -1851,27 +1851,27 @@ class _NoteHighwayPainter extends CustomPainter {
           barHeight,
         );
 
-        // Gradient fill - visible opacity
-        final baseAlpha = 0.3 + 0.4 * band; // 30-70% opacity based on intensity
+        // Gradient fill - faded so dots stay visible
+        final baseAlpha = 0.15 + 0.15 * band; // 15-30% opacity (subtle backdrop)
         final barPaint = Paint()
           ..shader = LinearGradient(
             begin: Alignment.bottomCenter,
             end: Alignment.topCenter,
             colors: [
               laneColors[i].withValues(alpha: baseAlpha),
-              laneColors[i].withValues(alpha: baseAlpha * 0.5),
-              laneColors[i].withValues(alpha: baseAlpha * 0.1),
+              laneColors[i].withValues(alpha: baseAlpha * 0.6),
+              laneColors[i].withValues(alpha: baseAlpha * 0.2),
             ],
           ).createShader(barRect);
         canvas.drawRect(barRect, barPaint);
 
-        // Glow at the top edge of the bar
-        if (band > 0.1) {
+        // Subtle glow at the top edge of the bar
+        if (band > 0.15) {
           final glowPaint = Paint()
-            ..color = laneColors[i].withValues(alpha: 0.4 * band)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 * scaleFactor);
+            ..color = laneColors[i].withValues(alpha: 0.15 * band)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, 8 * scaleFactor);
           canvas.drawRect(
-            Rect.fromLTWH(laneLeft, hitLineY - barHeight - 6, laneWidth, 12),
+            Rect.fromLTWH(laneLeft, hitLineY - barHeight - 4, laneWidth, 8),
             glowPaint,
           );
         }

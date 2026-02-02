@@ -178,6 +178,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _showVisualizerPicker(context),
                 ),
+              ListTile(
+                leading: Icon(Icons.volume_up, color: theme.colorScheme.primary),
+                title: const Text('Volume Bar'),
+                subtitle: Text(
+                  appState.showVolumeBar
+                      ? 'Shown in Now Playing'
+                      : 'Hidden (use device volume)'
+                ),
+                trailing: Switch(
+                  value: appState.showVolumeBar,
+                  onChanged: (value) {
+                    appState.setVolumeBarVisibility(value);
+                  },
+                ),
+              ),
             ],
           ),
         ),

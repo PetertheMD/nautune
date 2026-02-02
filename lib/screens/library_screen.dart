@@ -1857,12 +1857,30 @@ class _ListenBrainzDiscoveryShelfState extends State<_ListenBrainzDiscoveryShelf
   }
 
   Future<void> _loadRecommendations() async {
+    debugPrint('🎵 ListenBrainz Discovery: Starting to load recommendations...');
     final listenBrainz = ListenBrainzService();
+
+    // Wait for ListenBrainz to initialize if not ready yet (max 3 seconds)
+    if (!listenBrainz.isInitialized) {
+      debugPrint('🎵 ListenBrainz Discovery: Waiting for service to initialize...');
+      for (int i = 0; i < 30; i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (listenBrainz.isInitialized) break;
+      }
+    }
+
     // Only show if user has connected and enabled scrobbling
-    if (!listenBrainz.isConfigured || !listenBrainz.isScrobblingEnabled) {
+    if (!listenBrainz.isConfigured) {
+      debugPrint('🎵 ListenBrainz Discovery: Not configured, skipping');
       setState(() => _hasChecked = true);
       return;
     }
+    if (!listenBrainz.isScrobblingEnabled) {
+      debugPrint('🎵 ListenBrainz Discovery: Scrobbling disabled, skipping');
+      setState(() => _hasChecked = true);
+      return;
+    }
+    debugPrint('🎵 ListenBrainz Discovery: User ${listenBrainz.username} is configured, fetching...');
 
     setState(() => _isLoading = true);
 
@@ -1884,9 +1902,12 @@ class _ListenBrainzDiscoveryShelfState extends State<_ListenBrainzDiscoveryShelf
         maxFetch: 50,       // Fetch up to 50 recommendations
       );
 
+      debugPrint('🎵 ListenBrainz Discovery: Got ${matched.length} recommendations (${matched.where((r) => r.isInLibrary).length} in library)');
+
       if (!mounted) return;
 
       if (matched.isEmpty) {
+        debugPrint('🎵 ListenBrainz Discovery: No recommendations returned from API');
         setState(() {
           _recommendations = [];
           _matchedTracks = [];

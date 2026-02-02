@@ -1,3 +1,17 @@
+### v6.1.1 - UI Polish & Settings
+
+**Now Playing Improvements**
+- **Volume Bar Toggle**: New setting to show/hide the volume slider in Now Playing
+  - Found in Settings > Audio Visualizer section
+  - iOS users can hide it since iOS handles volume at the system level
+- **Waveform Spacing**: Added proper spacing between audio quality badges and waveform to prevent overlap
+
+**Frets on Fire Visualizer Polish**
+- **Faded FFT Bars**: Reduced spectrum visualizer opacity (15-30%) so note dots remain clearly visible
+- **Gentler Gradient**: Softer fade from bottom to top for a subtle ambient backdrop effect
+
+---
+
 ### v6.1.0 - ListenBrainz Discovery + Frets on Fire Polish
 
 **ListenBrainz Discover New Music**

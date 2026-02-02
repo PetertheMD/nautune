@@ -506,8 +506,10 @@ class ListenBrainzService {
   /// Get personalized recommendations from ListenBrainz
   Future<List<ListenBrainzRecommendation>> getRecommendations({int count = 50}) async {
     if (!_initialized || _config == null) {
+      debugPrint('ListenBrainzService: getRecommendations - not initialized or no config');
       return [];
     }
+    debugPrint('ListenBrainzService: Fetching recommendations for ${_config!.username}...');
 
     const maxRetries = 3;
     const initialDelay = Duration(seconds: 1);

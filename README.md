@@ -267,6 +267,7 @@ A Guitar Hero-style rhythm game that auto-generates playable charts from any tra
   - Lane 2: Mid frequencies (center)
   - Lanes 3-4: Treble frequencies (right side)
   - Full-lane gradient bars pulse with the music, theme-colored
+  - Subtle 15-30% opacity ensures note dots remain clearly visible
   - Works on iOS (MTAudioProcessingTap) and Linux (PulseAudio)
 - **PERFECT/GOOD Hit Text**: Floating feedback text on note hits (gold for PERFECT, white for GOOD)
 - **Lightning Effects**: Animated blue lightning with traveling sparks for Lightning Lane bonus
@@ -520,6 +521,7 @@ Nautune offers 5 audio-reactive visualizer styles. Access the picker via **Setti
 - **Album art colors**: Spectrum visualizers extract primary color from current artwork
 - **Bass boost**: All visualizers react dramatically to bass frequencies
 - **Low Power Mode**: Visualizers auto-disable on iOS when Low Power Mode is active
+- **Volume Bar Toggle**: Hide the volume slider in Now Playing (Settings > Audio Visualizer) - useful for iOS where system volume is independent
 
 ---
 
