@@ -365,6 +365,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Top content tab controller
   int _topContentTab = 0;
 
+  // Local analytics service (for relax mode stats refresh)
+  ListeningAnalyticsService? _analyticsService;
+
   // Network easter egg stats
   NetworkDownloadService? _networkService;
   List<NetworkChannelStats>? _networkTopChannels;
@@ -438,6 +441,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
+    _analyticsService?.removeListener(_onLocalAnalyticsChanged);
     _networkService?.removeListener(_onNetworkStatsChanged);
     _essentialMixService?.removeListener(_onEssentialMixStatsChanged);
     _chartCacheService?.removeListener(_onFretsOnFireStatsChanged);
@@ -445,22 +449,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _loadLocalAnalytics() {
-    final analytics = ListeningAnalyticsService();
-    if (!analytics.isInitialized) return;
+    _analyticsService = ListeningAnalyticsService();
+    if (!_analyticsService!.isInitialized) return;
+
+    _analyticsService!.addListener(_onLocalAnalyticsChanged);
+    // Load initial state
+    _onLocalAnalyticsChanged();
+  }
+
+  void _onLocalAnalyticsChanged() {
+    if (!mounted || _analyticsService == null) return;
+    if (!_analyticsService!.isInitialized) return;
 
     setState(() {
-      _heatmap = analytics.getListeningHeatmap();
-      _streak = analytics.getStreakInfo();
-      _weekComparison = analytics.getWeekOverWeekComparison();
-      _milestones = analytics.getMilestones();
-      _relaxModeStats = analytics.getRelaxModeStats();
-      _peakHour = analytics.getPeakListeningHour();
-      _peakDay = analytics.getPeakDayOfWeek();
-      _marathonSessions = analytics.getMarathonSessionCount();
-      _avgSessionLength = analytics.getAverageSessionLength();
-      _discoveryRate = analytics.getDiscoveryRate();
-      _unsyncedPlays = analytics.unsyncedCount;
-      _onThisDayEvents = analytics.getOnThisDayEvents();
+      _heatmap = _analyticsService!.getListeningHeatmap();
+      _streak = _analyticsService!.getStreakInfo();
+      _weekComparison = _analyticsService!.getWeekOverWeekComparison();
+      _milestones = _analyticsService!.getMilestones();
+      _relaxModeStats = _analyticsService!.getRelaxModeStats();
+      _peakHour = _analyticsService!.getPeakListeningHour();
+      _peakDay = _analyticsService!.getPeakDayOfWeek();
+      _marathonSessions = _analyticsService!.getMarathonSessionCount();
+      _avgSessionLength = _analyticsService!.getAverageSessionLength();
+      _discoveryRate = _analyticsService!.getDiscoveryRate();
+      _unsyncedPlays = _analyticsService!.unsyncedCount;
+      _onThisDayEvents = _analyticsService!.getOnThisDayEvents();
     });
   }
 
@@ -3368,7 +3381,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildRelaxModeStatsCard(ThemeData theme) {
     final stats = _relaxModeStats!;
     final totalMinutes = stats.totalTime.inMinutes;
-    final hasUsage = stats.rainUsageMs > 0 || stats.thunderUsageMs > 0 || stats.campfireUsageMs > 0;
+    final hasUsage = stats.rainUsageMs > 0 || stats.thunderUsageMs > 0 ||
+        stats.campfireUsageMs > 0 || stats.waveUsageMs > 0 || stats.loonUsageMs > 0;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -3441,6 +3455,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
               label: 'Campfire',
               percent: stats.campfirePercent,
               color: theme.colorScheme.tertiary,
+            ),
+            const SizedBox(height: 6),
+            _buildSoundUsageBar(
+              theme: theme,
+              icon: Icons.waves,
+              label: 'Waves',
+              percent: stats.wavePercent,
+              color: Colors.cyan,
+            ),
+            const SizedBox(height: 6),
+            _buildSoundUsageBar(
+              theme: theme,
+              icon: Icons.nights_stay,
+              label: 'Loon',
+              percent: stats.loonPercent,
+              color: Colors.indigo,
             ),
           ],
         ],

@@ -46,28 +46,34 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
   // Position notifier for iOS performance - avoids full rebuilds on position change
   final ValueNotifier<Duration> _positionNotifier = ValueNotifier(Duration.zero);
 
+  // Playing state notifier - avoids full rebuilds on play/pause
+  final ValueNotifier<bool> _playingNotifier = ValueNotifier(false);
+
   // Listening time tracking
   DateTime? _playStartTime;
 
   // Animation for artwork
   late AnimationController _artworkController;
 
-  // FFT for visualizer (with smoothing)
-  // Using ValueNotifier to avoid full widget rebuilds on FFT updates (iOS performance)
+  // FFT for visualizer - animation controller driven interpolation (like fullscreen player)
   StreamSubscription? _fftSubscription;
   final ValueNotifier<_FFTData> _fftNotifier = ValueNotifier(const _FFTData(0, 0, 0, 0));
+
+  // Target values from FFT (set by FFT listener)
+  double _targetBass = 0.0;
+  double _targetMid = 0.0;
+  double _targetTreble = 0.0;
+
+  // Smoothed values (interpolated by animation controller)
   double _smoothBass = 0.0;
   double _smoothMid = 0.0;
   double _smoothTreble = 0.0;
   double _visualizerRotation = 0.0;
+
   // Asymmetric smoothing: FAST attack, SLOW decay (matches fullscreen visualizers)
   static const double _attackFactor = 0.6;
   static final double _decayFactor = Platform.isIOS ? 0.25 : 0.12;
   static const double _rotationSpeed = 0.02;
-
-  // Frame rate throttling for FFT updates (~30fps)
-  DateTime _lastFrameTime = DateTime.now();
-  static const _frameInterval = Duration(milliseconds: 33);
 
   // Throttle position updates on iOS to reduce rebuilds
   DateTime _lastPositionUpdate = DateTime.now();
@@ -91,12 +97,10 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
 
     _artworkController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 20),
+      duration: const Duration(seconds: 10),
     );
-    // Only run animation controller on non-iOS (iOS uses FFT-synced rotation)
-    if (!Platform.isIOS) {
-      _artworkController.repeat();
-    }
+    // Animation controller drives visualizer interpolation at consistent frame rate
+    _artworkController.addListener(_onAnimationTick);
 
     // Listen to download service changes
     _service.addListener(_onServiceChanged);
@@ -156,7 +160,7 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
 
       _playingSub = _audioService.playingStream.listen((isPlaying) {
         if (!mounted) return;
-        setState(() {});
+        _playingNotifier.value = isPlaying;
 
         if (_isEssentialMixActive) {
           if (isPlaying && _playStartTime == null) {
@@ -264,48 +268,47 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
     _artworkController.dispose();
     _fftNotifier.dispose();
     _positionNotifier.dispose();
+    _playingNotifier.dispose();
     _service.removeListener(_onServiceChanged);
     super.dispose();
   }
 
   // ==================== FFT Integration ====================
 
+  /// Animation controller tick - interpolate smooth values toward targets
+  void _onAnimationTick() {
+    if (!mounted) return;
+
+    // Smoothly interpolate toward target values
+    _smoothBass += (_targetBass - _smoothBass) * (_targetBass > _smoothBass ? _attackFactor : _decayFactor);
+    _smoothMid += (_targetMid - _smoothMid) * (_targetMid > _smoothMid ? _attackFactor : _decayFactor);
+    _smoothTreble += (_targetTreble - _smoothTreble) * (_targetTreble > _smoothTreble ? _attackFactor : _decayFactor);
+    _visualizerRotation += _rotationSpeed;
+
+    _fftNotifier.value = _FFTData(_smoothBass, _smoothMid, _smoothTreble, _visualizerRotation);
+  }
+
   void _startFFTListener() {
     if (!_service.isPlayingOffline) return;
     if (!_visualizerEnabled) return;
     if (_fftSubscription != null) return; // Already listening
 
+    // Start animation controller for smooth interpolation
+    _artworkController.repeat();
+
     // AudioPlayerService already sets up FFT for local files
-    // Just subscribe to the FFT stream
+    // FFT listener just sets target values - animation controller does interpolation
     if (Platform.isIOS) {
       _fftSubscription = IOSFFTService.instance.fftStream.listen((data) {
-        if (!mounted) return;
-
-        final now = DateTime.now();
-        if (now.difference(_lastFrameTime) < _frameInterval) return;
-        _lastFrameTime = now;
-
-        _smoothBass += (data.bass - _smoothBass) * (data.bass > _smoothBass ? _attackFactor : _decayFactor);
-        _smoothMid += (data.mid - _smoothMid) * (data.mid > _smoothMid ? _attackFactor : _decayFactor);
-        _smoothTreble += (data.treble - _smoothTreble) * (data.treble > _smoothTreble ? _attackFactor : _decayFactor);
-        _visualizerRotation += _rotationSpeed;
-
-        _fftNotifier.value = _FFTData(_smoothBass, _smoothMid, _smoothTreble, _visualizerRotation);
+        _targetBass = data.bass;
+        _targetMid = data.mid;
+        _targetTreble = data.treble;
       });
     } else if (Platform.isLinux) {
       _fftSubscription = PulseAudioFFTService.instance.fftStream.listen((data) {
-        if (!mounted) return;
-
-        final now = DateTime.now();
-        if (now.difference(_lastFrameTime) < _frameInterval) return;
-        _lastFrameTime = now;
-
-        _smoothBass += (data.bass - _smoothBass) * (data.bass > _smoothBass ? _attackFactor : _decayFactor);
-        _smoothMid += (data.mid - _smoothMid) * (data.mid > _smoothMid ? _attackFactor : _decayFactor);
-        _smoothTreble += (data.treble - _smoothTreble) * (data.treble > _smoothTreble ? _attackFactor : _decayFactor);
-        _visualizerRotation += _rotationSpeed;
-
-        _fftNotifier.value = _FFTData(_smoothBass, _smoothMid, _smoothTreble, _visualizerRotation);
+        _targetBass = data.bass;
+        _targetMid = data.mid;
+        _targetTreble = data.treble;
       });
     }
   }
@@ -314,6 +317,13 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
     _fftSubscription?.cancel();
     _fftSubscription = null;
 
+    // Stop animation controller
+    _artworkController.stop();
+
+    // Reset values
+    _targetBass = 0.0;
+    _targetMid = 0.0;
+    _targetTreble = 0.0;
     _smoothBass = 0.0;
     _smoothMid = 0.0;
     _smoothTreble = 0.0;
@@ -674,10 +684,16 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
                             color: theme.colorScheme.onPrimary,
                           ),
                         )
-                      : Icon(
-                          _isPlaying ? Icons.pause : Icons.play_arrow,
-                          color: theme.colorScheme.onPrimary,
-                          size: 36,
+                      : ValueListenableBuilder<bool>(
+                          valueListenable: _playingNotifier,
+                          builder: (context, isPlaying, _) {
+                            final playing = _isEssentialMixActive && isPlaying;
+                            return Icon(
+                              playing ? Icons.pause : Icons.play_arrow,
+                              color: theme.colorScheme.onPrimary,
+                              size: 36,
+                            );
+                          },
                         ),
                 ),
               ),
@@ -845,41 +861,23 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
             children: [
               if (showVisualizer)
                 RepaintBoundary(
-                  child: Platform.isIOS
-                      ? ValueListenableBuilder<_FFTData>(
-                          valueListenable: _fftNotifier,
-                          builder: (context, fft, _) {
-                            return CustomPaint(
-                              size: Size(visualizerSize, visualizerSize),
-                              painter: _RadialVisualizerPainter(
-                                bass: fft.bass,
-                                mid: fft.mid,
-                                treble: fft.treble,
-                                color: theme.colorScheme.primary,
-                                innerRadius: artworkSize / 2 + 6,
-                                maxBarLength: maxBarLength,
-                                rotation: fft.rotation,
-                              ),
-                            );
-                          },
-                        )
-                      : AnimatedBuilder(
-                          animation: _artworkController,
-                          builder: (context, _) {
-                            return CustomPaint(
-                              size: Size(visualizerSize, visualizerSize),
-                              painter: _RadialVisualizerPainter(
-                                bass: _fftNotifier.value.bass,
-                                mid: _fftNotifier.value.mid,
-                                treble: _fftNotifier.value.treble,
-                                color: theme.colorScheme.primary,
-                                innerRadius: artworkSize / 2 + 6,
-                                maxBarLength: maxBarLength,
-                                rotation: _artworkController.value * 2 * pi,
-                              ),
-                            );
-                          },
+                  child: ValueListenableBuilder<_FFTData>(
+                    valueListenable: _fftNotifier,
+                    builder: (context, fft, _) {
+                      return CustomPaint(
+                        size: Size(visualizerSize, visualizerSize),
+                        painter: _RadialVisualizerPainter(
+                          bass: fft.bass,
+                          mid: fft.mid,
+                          treble: fft.treble,
+                          color: theme.colorScheme.primary,
+                          innerRadius: artworkSize / 2 + 6,
+                          maxBarLength: maxBarLength,
+                          rotation: fft.rotation,
                         ),
+                      );
+                    },
+                  ),
                 ),
 
               SizedBox(

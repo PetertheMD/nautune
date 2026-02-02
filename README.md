@@ -289,10 +289,10 @@ An ambient sound mixer for focus or relaxation, inspired by [ebithril/relax-play
 
 ### Features
 
-- **3 Sound Layers**: Mix rain, thunder, and campfire sounds with vertical sliders
+- **5 Sound Layers**: Mix rain, thunder, campfire, ocean waves, and loon sounds with vertical sliders
 - **Seamless Loops**: Ambient audio loops continuously without gaps
 - **Works Everywhere**: Available in demo mode, offline mode, and airplane mode (uses bundled assets)
-- **Stats Tracking**: Track total time spent and sound usage breakdown (Rain/Thunder/Campfire %)
+- **Stats Tracking**: Track total time spent and sound usage breakdown
 - **"Calm Waters" Milestone**: Unlock a badge for discovering Relax Mode
 
 

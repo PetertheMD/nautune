@@ -1,3 +1,23 @@
+### v5.8.8 - Relax Mode Expansion + Essential Mix Performance
+- **Relax Mode**: Added 2 new ambient sounds
+  - **Ocean Waves**: Soothing beach waves for coastal ambiance
+  - **Loon Calls**: Night loon bird sounds for wilderness atmosphere
+  - Now 5 total sounds: Rain, Thunder, Campfire, Waves, Loon
+  - Responsive layout for narrow screens (iOS portrait mode)
+  - Profile stats now show all 5 sound usage bars
+- **Essential Mix Performance Overhaul**:
+  - Animation controller driven interpolation (same as fullscreen visualizers)
+  - FFT listener just sets targets, animation controller does smooth interpolation
+  - ValueListenableBuilder for play/pause button (avoids full screen rebuilds)
+  - Consistent frame rate across iOS and Linux
+- **Stats Live Update**: Relax Mode stats now update in Profile when returning from session
+  - ListeningAnalyticsService now extends ChangeNotifier
+  - Profile screen listens for stats changes
+- **Essential Mix**: Fixed playback on Linux (was throwing "Invalid URI" error)
+- **Essential Mix**: Now uses AudioPlayerService (same audio pipeline as fullscreen player)
+- **Virtual Tracks**: Non-Jellyfin tracks no longer try to report to server (fixes 400 errors)
+- **Analytics Sync Fix**: Easter egg plays (Essential Mix, Network) marked as synced locally, not sent to Jellyfin
+
 ### v5.8.7 - Essential Mix iOS Fixes + Low Power Mode
 - **Architectural Refactor**: Essential Mix now uses AudioPlayerService instead of its own AudioPlayer
   - Same audio pipeline as fullscreen player = same iOS performance

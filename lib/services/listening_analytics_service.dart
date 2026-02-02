@@ -203,6 +203,8 @@ class RelaxModeStats {
   final int rainUsageMs;
   final int thunderUsageMs;
   final int campfireUsageMs;
+  final int waveUsageMs;
+  final int loonUsageMs;
   final bool discovered;
 
   RelaxModeStats({
@@ -210,36 +212,53 @@ class RelaxModeStats {
     this.rainUsageMs = 0,
     this.thunderUsageMs = 0,
     this.campfireUsageMs = 0,
+    this.waveUsageMs = 0,
+    this.loonUsageMs = 0,
     this.discovered = false,
   });
 
   Duration get totalTime => Duration(milliseconds: totalSessionsMs);
 
+  /// Get total sound usage for percentage calculations
+  int get _totalSoundUsage => rainUsageMs + thunderUsageMs + campfireUsageMs + waveUsageMs + loonUsageMs;
+
   /// Get percentage of usage for each sound (0-100)
   double get rainPercent {
-    final total = rainUsageMs + thunderUsageMs + campfireUsageMs;
-    if (total == 0) return 0;
-    return (rainUsageMs / total) * 100;
+    if (_totalSoundUsage == 0) return 0;
+    return (rainUsageMs / _totalSoundUsage) * 100;
   }
 
   double get thunderPercent {
-    final total = rainUsageMs + thunderUsageMs + campfireUsageMs;
-    if (total == 0) return 0;
-    return (thunderUsageMs / total) * 100;
+    if (_totalSoundUsage == 0) return 0;
+    return (thunderUsageMs / _totalSoundUsage) * 100;
   }
 
   double get campfirePercent {
-    final total = rainUsageMs + thunderUsageMs + campfireUsageMs;
-    if (total == 0) return 0;
-    return (campfireUsageMs / total) * 100;
+    if (_totalSoundUsage == 0) return 0;
+    return (campfireUsageMs / _totalSoundUsage) * 100;
+  }
+
+  double get wavePercent {
+    if (_totalSoundUsage == 0) return 0;
+    return (waveUsageMs / _totalSoundUsage) * 100;
+  }
+
+  double get loonPercent {
+    if (_totalSoundUsage == 0) return 0;
+    return (loonUsageMs / _totalSoundUsage) * 100;
   }
 
   /// Get the favorite sound name
   String? get favoriteSoundName {
-    if (rainUsageMs == 0 && thunderUsageMs == 0 && campfireUsageMs == 0) return null;
-    if (rainUsageMs >= thunderUsageMs && rainUsageMs >= campfireUsageMs) return 'Rain';
-    if (thunderUsageMs >= rainUsageMs && thunderUsageMs >= campfireUsageMs) return 'Thunder';
-    return 'Campfire';
+    if (_totalSoundUsage == 0) return null;
+    final usages = {
+      'Rain': rainUsageMs,
+      'Thunder': thunderUsageMs,
+      'Campfire': campfireUsageMs,
+      'Waves': waveUsageMs,
+      'Loon': loonUsageMs,
+    };
+    return usages.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
   }
 
   Map<String, dynamic> toJson() => {
@@ -247,6 +266,8 @@ class RelaxModeStats {
     'rainUsageMs': rainUsageMs,
     'thunderUsageMs': thunderUsageMs,
     'campfireUsageMs': campfireUsageMs,
+    'waveUsageMs': waveUsageMs,
+    'loonUsageMs': loonUsageMs,
     'discovered': discovered,
   };
 
@@ -255,6 +276,8 @@ class RelaxModeStats {
     rainUsageMs: json['rainUsageMs'] as int? ?? 0,
     thunderUsageMs: json['thunderUsageMs'] as int? ?? 0,
     campfireUsageMs: json['campfireUsageMs'] as int? ?? 0,
+    waveUsageMs: json['waveUsageMs'] as int? ?? 0,
+    loonUsageMs: json['loonUsageMs'] as int? ?? 0,
     discovered: json['discovered'] as bool? ?? false,
   );
 
@@ -263,18 +286,22 @@ class RelaxModeStats {
     int? rainUsageMs,
     int? thunderUsageMs,
     int? campfireUsageMs,
+    int? waveUsageMs,
+    int? loonUsageMs,
     bool? discovered,
   }) => RelaxModeStats(
     totalSessionsMs: totalSessionsMs ?? this.totalSessionsMs,
     rainUsageMs: rainUsageMs ?? this.rainUsageMs,
     thunderUsageMs: thunderUsageMs ?? this.thunderUsageMs,
     campfireUsageMs: campfireUsageMs ?? this.campfireUsageMs,
+    waveUsageMs: waveUsageMs ?? this.waveUsageMs,
+    loonUsageMs: loonUsageMs ?? this.loonUsageMs,
     discovered: discovered ?? this.discovered,
   );
 }
 
 /// Service for recording and querying local listening analytics
-class ListeningAnalyticsService {
+class ListeningAnalyticsService extends ChangeNotifier {
   static const _boxName = 'nautune_analytics';
   static const _eventsKey = 'play_events';
   static const _streakKey = 'streak_data';
@@ -297,6 +324,13 @@ class ListeningAnalyticsService {
   ListeningAnalyticsService._internal();
 
   bool get isInitialized => _initialized;
+
+  /// Check if a track ID belongs to an easter egg (not a real Jellyfin track)
+  bool _isEasterEggTrack(String trackId) {
+    return trackId.startsWith('essential-mix') ||
+        trackId.startsWith('network-') ||
+        trackId.startsWith('relax-');
+  }
 
   /// Initialize the service and load existing data
   Future<void> initialize() async {
@@ -356,6 +390,7 @@ class ListeningAnalyticsService {
   Future<void> _saveRelaxModeStats() async {
     if (_box == null) return;
     await _box!.put(_relaxModeKey, jsonEncode(_relaxModeStats.toJson()));
+    notifyListeners();
   }
 
   /// Get Relax Mode statistics
@@ -376,6 +411,8 @@ class ListeningAnalyticsService {
     required Duration rainUsage,
     required Duration thunderUsage,
     required Duration campfireUsage,
+    Duration waveUsage = Duration.zero,
+    Duration loonUsage = Duration.zero,
   }) async {
     if (!_initialized) return;
 
@@ -384,6 +421,8 @@ class ListeningAnalyticsService {
       rainUsageMs: _relaxModeStats.rainUsageMs + rainUsage.inMilliseconds,
       thunderUsageMs: _relaxModeStats.thunderUsageMs + thunderUsage.inMilliseconds,
       campfireUsageMs: _relaxModeStats.campfireUsageMs + campfireUsage.inMilliseconds,
+      waveUsageMs: _relaxModeStats.waveUsageMs + waveUsage.inMilliseconds,
+      loonUsageMs: _relaxModeStats.loonUsageMs + loonUsage.inMilliseconds,
       discovered: true,
     );
 
@@ -1875,13 +1914,34 @@ class ListeningAnalyticsService {
       return SyncResult(success: true, syncedCount: 0);
     }
 
-    debugPrint('📊 Sync: Pushing ${unsynced.length} unsynced plays to server...');
+    // Filter out easter egg tracks (not real Jellyfin items)
+    final syncable = unsynced.where((e) => !_isEasterEggTrack(e.trackId)).toList();
+    final skipped = unsynced.length - syncable.length;
+
+    if (skipped > 0) {
+      // Mark easter egg tracks as "synced" so they don't keep trying
+      for (final event in unsynced.where((e) => _isEasterEggTrack(e.trackId))) {
+        final index = _events.indexWhere((e) => e.eventId == event.eventId);
+        if (index != -1) {
+          _events[index] = event.copyWith(synced: true);
+        }
+      }
+      await _saveEvents();
+      debugPrint('📊 Sync: Skipped $skipped easter egg plays (not Jellyfin tracks)');
+    }
+
+    if (syncable.isEmpty) {
+      debugPrint('📊 Sync: No syncable events to push');
+      return SyncResult(success: true, syncedCount: 0);
+    }
+
+    debugPrint('📊 Sync: Pushing ${syncable.length} unsynced plays to server...');
 
     int syncedCount = 0;
     int failedCount = 0;
     final errors = <String>[];
 
-    for (final event in unsynced) {
+    for (final event in syncable) {
       try {
         final result = await client.markPlayed(
           credentials: credentials,

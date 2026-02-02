@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/haptic_service.dart';
 import '../services/listening_analytics_service.dart';
 
-/// Ambient sound mixer screen with vertical sliders for Rain, Thunder, and Campfire.
+/// Ambient sound mixer screen with vertical sliders for Rain, Thunder, Campfire, Waves, and Loon.
 class RelaxModeScreen extends StatefulWidget {
   const RelaxModeScreen({super.key});
 
@@ -19,11 +19,15 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
   final AudioPlayer _rainPlayer = AudioPlayer();
   final AudioPlayer _thunderPlayer = AudioPlayer();
   final AudioPlayer _campfirePlayer = AudioPlayer();
+  final AudioPlayer _wavePlayer = AudioPlayer();
+  final AudioPlayer _loonPlayer = AudioPlayer();
 
   // Volume levels (0.0 to 1.0)
   double _rainVolume = 0.0;
   double _thunderVolume = 0.0;
   double _campfireVolume = 0.0;
+  double _waveVolume = 0.0;
+  double _loonVolume = 0.0;
 
   // Track initialization state
   bool _initialized = false;
@@ -34,6 +38,8 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
   int _rainUsageMs = 0;
   int _thunderUsageMs = 0;
   int _campfireUsageMs = 0;
+  int _waveUsageMs = 0;
+  int _loonUsageMs = 0;
 
   @override
   void initState() {
@@ -56,7 +62,8 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
     // Track slider usage every second
     // Only count time when at least one sound is actively playing
     _usageTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final isAnySoundActive = _rainVolume > 0 || _thunderVolume > 0 || _campfireVolume > 0;
+      final isAnySoundActive = _rainVolume > 0 || _thunderVolume > 0 ||
+          _campfireVolume > 0 || _waveVolume > 0 || _loonVolume > 0;
 
       // Only count active listening time (when at least one sound is on)
       if (isAnySoundActive) {
@@ -73,6 +80,12 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
       if (_campfireVolume > 0) {
         _campfireUsageMs += 1000;
       }
+      if (_waveVolume > 0) {
+        _waveUsageMs += 1000;
+      }
+      if (_loonVolume > 0) {
+        _loonUsageMs += 1000;
+      }
     });
   }
 
@@ -81,16 +94,22 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
     await _rainPlayer.setReleaseMode(ReleaseMode.loop);
     await _thunderPlayer.setReleaseMode(ReleaseMode.loop);
     await _campfirePlayer.setReleaseMode(ReleaseMode.loop);
+    await _wavePlayer.setReleaseMode(ReleaseMode.loop);
+    await _loonPlayer.setReleaseMode(ReleaseMode.loop);
 
     // Set initial volume to 0
     await _rainPlayer.setVolume(0.0);
     await _thunderPlayer.setVolume(0.0);
     await _campfirePlayer.setVolume(0.0);
+    await _wavePlayer.setVolume(0.0);
+    await _loonPlayer.setVolume(0.0);
 
     // Load and start playing (at volume 0)
     await _rainPlayer.setSource(AssetSource('relax/rain.mp3'));
     await _thunderPlayer.setSource(AssetSource('relax/thunder.mp3'));
     await _campfirePlayer.setSource(AssetSource('relax/campfire.mp3'));
+    await _wavePlayer.setSource(AssetSource('relax/wave.mp3'));
+    await _loonPlayer.setSource(AssetSource('relax/loon.mp3'));
 
     if (mounted) {
       setState(() => _initialized = true);
@@ -112,6 +131,8 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
         rainUsage: Duration(milliseconds: _rainUsageMs),
         thunderUsage: Duration(milliseconds: _thunderUsageMs),
         campfireUsage: Duration(milliseconds: _campfireUsageMs),
+        waveUsage: Duration(milliseconds: _waveUsageMs),
+        loonUsage: Duration(milliseconds: _loonUsageMs),
       );
     }
 
@@ -119,6 +140,8 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
     _rainPlayer.dispose();
     _thunderPlayer.dispose();
     _campfirePlayer.dispose();
+    _wavePlayer.dispose();
+    _loonPlayer.dispose();
     super.dispose();
   }
 
@@ -149,6 +172,24 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
     HapticService.selectionClick();
   }
 
+  void _onWaveVolumeChanged(double value) {
+    setState(() => _waveVolume = value);
+    _wavePlayer.setVolume(value);
+    if (value > 0 && _wavePlayer.state != PlayerState.playing) {
+      _wavePlayer.resume();
+    }
+    HapticService.selectionClick();
+  }
+
+  void _onLoonVolumeChanged(double value) {
+    setState(() => _loonVolume = value);
+    _loonPlayer.setVolume(value);
+    if (value > 0 && _loonPlayer.state != PlayerState.playing) {
+      _loonPlayer.resume();
+    }
+    HapticService.selectionClick();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -171,8 +212,12 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
   }
 
   Widget _buildSliders(ThemeData theme) {
+    // Use responsive padding for narrow screens (5 sliders need more space)
+    final screenWidth = MediaQuery.of(context).size.width;
+    final horizontalPadding = screenWidth < 400 ? 16.0 : 32.0;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 24),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
@@ -197,6 +242,20 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
             value: _campfireVolume,
             onChanged: _onCampfireVolumeChanged,
           ),
+          _buildAmbientSlider(
+            theme: theme,
+            icon: Icons.waves,
+            color: Colors.cyan,
+            value: _waveVolume,
+            onChanged: _onWaveVolumeChanged,
+          ),
+          _buildAmbientSlider(
+            theme: theme,
+            icon: Icons.nights_stay,
+            color: Colors.indigo,
+            value: _loonVolume,
+            onChanged: _onLoonVolumeChanged,
+          ),
         ],
       ),
     );
@@ -209,29 +268,36 @@ class _RelaxModeScreenState extends State<RelaxModeScreen> {
     required double value,
     required ValueChanged<double> onChanged,
   }) {
-    return SizedBox(
-      width: 64,
+    // Responsive sizing for narrow screens
+    final screenWidth = MediaQuery.of(context).size.width;
+    final iconSize = screenWidth < 400 ? 24.0 : 32.0;
+
+    return Expanded(
       child: Column(
         children: [
           // Icon
           Icon(
             icon,
             color: value > 0 ? color : theme.colorScheme.onSurfaceVariant,
-            size: 32,
+            size: iconSize,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           // Vertical slider
           Expanded(
             child: RotatedBox(
               quarterTurns: 3,
               child: SliderTheme(
                 data: SliderThemeData(
-                  trackHeight: 6,
+                  trackHeight: screenWidth < 400 ? 4 : 6,
                   activeTrackColor: color,
                   inactiveTrackColor: color.withValues(alpha: 0.15),
                   thumbColor: color,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                  thumbShape: RoundSliderThumbShape(
+                    enabledThumbRadius: screenWidth < 400 ? 6 : 8,
+                  ),
+                  overlayShape: RoundSliderOverlayShape(
+                    overlayRadius: screenWidth < 400 ? 12 : 16,
+                  ),
                   overlayColor: color.withValues(alpha: 0.12),
                 ),
                 child: Slider(
