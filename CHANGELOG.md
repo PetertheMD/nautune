@@ -1,4 +1,4 @@
-### v6.4.2 - CarPlay Stability & ReplayGain Fix
+### v6.4.2 - CarPlay Stability, ReplayGain & iOS Visualizer Fix
 
 **CarPlay: Browsing Desync Fix**
 - **Fixed Browsing Stops Working**: CarPlay browsing no longer breaks after phone unlock or app resume
@@ -11,6 +11,13 @@
 - **Fixed Volume Jump on Resume**: Resuming a paused track no longer causes a sudden volume increase
 - **ReplayGain in Fade Methods**: Fade-out and fade-in now correctly apply ReplayGain normalization multiplier
 - **Consistent Playback Volume**: Volume stays consistent before pause and after resume for tracks with ReplayGain metadata
+
+**iOS Visualizer: Spectrum Bars & Mirror Bars Tuning**
+- **Fixed "Blown Out" Visualizers**: iOS spectrum bars and mirror bars no longer look constantly maxed out
+- **iOS FFT Intensity Scaling**: Raw FFT values scaled to 65% to match Linux visual output levels
+- **Slower Attack on iOS**: Reduced attack factor (0.6 → 0.4) so bars rise more gradually
+- **Faster Decay on iOS**: Increased decay factor (0.25 → 0.35) so bars fall back down properly
+- **Visual Parity with Linux**: iOS visualizers now have similar dynamic range and responsiveness as Linux
 
 **Album Detail: Layout Fix**
 - **Fixed Title/Artist Overlap**: Added proper spacing between album artwork and album info section

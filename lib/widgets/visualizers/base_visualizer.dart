@@ -99,12 +99,14 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
 
     if (useIOSFFT) {
       _fftSubscription = IOSFFTService.instance.fftStream.listen((fft) {
-        _targetBass = fft.bass;
-        _targetMid = fft.mid;
-        _targetTreble = fft.treble;
-        _targetAmplitude = fft.amplitude;
+        // iOS FFT values tend to be more elevated than Linux, scale down for visual parity
+        const iosScale = 0.65;
+        _targetBass = fft.bass * iosScale;
+        _targetMid = fft.mid * iosScale;
+        _targetTreble = fft.treble * iosScale;
+        _targetAmplitude = fft.amplitude * iosScale;
         // iOS FFT doesn't provide full spectrum, generate from bands
-        _targetSpectrum = _generateFakeSpectrum(fft.bass, fft.mid, fft.treble);
+        _targetSpectrum = _generateFakeSpectrum(_targetBass, _targetMid, _targetTreble);
       });
       return;
     }
@@ -164,9 +166,9 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
     _lastFrameTime = now;
 
     // Musical smoothing: FAST attack, SLOW decay
-    // iOS needs faster decay since FFT values tend to stay elevated
-    final attackFactor = useRealFFT ? 0.6 : 0.3;
-    final decayFactor = useRealFFT ? (Platform.isIOS ? 0.25 : 0.12) : 0.08;
+    // iOS needs slower attack (values come in hot) and faster decay (they stay elevated)
+    final attackFactor = Platform.isIOS ? 0.4 : (useRealFFT ? 0.6 : 0.3);
+    final decayFactor = Platform.isIOS ? 0.35 : (useRealFFT ? 0.12 : 0.08);
 
     smoothBass += (_targetBass - smoothBass) *
         (_targetBass > smoothBass ? attackFactor : decayFactor);
