@@ -143,6 +143,7 @@ class NautuneAppState extends ChangeNotifier {
   bool _visualizerSuppressedByLowPower = false; // Temporarily disabled by iOS Low Power Mode
   VisualizerType _visualizerType = VisualizerType.bioluminescent; // Current visualizer style
   VisualizerPosition _visualizerPosition = VisualizerPosition.controlsBar; // Where visualizer is displayed
+  NowPlayingLayout _nowPlayingLayout = NowPlayingLayout.classic; // Now Playing screen layout
   StreamSubscription? _powerModeSub;
   SortOption _albumSortBy = SortOption.name;
   SortOrder _albumSortOrder = SortOrder.ascending;
@@ -417,6 +418,7 @@ class NautuneAppState extends ChangeNotifier {
   bool get visualizerEnabled => _visualizerEnabled;
   VisualizerType get visualizerType => _visualizerType;
   VisualizerPosition get visualizerPosition => _visualizerPosition;
+  NowPlayingLayout get nowPlayingLayout => _nowPlayingLayout;
   Duration get cacheTtl => Duration(minutes: _cacheTtlMinutes);
   SortOption get albumSortBy => _albumSortBy;
   SortOrder get albumSortOrder => _albumSortOrder;
@@ -740,6 +742,18 @@ class NautuneAppState extends ChangeNotifier {
     debugPrint('🎨 Visualizer position set to: ${position.label}');
   }
 
+  /// Set Now Playing screen layout
+  void setNowPlayingLayout(NowPlayingLayout layout) {
+    if (_nowPlayingLayout == layout) return;
+    _nowPlayingLayout = layout;
+    notifyListeners();
+
+    unawaited(_playbackStateStore.saveUiState(
+      nowPlayingLayout: layout,
+    ));
+    debugPrint('🎨 Now Playing layout set to: ${layout.label}');
+  }
+
   /// Set pre-cache track count for smart caching
   void setPreCacheTrackCount(int count) {
     _audioPlayerService.setPreCacheTrackCount(count);
@@ -955,9 +969,8 @@ class NautuneAppState extends ChangeNotifier {
     debugPrint('Nautune initialization started');
     await _ensureConnectivityMonitoring();
 
-    // Initialize iOS Low Power Mode detection
+    // Initialize iOS Low Power Mode detection (listener attached after state restoration below)
     await PowerModeService.instance.initialize();
-    _initPowerModeListener();
 
     // Initialize app icon service (for alternate icon support)
     await AppIconService().initialize();
@@ -980,6 +993,7 @@ class NautuneAppState extends ChangeNotifier {
       _visualizerEnabledByUser = storedPlaybackState.visualizerEnabled;
       _visualizerType = storedPlaybackState.visualizerType;
       _visualizerPosition = storedPlaybackState.visualizerPosition;
+      _nowPlayingLayout = storedPlaybackState.nowPlayingLayout;
       _libraryScrollOffsets =
           Map<String, double>.from(storedPlaybackState.scrollOffsets);
       await _audioPlayerService.hydrateFromPersistence(storedPlaybackState);
@@ -992,6 +1006,10 @@ class NautuneAppState extends ChangeNotifier {
       _audioPlayerService.setWifiOnlyCaching(storedPlaybackState.wifiOnlyCaching);
       _audioPlayerService.setConnectivityService(_connectivityService);
       _jellyfinService.setCacheTtl(Duration(minutes: _cacheTtlMinutes));
+
+      // Initialize Low Power Mode listener AFTER visualizer state is restored
+      // (so the initial check has the correct _visualizerEnabled value)
+      _initPowerModeListener();
       
       // Restore download settings
       _downloadService.loadSettings(
@@ -1004,6 +1022,9 @@ class NautuneAppState extends ChangeNotifier {
 
       // Restore offline mode preference
       _userWantsOffline = storedPlaybackState.isOfflineMode;
+    } else {
+      // No stored state - still need power mode listener for new installs
+      _initPowerModeListener();
     }
 
     try {

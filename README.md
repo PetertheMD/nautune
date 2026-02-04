@@ -4,6 +4,7 @@
 
 ## ✨ Key Features
 
+- **6 Now Playing Layouts**: Classic, Blur, Card, Gradient, Compact, and Full Art - choose your preferred player design
 - **Your Rewind**: Spotify Wrapped-style yearly listening reports with shareable exports
 - **ListenBrainz Integration**: Scrobble your plays and get personalized music recommendations (matches via MusicBrainz IDs for reliable library matching)
 - **Popular Tracks**: Artist pages show top 5 most popular tracks globally with dynamic accent colors, album pages highlight popular songs with flame icons (powered by ListenBrainz)
@@ -446,6 +447,8 @@ flutter run -d linux --dart-define=TUI_MODE=true
 - **Buffering Spinner**: Animated indicator during audio buffering
 - **Box-Drawing Borders**: Classic TUI aesthetic
 - **JetBrains Mono Font**: Crisp monospace rendering
+- **Window Resizing**: Drag handle in bottom-right corner for resizing
+- **Responsive Layout**: UI adapts gracefully to small window sizes
 
 ### Desktop Shortcut with TUI Option (KDE/GNOME)
 

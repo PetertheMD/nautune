@@ -208,6 +208,7 @@ Future<void> main(List<String> args) async {
       await windowManager.setBackgroundColor(Colors.black);
       await windowManager.setSize(const Size(1000, 600));
       await windowManager.setMinimumSize(const Size(800, 400));
+      await windowManager.setResizable(true);
     }
   }
 

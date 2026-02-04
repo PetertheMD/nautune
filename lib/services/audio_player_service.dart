@@ -647,17 +647,20 @@ class AudioPlayerService {
     });
 
     // Duration updates
+    // IMPORTANT: Prefer player-reported duration over metadata since it reflects
+    // actual audio length. Metadata can be inaccurate (especially for variable bitrate files).
     _playerDurSub = player.onDurationChanged.listen((duration) {
-      // For streams, player might report 0 or very small duration.
-      // If we have track metadata, prefer that unless player reports something reasonable.
-      if (duration.inSeconds > 0) {
+      // Use player duration if it's reasonable (> 1 second)
+      // This prevents progress bar showing "complete" while audio still plays
+      if (duration.inSeconds > 1) {
         _cachedDuration = duration;
         _durationController.add(duration);
-      } else if (_currentTrack != null) {
-        // Fallback to metadata duration
+      } else if (_currentTrack != null && _currentTrack!.duration != null) {
+        // Fallback to metadata duration only if player reports nothing useful
         _cachedDuration = _currentTrack!.duration;
         _durationController.add(_currentTrack!.duration);
-      } else {
+      } else if (duration.inMilliseconds > 0) {
+        // Last resort: use whatever the player reported
         _cachedDuration = duration;
         _durationController.add(duration);
       }
@@ -1403,9 +1406,24 @@ class AudioPlayerService {
   }
   
   Future<void> seek(Duration position) async {
-    await _player.seek(position);
-    _lastPosition = position;
-    await _stateStore.savePlaybackSnapshot(position: position);
+    // Clamp position to valid range to prevent seeking beyond track bounds
+    final duration = _cachedDuration ?? _currentTrack?.duration;
+    final clampedPosition = duration != null
+        ? Duration(milliseconds: position.inMilliseconds.clamp(0, duration.inMilliseconds))
+        : position;
+
+    // Update position immediately for responsive UI (before player confirms)
+    _lastPosition = clampedPosition;
+    _positionController.add(clampedPosition);
+
+    // Perform the actual seek
+    await _player.seek(clampedPosition);
+    await _stateStore.savePlaybackSnapshot(position: clampedPosition);
+
+    // Sync iOS FFT shadow player position after seek
+    if (Platform.isIOS) {
+      IOSFFTService.instance.syncPosition(clampedPosition.inMilliseconds / 1000.0);
+    }
   }
   
   Future<void> skipToNext() async {
@@ -2301,35 +2319,53 @@ class AudioPlayerService {
     }
   }
 
-  /// Execute the crossfade (volume fade)
+  /// Execute the crossfade (sequential fade out/in - not overlay)
+  /// User expectation: current track fades OUT completely, then next track fades IN
   Future<void> _executeCrossfade(JellyfinTrack nextTrack, int nextIndex) async {
     if (_crossfadePlayer == null) return;
 
-    final steps = 30; // Number of fade steps (smooth)
-    final stepDuration = Duration(milliseconds: (_crossfadeDurationSeconds * 1000) ~/ steps);
-    
-    // Start next track at 0 volume
-    await _crossfadePlayer!.setVolume(0.0);
-    await _crossfadePlayer!.resume();
-    
-    // Fade volumes over time
+    final steps = 20; // Steps per fade phase (smooth enough, fast enough)
+    // Split crossfade duration: 60% fade out, 40% fade in
+    final fadeOutDuration = Duration(milliseconds: (_crossfadeDurationSeconds * 600) ~/ steps);
+    final fadeInDuration = Duration(milliseconds: (_crossfadeDurationSeconds * 400) ~/ steps);
+
+    // PHASE 1: Fade out current track
     for (int i = 0; i <= steps; i++) {
       if (!_isCrossfading || _crossfadePlayer == null) break;
-      
+
       final progress = i / steps;
-      
-      // Exponential curves for natural sound
-      final fadeOut = 1.0 - (progress * progress); // Quadratic fade out
-      final fadeIn = progress * progress; // Quadratic fade in
-      
+      // Quadratic fade out for natural decay
+      final fadeOut = 1.0 - (progress * progress);
+
       await _player.setVolume(_volume * fadeOut);
-      await _crossfadePlayer!.setVolume(_volume * fadeIn);
-      
+
       if (i < steps) {
-        await Future.delayed(stepDuration);
+        await Future.delayed(fadeOutDuration);
       }
     }
-    
+
+    // Stop current track after fade out
+    await _player.stop();
+    await _player.setVolume(_volume); // Reset volume for next use
+
+    // PHASE 2: Start next track and fade in
+    await _crossfadePlayer!.setVolume(0.0);
+    await _crossfadePlayer!.resume();
+
+    for (int i = 0; i <= steps; i++) {
+      if (!_isCrossfading || _crossfadePlayer == null) break;
+
+      final progress = i / steps;
+      // Quadratic fade in for natural attack
+      final fadeIn = progress * progress;
+
+      await _crossfadePlayer!.setVolume(_volume * fadeIn);
+
+      if (i < steps) {
+        await Future.delayed(fadeInDuration);
+      }
+    }
+
     // Complete the transition
     await _completeCrossfadeTransition(nextTrack, nextIndex);
   }

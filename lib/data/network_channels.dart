@@ -31,7 +31,7 @@ const List<NetworkChannel> networkChannels = [
     name: 'Against All Logic',
     artist: 'AALISME',
     audioFile: 'AAL SET.mp3',
-    imageFile: 'AA.FM.jpg',
+    imageFile: 'AAL FULL LENGTH image.jpg',
   ),
   NetworkChannel(
     number: 11,

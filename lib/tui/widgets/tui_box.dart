@@ -68,24 +68,30 @@ class TuiBox extends StatelessWidget {
       );
     }
 
-    return Row(
-      children: [
-        Text(TuiChars.topLeft, style: style),
-        Text(TuiChars.horizontal, style: style),
-        Text(
-          ' $title ',
-          style: focused ? TuiTextStyles.accent : TuiTextStyles.normal,
-        ),
-        Expanded(
-          child: Text(
-            TuiChars.horizontal * 1000,
-            style: style,
-            overflow: TextOverflow.clip,
-            maxLines: 1,
+    return ClipRect(
+      child: Row(
+        children: [
+          Text(TuiChars.topLeft, style: style),
+          Text(TuiChars.horizontal, style: style),
+          Flexible(
+            child: Text(
+              ' $title ',
+              style: focused ? TuiTextStyles.accent : TuiTextStyles.normal,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
           ),
-        ),
-        Text(TuiChars.topRight, style: style),
-      ],
+          Expanded(
+            child: Text(
+              TuiChars.horizontal * 1000,
+              style: style,
+              overflow: TextOverflow.clip,
+              maxLines: 1,
+            ),
+          ),
+          Text(TuiChars.topRight, style: style),
+        ],
+      ),
     );
   }
 

@@ -163,39 +163,42 @@ class _TuiShellState extends State<TuiShell> with SingleTickerProviderStateMixin
             onKeyEvent: _handleKeyEvent,
             child: Stack(
               children: [
-                Column(
-                  children: [
-                    // Tab bar (draggable for window movement)
-                    GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onPanStart: (_) => windowManager.startDragging(),
-                      child: TuiTabBar(
-                        selectedSection: _selectedSection,
-                        onSectionSelected: _onSidebarItemSelected,
+                // ClipRect prevents overflow errors on very small windows
+                ClipRect(
+                  child: Column(
+                    children: [
+                      // Tab bar (draggable for window movement)
+                      GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onPanStart: (_) => windowManager.startDragging(),
+                        child: TuiTabBar(
+                          selectedSection: _selectedSection,
+                          onSectionSelected: _onSidebarItemSelected,
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Sidebar
-                          TuiSidebar(
-                            selectedItem: _selectedSection,
-                            onItemSelected: _onSidebarItemSelected,
-                            focused: _focus == TuiFocus.sidebar,
-                          ),
-                          // Vertical divider
-                          const TuiVerticalDivider(),
-                          // Content pane
-                          Expanded(
-                            child: _buildContentPane(),
-                          ),
-                        ],
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Sidebar
+                            TuiSidebar(
+                              selectedItem: _selectedSection,
+                              onItemSelected: _onSidebarItemSelected,
+                              focused: _focus == TuiFocus.sidebar,
+                            ),
+                            // Vertical divider
+                            const TuiVerticalDivider(),
+                            // Content pane
+                            Expanded(
+                              child: _buildContentPane(),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    // Status bar
-                    const TuiStatusBar(),
-                  ],
+                      // Status bar
+                      const TuiStatusBar(),
+                    ],
+                  ),
                 ),
                 // Search overlay
                 if (_isSearchMode) _buildSearchOverlay(),
@@ -207,6 +210,27 @@ class _TuiShellState extends State<TuiShell> with SingleTickerProviderStateMixin
                       child: const TuiHelpOverlay(),
                     ),
                   ),
+                // Resize handle (bottom-right corner)
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: GestureDetector(
+                    onPanStart: (_) => windowManager.startResizing(ResizeEdge.bottomRight),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.resizeDownRight,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        alignment: Alignment.bottomRight,
+                        child: Icon(
+                          Icons.drag_handle,
+                          size: 12,
+                          color: TuiColors.dim,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

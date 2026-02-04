@@ -15,12 +15,14 @@ import 'package:window_manager/window_manager.dart';
 import '../app_state.dart';
 import '../providers/syncplay_provider.dart';
 import '../services/lyrics_service.dart';
+import '../models/now_playing_layout.dart';
 import '../services/playback_state_store.dart' show StreamingQuality, VisualizerPosition;
 import '../jellyfin/jellyfin_album.dart';
 import '../jellyfin/jellyfin_artist.dart';
 import '../jellyfin/jellyfin_track.dart';
 import '../services/audio_player_service.dart';
 import '../services/haptic_service.dart';
+import '../services/ios_fft_service.dart';
 import '../services/saved_loops_service.dart';
 import '../services/share_service.dart';
 import '../widgets/add_to_playlist_dialog.dart';
@@ -785,6 +787,227 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     setState(() {
       _showingVisualizerInArtwork = !_showingVisualizerInArtwork;
     });
+
+    // BATTERY FIX: Control iOS FFT capture based on visualizer visibility
+    // Stop FFT when visualizer is hidden to prevent battery drain
+    if (Platform.isIOS) {
+      if (_showingVisualizerInArtwork && _audioService.isPlaying) {
+        // Visualizer now visible - start FFT capture
+        IOSFFTService.instance.startCapture();
+      } else {
+        // Visualizer hidden - stop FFT capture to save battery
+        IOSFFTService.instance.stopCapture();
+      }
+    }
+  }
+
+  /// Build artwork with layout-specific styling
+  Widget _buildLayoutStyledArtwork({
+    required Widget artwork,
+    required bool isDesktop,
+    required Size size,
+    required ThemeData theme,
+  }) {
+    final layout = _appState.nowPlayingLayout;
+
+    // Size constraints based on layout
+    double maxWidthFactor;
+    double maxHeightFactor;
+
+    switch (layout) {
+      case NowPlayingLayout.compact:
+        maxWidthFactor = isDesktop ? 0.4 : 0.65;
+        maxHeightFactor = isDesktop ? 0.4 : 0.45;
+        break;
+      case NowPlayingLayout.fullArt:
+        maxWidthFactor = 1.0;
+        maxHeightFactor = 0.85;
+        break;
+      case NowPlayingLayout.card:
+        maxWidthFactor = isDesktop ? 0.5 : 0.85;
+        maxHeightFactor = isDesktop ? 0.6 : 0.55;
+        break;
+      default:
+        maxWidthFactor = isDesktop ? 0.6 : 0.98;
+        maxHeightFactor = isDesktop ? 0.7 : 0.7;
+    }
+
+    Widget styledArtwork = FittedBox(
+      fit: BoxFit.contain,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: isDesktop ? 1000 * maxWidthFactor : size.width * maxWidthFactor,
+          maxHeight: isDesktop ? 1000 * maxHeightFactor : size.height * maxHeightFactor,
+        ),
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: artwork,
+        ),
+      ),
+    );
+
+    // Apply layout-specific decorations
+    switch (layout) {
+      case NowPlayingLayout.card:
+        // Card: Elevated with shadow
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 30,
+                spreadRadius: 5,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: styledArtwork,
+          ),
+        );
+
+      case NowPlayingLayout.blur:
+        // Blur: Floating with subtle shadow
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 20,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: styledArtwork,
+          ),
+        );
+
+      case NowPlayingLayout.fullArt:
+        // Full Art: No rounded corners, fills more space
+        return styledArtwork;
+
+      default:
+        // Classic, Gradient, Compact: Default styling
+        return styledArtwork;
+    }
+  }
+
+  /// Build background layers based on selected Now Playing layout
+  List<Widget> _buildBackgroundLayers(ThemeData theme) {
+    final layout = _appState.nowPlayingLayout;
+    final hasColors = _paletteColors != null && _paletteColors!.isNotEmpty;
+
+    switch (layout) {
+      case NowPlayingLayout.classic:
+      case NowPlayingLayout.gradient:
+        // Classic/Gradient: Full gradient with medium blur
+        return [
+          if (hasColors)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: _paletteColors!.length >= 4
+                        ? [_paletteColors![0], _paletteColors![1], _paletteColors![2], _paletteColors![3]]
+                        : _paletteColors!.length == 3
+                            ? [_paletteColors![0], _paletteColors![1], _paletteColors![2]]
+                            : _paletteColors!.length == 2
+                                ? [_paletteColors![0], _paletteColors![1]]
+                                : [_paletteColors![0], Colors.black],
+                  ),
+                ),
+              ),
+            ),
+          if (hasColors)
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 100, sigmaY: 100),
+                child: Container(color: Colors.black.withValues(alpha: 0.3)),
+              ),
+            ),
+        ];
+
+      case NowPlayingLayout.blur:
+        // Blur: Heavy frosted glass effect
+        return [
+          if (hasColors)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [_paletteColors![0], _paletteColors!.length > 1 ? _paletteColors![1] : _paletteColors![0]],
+                  ),
+                ),
+              ),
+            ),
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 150, sigmaY: 150),
+              child: Container(color: Colors.black.withValues(alpha: 0.5)),
+            ),
+          ),
+        ];
+
+      case NowPlayingLayout.card:
+        // Card: Dark/muted background, emphasis on card
+        return [
+          Positioned.fill(
+            child: Container(
+              color: theme.scaffoldBackgroundColor,
+            ),
+          ),
+          if (hasColors)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      _paletteColors![0].withValues(alpha: 0.15),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ];
+
+      case NowPlayingLayout.compact:
+        // Compact: Subtle gradient, less visual noise
+        return [
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: hasColors
+                      ? [_paletteColors![0].withValues(alpha: 0.4), theme.scaffoldBackgroundColor]
+                      : [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor],
+                ),
+              ),
+            ),
+          ),
+        ];
+
+      case NowPlayingLayout.fullArt:
+        // Full Art: No special background (album art fills screen)
+        return [
+          Positioned.fill(
+            child: Container(color: Colors.black),
+          ),
+        ];
+    }
   }
 
   /// Build artwork container with optional visualizer toggle (when position is albumArt)
@@ -802,7 +1025,9 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
       return artwork;
     }
 
-    final borderRadius = BorderRadius.circular(isDesktop ? 24 : 16);
+    final layout = _appState.nowPlayingLayout;
+    final isFullArt = layout == NowPlayingLayout.fullArt;
+    final borderRadius = isFullArt ? BorderRadius.zero : BorderRadius.circular(isDesktop ? 24 : 16);
 
     return GestureDetector(
       onTap: _toggleVisualizerInArtwork,
@@ -821,12 +1046,10 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
             curve: Curves.easeInOut,
             child: artwork,
           ),
-          // Visualizer layer with fade (higher opacity when in album art position)
-          AnimatedOpacity(
-            opacity: _showingVisualizerInArtwork ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            child: ClipRRect(
+          // BATTERY FIX: Only render visualizer when visible (not just hidden with opacity 0)
+          // This prevents FFT processing and GPU rendering when visualizer is hidden
+          if (_showingVisualizerInArtwork)
+            ClipRRect(
               borderRadius: borderRadius,
               child: Container(
                 decoration: BoxDecoration(
@@ -842,7 +1065,6 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                 ),
               ),
             ),
-          ),
           // Mode indicator icon (bottom-right corner)
           Positioned(
             right: 8,
@@ -1270,46 +1492,8 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
           child: Scaffold(
             body: Stack(
               children: [
-                // Gradient background layer
-                if (_paletteColors != null && _paletteColors!.isNotEmpty)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: _paletteColors!.length >= 4
-                              ? [
-                                  _paletteColors![0],
-                                  _paletteColors![1],
-                                  _paletteColors![2],
-                                  _paletteColors![3],
-                                ]
-                              : _paletteColors!.length == 3
-                              ? [
-                                  _paletteColors![0],
-                                  _paletteColors![1],
-                                  _paletteColors![2],
-                                ]
-                              : _paletteColors!.length == 2
-                              ? [_paletteColors![0], _paletteColors![1]]
-                              : [_paletteColors![0], Colors.black],
-                        ),
-                      ),
-                    ),
-                  ),
-                // Blur layer for extra effect
-                if (_paletteColors != null && _paletteColors!.isNotEmpty)
-                  Positioned.fill(
-                    child: BackdropFilter(
-                      filter: ui.ImageFilter.blur(sigmaX: 100, sigmaY: 100),
-                      child: Container(
-                        color: Colors.black.withValues(
-                          alpha: 0.3,
-                        ), // Elegant darkening
-                      ),
-                    ),
-                  ),
+                // Background layer - varies by layout
+                ..._buildBackgroundLayers(theme),
                 // Content layer
                 SafeArea(
                   child: Column(
@@ -1824,20 +2008,13 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Artwork - Scaled to fit
+                        // Artwork - Styled based on layout
                         Flexible(
-                          child: FittedBox(
-                            fit: BoxFit.contain,
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: isDesktop ? 1000 : size.width * 0.98,
-                                maxHeight: isDesktop ? 1000 : size.height * 0.7,
-                              ),
-                              child: AspectRatio(
-                                aspectRatio: 1,
-                                child: artwork,
-                              ),
-                            ),
+                          child: _buildLayoutStyledArtwork(
+                            artwork: artwork,
+                            isDesktop: isDesktop,
+                            size: size,
+                            theme: theme,
                           ),
                         ),
 
@@ -2862,7 +3039,13 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     required bool isDesktop,
     required ThemeData theme,
   }) {
-    final borderRadius = BorderRadius.circular(isDesktop ? 24 : 16);
+    final layout = _appState.nowPlayingLayout;
+    final isFullArt = layout == NowPlayingLayout.fullArt;
+
+    // Full Art layout: no rounded corners; others: rounded
+    final borderRadius = isFullArt
+        ? BorderRadius.zero
+        : BorderRadius.circular(isDesktop ? 24 : 16);
     final maxWidth = isDesktop ? 1024 : 800;
     final placeholder = Container(
       color: theme.colorScheme.primaryContainer,
@@ -2887,6 +3070,31 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     if (imageTag == null || imageTag.isEmpty) {
       imageTag = track.parentThumbImageTag;
       itemId = track.albumId ?? track.id;
+    }
+
+    // Full Art: no shadow, no container decoration
+    if (isFullArt) {
+      return ClipRRect(
+        borderRadius: borderRadius,
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: (imageTag != null && imageTag.isNotEmpty)
+              ? JellyfinImage(
+                  key: ValueKey('$itemId-$imageTag-fullart'),
+                  itemId: itemId,
+                  imageTag: imageTag,
+                  trackId: track.id,
+                  maxWidth: maxWidth,
+                  boxFit: BoxFit.cover,
+                  placeholderBuilder: (context, url) => Container(
+                    color: theme.colorScheme.primaryContainer,
+                    child: const Center(child: CircularProgressIndicator()),
+                  ),
+                  errorBuilder: (context, url, error) => placeholder,
+                )
+              : placeholder,
+        ),
+      );
     }
 
     return Container(

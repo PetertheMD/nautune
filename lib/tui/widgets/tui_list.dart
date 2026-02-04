@@ -407,20 +407,25 @@ class TuiListItem extends StatelessWidget {
       onTap: onTap,
       child: Container(
         color: isSelected ? TuiColors.selection : Colors.transparent,
-        child: Row(
-          children: [
-            Text(prefixText, style: style),
-            Expanded(
-              child: Text(
-                text,
-                style: style,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
+        child: ClipRect(
+          child: Row(
+            children: [
+              Text(prefixText, style: style),
+              Expanded(
+                child: Text(
+                  text,
+                  style: style,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
               ),
-            ),
-            if (suffixText.isNotEmpty)
-              Text(' $suffixText', style: style.copyWith(color: TuiColors.dim)),
-          ],
+              if (suffixText.isNotEmpty)
+                Flexible(
+                  flex: 0,
+                  child: Text(' $suffixText', style: style.copyWith(color: TuiColors.dim), overflow: TextOverflow.ellipsis),
+                ),
+            ],
+          ),
         ),
       ),
     );

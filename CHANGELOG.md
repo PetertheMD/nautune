@@ -1,3 +1,47 @@
+### v6.5.0 - Now Playing Layouts, Crossfade Fix & Battery Optimization
+
+**Now Playing Screen Layouts**
+- **6 Layout Options**: Choose from Classic, Blur, Card, Gradient, Compact, and Full Art layouts
+- **Settings Picker**: New "Now Playing Layout" option in Settings > Appearance
+- **Persistent Preference**: Selected layout saved and restored across app restarts
+- **Classic Layout**: Current default - traditional player with album art and controls
+- **Blur Layout**: Heavy frosted glass effect with blurred album art background
+- **Card Layout**: Dark background with elevated album art card and large shadow
+- **Gradient Layout**: Dynamic gradient background from album colors
+- **Compact Layout**: Smaller artwork (35-45% reduction) with subtle gradient
+- **Full Art Layout**: Black background, no rounded corners, artwork fills screen
+
+**Crossfade: Proper Fade Out/In Behavior**
+- **Fixed Overlay Issue**: Crossfade now properly fades out the current track THEN fades in the next track
+- **Sequential Transition**: No more simultaneous mixing of both tracks during crossfade
+- **Split Duration**: 60% of crossfade time for fade out, 40% for fade in
+- **Smoother Experience**: Users get the expected radio-style sequential fade behavior
+
+**Track Seeking Accuracy Fix**
+- **Fixed Desync Issue**: Seeking now immediately updates the progress bar UI for responsive feedback
+- **Position Clamping**: Seek position clamped to valid range to prevent seeking beyond track bounds
+- **iOS FFT Sync**: FFT shadow player position synced after seek operations
+- **Duration Priority**: Player-reported duration now prioritized over metadata to prevent "completed but still playing" issue
+
+**Visualizer Battery Optimization (iOS)**
+- **FFT Stops When Hidden**: FFT processing now stops when visualizer is toggled off (hidden behind album art)
+- **No Rendering When Hidden**: Visualizer widget not rendered at all when hidden (previously rendered with opacity 0)
+- **Manual FFT Control**: Toggling visualizer on/off now explicitly starts/stops iOS FFT capture
+- **Fixes Battery Drain**: 20-30 minute sessions no longer heat up phone when visualizer is enabled but not visible
+
+**iOS Low Power Mode Fix**
+- **Fixed Visualizer Not Disabling**: Low Power Mode listener now initializes AFTER visualizer state is restored
+- **Proper Initial Check**: If Low Power Mode is already enabled at app start, visualizer correctly disables
+- **Restored on Exit**: Visualizer properly restores when Low Power Mode is turned off
+
+**TUI Mode Improvements (Linux)**
+- **Window Resizing**: Added drag handle in bottom-right corner for resizing the TUI window
+- **Responsive Layout**: Tab bar and status bar now handle small window sizes gracefully
+- **Overflow Protection**: No more render overflow errors when resizing to very small dimensions
+- **Smart Element Hiding**: Now playing indicator and progress bar hide on narrow windows
+
+---
+
 ### v6.4.2 - CarPlay Stability, ReplayGain & iOS Visualizer Fix
 
 **CarPlay: Browsing Desync Fix**

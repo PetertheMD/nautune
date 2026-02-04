@@ -87,50 +87,59 @@ class _NowPlayingRow extends StatelessWidget {
                       builder: (context, loopSnapshot) {
                         final loopState = loopSnapshot.data;
 
-                        return Row(
-                          children: [
-                            // Status icon
-                            Text(
-                              '${isPlaying ? TuiChars.playing : TuiChars.paused} ',
-                              style: isPlaying ? TuiTextStyles.playing : TuiTextStyles.dim,
-                            ),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    track.name,
-                                    style: TuiTextStyles.normal,
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
+                        return LayoutBuilder(
+                          builder: (context, constraints) {
+                            // Hide progress/volume on very narrow windows
+                            final showExtras = constraints.maxWidth > 400;
+                            return Row(
+                              children: [
+                                // Status icon
+                                Text(
+                                  '${isPlaying ? TuiChars.playing : TuiChars.paused} ',
+                                  style: isPlaying ? TuiTextStyles.playing : TuiTextStyles.dim,
+                                ),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        track.name,
+                                        style: TuiTextStyles.normal,
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                      Text(
+                                        track.displayArtist,
+                                        style: TuiTextStyles.dim,
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                    ],
                                   ),
-                                  Text(
-                                    track.displayArtist,
-                                    style: TuiTextStyles.dim,
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
+                                ),
+                                if (showExtras) ...[
+                                  const SizedBox(width: 16),
+                                  // Progress bar with loop state
+                                  TuiProgressBar(
+                                    position: position,
+                                    duration: duration,
+                                    width: 25,
+                                    loopState: loopState,
+                                  ),
+                                  const SizedBox(width: 16),
+                                  // Volume
+                                  StreamBuilder<double>(
+                                    stream: audioService.volumeStream,
+                                    builder: (context, volSnapshot) {
+                                      final volume = volSnapshot.data ?? 1.0;
+                                      return TuiVolumeBar(volume: volume, width: 8);
+                                    },
                                   ),
                                 ],
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            // Progress bar with loop state
-                            TuiProgressBar(
-                              position: position,
-                              duration: duration,
-                              width: 25,
-                              loopState: loopState,
-                            ),
-                            const SizedBox(width: 16),
-                            // Volume
-                            StreamBuilder<double>(
-                              stream: audioService.volumeStream,
-                              builder: (context, volSnapshot) {
-                                final volume = volSnapshot.data ?? 1.0;
-                                return TuiVolumeBar(volume: volume, width: 8);
-                              },
-                            ),
-                          ],
+                              ],
+                            );
+                          },
                         );
                       },
                     );

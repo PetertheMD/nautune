@@ -1,4 +1,5 @@
 import '../jellyfin/jellyfin_track.dart';
+import 'now_playing_layout.dart';
 import 'visualizer_type.dart';
 
 /// Streaming quality options for audio playback
@@ -109,6 +110,8 @@ class PlaybackState {
     this.gridSize = 2,
     // List mode vs grid mode
     this.useListMode = false,
+    // Now Playing layout
+    this.nowPlayingLayout = NowPlayingLayout.classic,
   });
 
   final String? currentTrackId;
@@ -158,6 +161,8 @@ class PlaybackState {
   final int gridSize;
   // List mode vs grid mode
   final bool useListMode;
+  // Now Playing layout
+  final NowPlayingLayout nowPlayingLayout;
 
   bool get hasTrack => currentTrackId != null;
 
@@ -201,6 +206,7 @@ class PlaybackState {
     bool? isOfflineMode,
     int? gridSize,
     bool? useListMode,
+    NowPlayingLayout? nowPlayingLayout,
   }) {
     return PlaybackState(
       currentTrackId: currentTrackId ?? this.currentTrackId,
@@ -242,6 +248,7 @@ class PlaybackState {
       isOfflineMode: isOfflineMode ?? this.isOfflineMode,
       gridSize: gridSize ?? this.gridSize,
       useListMode: useListMode ?? this.useListMode,
+      nowPlayingLayout: nowPlayingLayout ?? this.nowPlayingLayout,
     );
   }
 
@@ -286,6 +293,7 @@ class PlaybackState {
       'isOfflineMode': isOfflineMode,
       'gridSize': gridSize,
       'useListMode': useListMode,
+      'nowPlayingLayout': nowPlayingLayout.name,
     };
   }
 
@@ -342,6 +350,7 @@ class PlaybackState {
       isOfflineMode: json['isOfflineMode'] as bool? ?? false,
       gridSize: (json['gridSize'] as num?)?.toInt() ?? 2,
       useListMode: json['useListMode'] as bool? ?? false,
+      nowPlayingLayout: NowPlayingLayoutExtension.fromString(json['nowPlayingLayout'] as String?),
     );
   }
 
@@ -388,6 +397,7 @@ class PlaybackState {
       wifiOnlyCaching: wifiOnlyCaching,
       gridSize: gridSize, // Preserve grid size preference
       useListMode: useListMode, // Preserve list mode preference
+      nowPlayingLayout: nowPlayingLayout, // Preserve Now Playing layout
     );
   }
 

@@ -60,21 +60,27 @@ class TuiSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: TuiMetrics.sidebarWidth,
-      child: TuiBox(
-        title: 'Nautune',
-        focused: focused,
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final item in TuiSidebarItem.values) _buildItem(item),
-            ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Use sidebar width but constrain to available space
+        final width = TuiMetrics.sidebarWidth.clamp(0.0, constraints.maxWidth * 0.4);
+        return SizedBox(
+          width: width,
+          child: TuiBox(
+            title: 'Nautune',
+            focused: focused,
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final item in TuiSidebarItem.values) _buildItem(item),
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

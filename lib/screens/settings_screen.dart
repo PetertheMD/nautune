@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../services/listening_analytics_service.dart';
 import '../services/network_download_service.dart';
+import '../models/now_playing_layout.dart';
 import '../models/playback_state.dart' show StreamingQuality, StreamingQualityExtension;
 import '../models/visualizer_type.dart';
 import '../providers/session_provider.dart';
@@ -186,6 +187,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _showVisualizerPositionPicker(context),
                 ),
+              ListTile(
+                leading: Icon(appState.nowPlayingLayout.icon, color: theme.colorScheme.primary),
+                title: const Text('Now Playing Layout'),
+                subtitle: Text(appState.nowPlayingLayout.description),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showNowPlayingLayoutPicker(context),
+              ),
               ListTile(
                 leading: Icon(Icons.volume_up, color: theme.colorScheme.primary),
                 title: const Text('Volume Bar'),
@@ -605,6 +613,85 @@ class _SettingsScreenState extends State<SettingsScreen> {
             }),
             const SizedBox(height: 16),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showNowPlayingLayoutPicker(BuildContext context) {
+    final appState = Provider.of<NautuneAppState>(context, listen: false);
+    final theme = Theme.of(context);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Now Playing Layout',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              ...NowPlayingLayout.values.map((layout) {
+                final isSelected = layout == appState.nowPlayingLayout;
+                return ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                          : theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      layout.icon,
+                      color: isSelected
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  title: Text(
+                    layout.label,
+                    style: TextStyle(
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  subtitle: Text(layout.description),
+                  trailing: isSelected
+                      ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
+                      : null,
+                  onTap: () {
+                    appState.setNowPlayingLayout(layout);
+                    Navigator.pop(context);
+                  },
+                );
+              }),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );

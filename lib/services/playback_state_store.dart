@@ -4,10 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../jellyfin/jellyfin_track.dart';
+import '../models/now_playing_layout.dart';
 import '../models/playback_state.dart';
 import '../models/visualizer_type.dart';
 export '../models/playback_state.dart' show StreamingQuality, StreamingQualityExtension;
 export '../models/visualizer_type.dart' show VisualizerType, VisualizerTypeExtension, VisualizerPosition, VisualizerPositionExtension;
+export '../models/now_playing_layout.dart' show NowPlayingLayout, NowPlayingLayoutExtension;
 
 class PlaybackStateStore {
   static const _boxName = 'nautune_playback';
@@ -165,6 +167,7 @@ class PlaybackStateStore {
     bool? isOfflineMode,
     int? gridSize,
     bool? useListMode,
+    NowPlayingLayout? nowPlayingLayout,
   }) async {
     await update((state) {
       final mergedOffsets = Map<String, double>.from(state.scrollOffsets);
@@ -199,6 +202,7 @@ class PlaybackStateStore {
         isOfflineMode: isOfflineMode ?? state.isOfflineMode,
         gridSize: gridSize ?? state.gridSize,
         useListMode: useListMode ?? state.useListMode,
+        nowPlayingLayout: nowPlayingLayout ?? state.nowPlayingLayout,
       );
     });
   }
