@@ -14,9 +14,10 @@ import '../models/download_item.dart';
 import '../providers/demo_mode_provider.dart';
 import '../services/chart_cache_service.dart';
 import '../services/chart_generator_service.dart';
-import '../services/ios_fft_service.dart';
-import '../services/listening_analytics_service.dart';
-import '../services/pulseaudio_fft_service.dart';
+import 'package:nautune/services/android_fft_service.dart';
+import 'package:nautune/services/ios_fft_service.dart';
+import 'package:nautune/services/listening_analytics_service.dart';
+import 'package:nautune/services/pulseaudio_fft_service.dart';
 import '../widgets/jellyfin_image.dart';
 
 /// Frets on Fire - Guitar Hero style rhythm game easter egg.
@@ -605,6 +606,19 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
         _laneBands[3] = ((data.mid * 0.4 + data.treble * 0.6) * 1.3).clamp(0.0, 1.0);
         _laneBands[4] = (data.treble * 1.5).clamp(0.0, 1.0);
       });
+    } else if (Platform.isAndroid) {
+      // Android: Global mix visualizer (Session 0)
+      await AndroidFFTService.instance.startVisualizer(0);
+      _fftSubscription = AndroidFFTService.instance.fftStream.listen((data) {
+        if (!mounted) return;
+        setState(() {
+          _laneBands[0] = (data.bass * 1.5).clamp(0.0, 1.0);
+          _laneBands[1] = ((data.bass * 0.6 + data.mid * 0.4) * 1.3).clamp(0.0, 1.0);
+          _laneBands[2] = (data.mid * 1.2).clamp(0.0, 1.0);
+          _laneBands[3] = ((data.mid * 0.4 + data.treble * 0.6) * 1.3).clamp(0.0, 1.0);
+          _laneBands[4] = (data.treble * 1.5).clamp(0.0, 1.0);
+        });
+      });
     }
   }
 
@@ -615,6 +629,8 @@ class _FretsOnFireScreenState extends State<FretsOnFireScreen>
       IOSFFTService.instance.stopCapture();
     } else if (Platform.isLinux) {
       PulseAudioFFTService.instance.stopCapture();
+    } else if (Platform.isAndroid) {
+      AndroidFFTService.instance.stopVisualizer();
     }
   }
 

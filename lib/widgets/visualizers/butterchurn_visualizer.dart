@@ -9,7 +9,12 @@ class ButterchurnVisualizer extends BaseVisualizer {
     super.key,
     required super.audioService,
     super.opacity = 0.6,
+    super.isVisible = true,
   });
+
+  // Pre-calculated color lookups for performance
+  static final List<Color> _rainbowColors = List.generate(360, (h) => 
+      HSLColor.fromAHSL(1.0, h.toDouble(), 0.8, 0.6).toColor());
 
   @override
   State<ButterchurnVisualizer> createState() => _ButterchurnVisualizerState();
@@ -87,8 +92,9 @@ class _ButterchurnVisualizerState extends BaseVisualizerState<ButterchurnVisuali
   }
 
   Color _getTrailColor(double angle) {
-    final hue = (angle / (2 * pi) * 360 + lastPaintedTime * 30) % 360;
-    return HSLColor.fromAHSL(1.0, hue, 0.8, 0.6).toColor();
+    final hue = (angle / (2 * pi) * 360 + lastPaintedTime * 30).round() % 360;
+    final h = hue < 0 ? hue + 360 : hue;
+    return ButterchurnVisualizer._rainbowColors[h];
   }
 }
 
@@ -160,10 +166,17 @@ class _ButterchurnPainter extends CustomPainter {
 
   /// Get cycling color based on time and position
   Color _getCyclingColor(double phase, double intensity) {
-    final hue = (phase * 60 + time * 40) % 360;
-    final saturation = 0.6 + intensity * 0.4;
-    final lightness = 0.4 + intensity * 0.35;
-    return HSLColor.fromAHSL(1.0, hue, saturation.clamp(0.0, 1.0), lightness.clamp(0.0, 0.85)).toColor();
+    final hue = (phase * 60 + time * 40).round() % 360;
+    final h = hue < 0 ? hue + 360 : hue;
+    
+    // Instead of full HSL conversion, we can lerp from our rainbow table
+    // or just use the table if we want maximum speed. 
+    // Given the intensity shift, we'll lerp towards a brighter/saturated version.
+    return Color.lerp(
+      ButterchurnVisualizer._rainbowColors[h], 
+      Colors.white, 
+      intensity * 0.3
+    ) ?? ButterchurnVisualizer._rainbowColors[h];
   }
 
   @override

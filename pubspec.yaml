@@ -2,7 +2,7 @@ name: nautune
 description: "Nautune - Poseidon Music Player for Jellyfin"
 publish_to: 'none'
 
-version: 6.6.1+1
+version: 6.7.1+1
 
 environment:
   sdk: ^3.9.2
@@ -53,6 +53,7 @@ dependencies:
 
   # Rewind PDF export
   pdf: ^3.11.1  # Pure Dart PDF generation
+  permission_handler: ^12.0.1
 
 dev_dependencies:
   flutter_test:

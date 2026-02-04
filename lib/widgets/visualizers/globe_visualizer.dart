@@ -16,6 +16,7 @@ class GlobeVisualizer extends BaseVisualizer {
     required super.audioService,
     super.opacity = 0.6,
     this.quality = GlobeQuality.normal,
+    super.isVisible = true,
   });
 
   /// Graphics quality level (affects particle count)
@@ -28,7 +29,6 @@ class GlobeVisualizer extends BaseVisualizer {
 class _GlobeVisualizerState extends BaseVisualizerState<GlobeVisualizer> {
   // Points array - regenerated when quality changes
   List<_GlobePoint> _points = [];
-  int _currentPointCount = 0;
 
   @override
   void initState() {
@@ -45,19 +45,18 @@ class _GlobeVisualizerState extends BaseVisualizerState<GlobeVisualizer> {
   }
 
   void _regeneratePoints() {
-    _currentPointCount = widget.quality.particleCount;
-    _points = List.filled(_currentPointCount, const _GlobePoint(0, 0, 0, 0));
-    _generateFibonacciSphere();
+    final count = widget.quality.particleCount;
+    _points = _generateFibonacciSphere(count);
   }
 
   // Create an evenly distributed sphere of points
-  // Also, unlike the flat earth theories, this one is definitely round
-  void _generateFibonacciSphere() {
+  List<_GlobePoint> _generateFibonacciSphere(int count) {
+    final List<_GlobePoint> newPoints = [];
     final goldenAngle = pi * (3.0 - sqrt(5.0));
 
-    for (int i = 0; i < _currentPointCount; i++) {
+    for (int i = 0; i < count; i++) {
       // Calculate point position
-      final t = i / (_currentPointCount - 1);
+      final t = i / (count - 1);
       final yy = 1.0 - 2.0 * t;
       final r = sqrt(max(0.0, 1.0 - yy * yy));
       final theta = goldenAngle * i;
@@ -66,11 +65,12 @@ class _GlobeVisualizerState extends BaseVisualizerState<GlobeVisualizer> {
       final x = cos(theta) * r;
       final z = sin(theta) * r;
 
-      // Map height to frequency band
+      // Map height to frequency band (0-63)
       final bandIndex = ((yy + 1.0) / 2.0) * 63.0;
 
-      _points[i] = _GlobePoint(x, yy, z, bandIndex);
+      newPoints.add(_GlobePoint(x, yy, z, bandIndex));
     }
+    return newPoints;
   }
 
   @override
@@ -131,9 +131,9 @@ class _GlobePainter extends CustomPainter {
     required this.color,
     required this.opacity,
   }) {
-    // Set up rotation based on time
-    final rotY = time * 0.15; 
-    final rotX = sin(time * 0.13) * 0.18;
+    // Set up rotation based on time (slow, smooth rotation)
+    final rotY = time * 0.12; 
+    final rotX = sin(time * 0.08) * 0.15;
 
     _sinY = sin(rotY);
     _cosY = cos(rotY);
@@ -146,75 +146,64 @@ class _GlobePainter extends CustomPainter {
     final cx = size.width / 2;
     final cy = size.height / 2;
     
-    // Scale globe based on screen size
-    final radius = min(size.width, size.height) * 0.35; // slightly larger than HTML's 0.28
+    // Scale globe based on screen size (increased 10% from 0.36 to 0.40)
+    final radius = min(size.width, size.height) * 0.40;
     
     // Field of view for perspective
-    final fov = radius * 2.2;
+    final fov = radius * 2.5;
     
-    // Gain/Volume boost (keep base gain)
-    final audioGain = 1.0 + amplitude * 0.5;
+    // Gain/Volume boost
+    final audioGain = 1.0 + amplitude * 0.45;
 
-    // Prepare points for projection
-    final List<_ProjectedPoint> projectedPoints = List.filled(
-      points.length, 
-      const _ProjectedPoint(0, 0, 0, 0, 0),
-    );
-
-    // Project, rotate, and apply audio boost to each point
+    // 1. Project, rotate, and apply audio boost to each point
+    final List<_ProjectedPoint> projectedPoints = [];
+    
     for (int i = 0; i < points.length; i++) {
         final p = points[i];
         
-        // Calculate amplitude with rough interpolation
+        // Calculate amplitude with interpolation
         final binFloat = p.bandIndex;
-        final binLow = binFloat.floor();
-        final binHigh = min(binLow + 1, spectrum.length - 1);
+        final binLow = binFloat.floor().clamp(0, spectrum.length - 1);
+        final binHigh = (binLow + 1).clamp(0, spectrum.length - 1);
         final blend = binFloat - binLow;
         
-        final safeBinLow = binLow.clamp(0, spectrum.length - 1);
-        final safeBinHigh = binHigh.clamp(0, spectrum.length - 1);
-        
-        final ampLow = spectrum[safeBinLow];
-        final ampHigh = spectrum[safeBinHigh];
-        
-        // Apply boosts to mids and treble
-        double freqBoost = 1.0;
-        if (binFloat > 15 && binFloat < 45) {
-          // Mid boost (subtle)
-          freqBoost = 1.4;
-        } else if (binFloat >= 45) {
-          freqBoost = 1.8;
-        }
-
-        final amp = (ampLow * (1.0 - blend) + ampHigh * blend) * audioGain * freqBoost;
+        // Apply frequency-dependent boost to make mids/highs more visible
+        // Bass is naturally stronger, so we scale up the response for higher bands
+        final freqBoost = 1.0 + (binFloat / 63.0) * 1.2;
+        final amp = (spectrum[binLow] * (1.0 - blend) + spectrum[binHigh] * blend) * audioGain * freqBoost;
         
         // Rotate point in 3D space
+        // Rotate around X axis (tilt)
         final y1 = p.y * _cosX - p.z * _sinX;
         final z1 = p.y * _sinX + p.z * _cosX;
         
+        // Rotate around Y axis (spinning)
         final rx = p.x * _cosY + z1 * _sinY;
         final ry = y1;
         final rz = -p.x * _sinY + z1 * _cosY;
         
-        // Push point outward based on volume
-        final push = 1.0 + amp * 0.22;
+        // Push point outward based on volume (pulse effect)
+        // Reduced push factor to keep globe shape more consistent
+        final push = 1.0 + amp * 0.15;
         final px = rx * push;
         final py = ry * push;
         final pz = rz * push;
         
-        projectedPoints[i] = _ProjectedPoint(i, px, py, pz, amp);
+        projectedPoints.add(_ProjectedPoint(px, py, pz, amp));
     }
     
-    // Sort so we draw back-to-front
+    // 3. Sort so we draw back-to-front for correct transparency depth
+    // This is essential for the 3D effect with semi-transparent particles
     projectedPoints.sort((a, b) => a.z.compareTo(b.z));
 
-    // Draw all points
+    // 4. Draw all points as spheres
     final Paint paint = Paint()..style = PaintingStyle.fill;
-    const baseSize = 1.35;
+    final Paint highlightPaint = Paint()..style = PaintingStyle.fill;
     
-    for (int i = 0; i < projectedPoints.length; i++) {
-        final p = projectedPoints[i];
-        
+    // Smaller base size for a cleaner, less "messy" look
+    const baseSize = 1.1; 
+    
+    for (final p in projectedPoints) {
         // Perspective projection
         final viewZ = p.z * radius + radius * 1.2;
         final depth = fov / (fov + viewZ);
@@ -223,35 +212,50 @@ class _GlobePainter extends CustomPainter {
         final y2 = cy + (p.y * radius) * depth;
         
         // Size and opacity based on depth and volume
-        final sizeScale = (baseSize + p.amp * 1.2) * (0.65 + depth * 0.7);
-        final facing = (p.z + 1.0) * 0.5;
-        final rawAlpha = 0.10 + p.amp * 0.55 + facing * 0.25;
-        final alpha = rawAlpha.clamp(0.1, 0.95) * opacity;
+        // Further points are smaller and dimmer
+        final sizeScale = (baseSize + p.amp * 0.9) * (0.6 + depth * 0.8);
+        final facing = (p.z + 1.0) * 0.5; // 0.0 at back, 1.0 at front
         
+        final rawAlpha = 0.12 + p.amp * 0.6 + facing * 0.25;
+        final alpha = rawAlpha.clamp(0.05, 0.98) * opacity;
+        
+        // Main sphere body
         paint.color = color.withValues(alpha: alpha);
         canvas.drawCircle(Offset(x2, y2), sizeScale, paint);
+        
+        // Sphere highlight (makes it look 3D and "clean")
+        if (sizeScale > 1.0) {
+          final highlightAlpha = (alpha * 0.5).clamp(0.0, 1.0);
+          highlightPaint.color = Colors.white.withValues(alpha: highlightAlpha);
+          
+          // Offset highlight to top-left of the particle
+          final hOffset = sizeScale * 0.3;
+          canvas.drawCircle(
+            Offset(x2 - hOffset, y2 - hOffset), 
+            sizeScale * 0.35, 
+            highlightPaint
+          );
+        }
     }
   }
 
   @override
   bool shouldRepaint(covariant _GlobePainter oldDelegate) {
-     const threshold = 0.01;
-     // Repaint if time changes (always) or audio data changes
-     return (oldDelegate.time - time).abs() > 0.001 ||
-            (oldDelegate.bass - bass).abs() > threshold ||
-            (oldDelegate.amplitude - amplitude).abs() > threshold ||
+     return oldDelegate.time != time ||
+            oldDelegate.bass != bass ||
+            oldDelegate.amplitude != amplitude ||
             oldDelegate.color != color ||
-            oldDelegate.opacity != opacity;
+            oldDelegate.opacity != opacity ||
+            oldDelegate.spectrum != spectrum;
   }
 }
 
 /// Helper class for points after projection calculation
 class _ProjectedPoint {
-    final int originalIndex; // 'i' in HTML, used for rotation offset
     final double x;
     final double y;
     final double z;
     final double amp;
 
-    const _ProjectedPoint(this.originalIndex, this.x, this.y, this.z, this.amp);
+    const _ProjectedPoint(this.x, this.y, this.z, this.amp);
 }

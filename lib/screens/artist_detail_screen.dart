@@ -60,16 +60,11 @@ class ArtistDetailScreen extends StatefulWidget {
 }
 
 class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
-  // Static LRU cache for palette colors
-  static final Map<String, List<Color>> _paletteCache = {};
-  static const int _maxCacheSize = 50;
-
   bool _isLoading = false;
   Object? _error;
   List<JellyfinAlbum>? _albums;
   late NautuneAppState _appState;
   bool _hasInitialized = false;
-  List<Color>? _paletteColors;
   bool _bioExpanded = false;
 
   // Top tracks from ListenBrainz
@@ -83,6 +78,11 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
   String _selectedSort = 'Most Listened';
   List<JellyfinTrack>? _tracks;
   bool _isLoadingTracks = false;
+
+  // Hot track IDs matched from artist's top tracks (Jellyfin track ID -> rank)
+  Map<String, int> _hotTrackRanks = {};
+  Set<String> get _hotTrackIds => _hotTrackRanks.keys.toSet();
+  List<Color>? _paletteColors;
 
   final Map<String, ({String sortBy, String sortOrder})> _sortOptions = {
     'Most Listened': (sortBy: 'PlayCount', sortOrder: 'Descending'),
@@ -115,18 +115,6 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
   Future<void> _extractColors() async {
     final tag = widget.artist.primaryImageTag;
     if (tag == null || tag.isEmpty) return;
-
-    // Check cache first
-    final cacheKey = '${widget.artist.id}-$tag';
-    final cached = _paletteCache[cacheKey];
-    if (cached != null) {
-      if (mounted) {
-        setState(() {
-          _paletteColors = cached;
-        });
-      }
-      return;
-    }
 
     try {
       final imageUrl = _appState.jellyfinService.buildImageUrl(
@@ -163,22 +151,13 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
       // Convert int colors back to Color objects
       final colors = colorInts.map((c) => Color(c)).toList();
 
-      // Cache the extracted colors
-      if (colors.isNotEmpty) {
-        if (_paletteCache.length >= _maxCacheSize) {
-          final oldestKey = _paletteCache.keys.first;
-          _paletteCache.remove(oldestKey);
-        }
-        _paletteCache[cacheKey] = colors;
-      }
-
       if (mounted && colors.isNotEmpty) {
         setState(() {
           _paletteColors = colors;
         });
       }
     } catch (e) {
-      debugPrint('Failed to extract colors: $e');
+      debugPrint('ArtistDetail: Failed to extract colors: $e');
     }
   }
 
@@ -277,9 +256,27 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
         maxResults: 25,
       );
 
+      // Match popular tracks to matched library tracks to get their original ranks
+      // We only mark the top 3 matches with flames for consistency
+      final hotRanks = <String, int>{};
+      for (final track in matched) {
+        if (hotRanks.length >= 3) break;
+
+        // Find original rank from ListenBrainz results
+        final popIndex = popularTracks.indexWhere((p) =>
+            (p.recordingMbid != null &&
+                p.recordingMbid == track.providerIds?['MusicBrainzTrack']) ||
+            p.recordingName.toLowerCase().trim() == track.name.toLowerCase().trim());
+
+        if (popIndex != -1) {
+          hotRanks[track.id] = popIndex + 1;
+        }
+      }
+
       if (mounted) {
         setState(() {
           _topTracks = matched;
+          _hotTrackRanks = hotRanks;
           _isLoadingTopTracks = false;
         });
       }
@@ -344,19 +341,25 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
     final artist = widget.artist;
     final isDesktop = MediaQuery.of(context).size.width > 600;
 
+    // Determine the flame color from palette
+    Color? flameColor;
+    if (_paletteColors != null && _paletteColors!.isNotEmpty) {
+      // Use a warm/bright color from the palette - pick from the brighter end
+      final brightIndex = (_paletteColors!.length * 2 ~/ 3).clamp(0, _paletteColors!.length - 1);
+      flameColor = _paletteColors![brightIndex];
+    }
+
     Widget artwork;
     final tag = artist.primaryImageTag;
     if (tag != null && tag.isNotEmpty) {
       artwork = Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: (_paletteColors?.isNotEmpty ?? false)
-                  ? _paletteColors!.first.withValues(alpha: 0.4)
-                  : Colors.black26,
-              blurRadius: 24,
-              spreadRadius: 4,
+              color: Colors.black12,
+              blurRadius: 16,
+              spreadRadius: 2,
             ),
           ],
         ),
@@ -375,26 +378,17 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
       artwork = _DefaultArtistArtwork();
     }
 
-    // Build gradient colors from palette or use fallback
-    final gradientColors = _paletteColors != null && _paletteColors!.isNotEmpty
-        ? [
-            _paletteColors!.first.withValues(alpha: 0.6),
-            theme.scaffoldBackgroundColor,
-          ]
-        : [
-            theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
-            theme.scaffoldBackgroundColor,
-          ];
-
     return Scaffold(
       body: CustomScrollView(
         cacheExtent: 500,
         slivers: [
           SliverAppBar(
-            expandedHeight: isDesktop ? 380 : 340,
+            expandedHeight: isDesktop ? 300 : 260,
             pinned: true,
             stretch: true,
-            backgroundColor: gradientColors.first.withValues(alpha: 1.0),
+            backgroundColor: theme.scaffoldBackgroundColor,
+            elevation: 0,
+            scrolledUnderElevation: 0,
             leading: IconButton(
               icon: Container(
                 padding: const EdgeInsets.all(8),
@@ -410,43 +404,23 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
             flexibleSpace: FlexibleSpaceBar(
               stretchModes: const [
                 StretchMode.zoomBackground,
-                StretchMode.blurBackground,
               ],
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // Gradient background
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: gradientColors,
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        stops: const [0.0, 0.9],
-                      ),
-                    ),
+              background: Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 40),
+                  child: SizedBox(
+                    width: isDesktop ? 200 : 160,
+                    height: isDesktop ? 200 : 160,
+                    child: artwork,
                   ),
-                  // Artist image centered
-                  Positioned(
-                    top: 80,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: SizedBox(
-                        width: isDesktop ? 220 : 180,
-                        height: isDesktop ? 220 : 180,
-                        child: artwork,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
           // Artist info section
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -462,8 +436,10 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                   ),
                   const SizedBox(height: 12),
                   // Stats row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 16,
+                    runSpacing: 8,
                     children: [
                       if (artist.albumCount != null && artist.albumCount! > 0)
                         _StatChip(
@@ -471,13 +447,17 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                           label: '${artist.albumCount} albums',
                           color: theme.colorScheme.primary,
                         ),
-                      if (artist.albumCount != null && artist.songCount != null)
-                        const SizedBox(width: 16),
                       if (artist.songCount != null && artist.songCount! > 0)
                         _StatChip(
                           icon: Icons.music_note_outlined,
                           label: '${artist.songCount} songs',
                           color: theme.colorScheme.secondary,
+                        ),
+                      if (artist.playCount != null && artist.playCount! > 0)
+                        _StatChip(
+                          icon: Icons.play_circle_outline,
+                          label: '${artist.playCount} plays',
+                          color: theme.colorScheme.tertiary,
                         ),
                     ],
                   ),
@@ -530,10 +510,8 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                         icon: const Icon(Icons.shuffle, size: 18),
                         label: const Text('Shuffle All'),
                         style: FilledButton.styleFrom(
-                          backgroundColor: _paletteColors?.isNotEmpty == true
-                              ? _paletteColors!.first
-                              : theme.colorScheme.primary,
-                          foregroundColor: Colors.white,
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: theme.colorScheme.onPrimary,
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                         ),
                       ),
@@ -552,13 +530,6 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                         icon: const Icon(Icons.trending_up, size: 18),
                         label: const Text('Shuffle Popular'),
                         style: FilledButton.styleFrom(
-                          backgroundColor: (_paletteColors?.isNotEmpty == true
-                                  ? _paletteColors!.first
-                                  : theme.colorScheme.primary)
-                              .withValues(alpha: 0.15),
-                          foregroundColor: _paletteColors?.isNotEmpty == true
-                              ? _paletteColors!.first
-                              : theme.colorScheme.primary,
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                         ),
                       ),
@@ -577,9 +548,6 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                   bio: artist.overview!,
                   expanded: _bioExpanded,
                   onToggle: () => setState(() => _bioExpanded = !_bioExpanded),
-                  paletteColor: _paletteColors?.isNotEmpty == true
-                      ? _paletteColors!.first
-                      : null,
                 ),
               ),
             ),
@@ -593,41 +561,21 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                     icon: Icons.trending_up,
                     isExpanded: _topTracksExpanded,
                     onToggle: () => setState(() => _topTracksExpanded = !_topTracksExpanded),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: InkWell(
-                        onTap: () {
-                          if (_topTracks != null && _topTracks!.isNotEmpty) {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => AllTracksScreen(
-                                  title: 'Popular Tracks',
-                                  subtitle: widget.artist.name,
-                                  tracks: _topTracks!,
-                                  accentColor: _paletteColors?.isNotEmpty == true
-                                      ? _paletteColors!.first
-                                      : null,
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                        child: Text(
-                          'Show All',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
+                    onShowAll: () {
+                      if (_topTracks != null && _topTracks!.isNotEmpty) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => AllTracksScreen(
+                              title: 'Popular Tracks',
+                              subtitle: widget.artist.name,
+                              tracks: _topTracks!,
+                              hotTrackRanks: _hotTrackRanks,
+                              flameColor: flameColor,
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                    accentColor: _paletteColors?.isNotEmpty == true
-                        ? _paletteColors!.first
-                        : null,
+                        );
+                      }
+                    },
                   ),
                   if (_topTracksExpanded)
                     if (_isLoadingTopTracks)
@@ -647,9 +595,9 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                                 track: track,
                                 rank: index + 1,
                                 appState: _appState,
-                                accentColor: _paletteColors?.isNotEmpty == true
-                                    ? _paletteColors!.first
-                                    : theme.colorScheme.primary,
+                                isHotTrack: _hotTrackIds.contains(track.id),
+                                hotRank: _hotTrackRanks[track.id],
+                                flameColor: flameColor,
                                 onTap: () async {
                                   final queue = _topTracks!;
                                   await _appState.audioPlayerService.playTrack(
@@ -685,46 +633,21 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                   icon: Icons.music_note,
                   isExpanded: _tracksExpanded,
                   onToggle: () => setState(() => _tracksExpanded = !_tracksExpanded),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: InkWell(
-                      onTap: () {
-                        if (_tracks != null && _tracks!.isNotEmpty) {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => AllTracksScreen(
-                                title: 'All Tracks',
-                                subtitle: widget.artist.name,
-                                tracks: _tracks!,
-                                accentColor: _paletteColors?.isNotEmpty == true
-                                    ? _paletteColors!.first
-                                    : null,
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Show All',
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
-                            ),
+                  onShowAll: () {
+                    if (_tracks != null && _tracks!.isNotEmpty) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => AllTracksScreen(
+                            title: 'All Tracks',
+                            subtitle: widget.artist.name,
+                            tracks: _tracks!,
+                            hotTrackRanks: _hotTrackRanks,
+                            flameColor: flameColor,
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  accentColor: _paletteColors?.isNotEmpty == true
-                      ? _paletteColors!.first
-                      : null,
+                        ),
+                      );
+                    }
+                  },
                 ),
                 if (_tracksExpanded) ...[
                   if (_isLoadingTracks)
@@ -754,23 +677,16 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                                 }
                               },
                               backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                              selectedColor: (_paletteColors?.isNotEmpty == true
-                                      ? _paletteColors!.first
-                                      : theme.colorScheme.primary)
-                                  .withValues(alpha: 0.2),
+                              selectedColor: theme.colorScheme.primary.withValues(alpha: 0.2),
                               labelStyle: TextStyle(
                                 color: isSelected
-                                    ? (_paletteColors?.isNotEmpty == true
-                                        ? _paletteColors!.first
-                                        : theme.colorScheme.primary)
+                                    ? theme.colorScheme.primary
                                     : theme.colorScheme.onSurfaceVariant,
                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                               ),
                               side: BorderSide(
                                 color: isSelected
-                                    ? (_paletteColors?.isNotEmpty == true
-                                        ? _paletteColors!.first
-                                        : theme.colorScheme.primary)
+                                    ? theme.colorScheme.primary
                                     : Colors.transparent,
                                 width: 1,
                               ),
@@ -789,9 +705,9 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                               track: track,
                               rank: _tracks!.indexOf(track) + 1,
                               appState: _appState,
-                              accentColor: _paletteColors?.isNotEmpty == true
-                                  ? _paletteColors!.first
-                                  : theme.colorScheme.primary,
+                              isHotTrack: _hotTrackIds.contains(track.id),
+                              hotRank: _hotTrackRanks[track.id],
+                              flameColor: flameColor,
                               onTap: () async {
                                 final queue = _tracks!; 
                                 await _appState.audioPlayerService.playTrack(
@@ -828,9 +744,6 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                   icon: Icons.album_outlined,
                   isExpanded: _albumsExpanded,
                   onToggle: () => setState(() => _albumsExpanded = !_albumsExpanded),
-                  accentColor: _paletteColors?.isNotEmpty == true
-                      ? _paletteColors!.first
-                      : null,
                 ),
               ],
             ),
@@ -1010,18 +923,16 @@ class _BioCard extends StatelessWidget {
     required this.bio,
     required this.expanded,
     required this.onToggle,
-    this.paletteColor,
   });
 
   final String bio;
   final bool expanded;
   final VoidCallback onToggle;
-  final Color? paletteColor;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accentColor = paletteColor ?? theme.colorScheme.primary;
+    final accentColor = theme.colorScheme.primary;
 
     return Container(
       decoration: BoxDecoration(
@@ -1200,14 +1111,18 @@ class _TopTrackTile extends StatelessWidget {
     required this.rank,
     required this.appState,
     required this.onTap,
-    this.accentColor,
+    this.isHotTrack = false,
+    this.hotRank,
+    this.flameColor,
   });
 
   final JellyfinTrack track;
   final int rank;
   final NautuneAppState appState;
   final VoidCallback onTap;
-  final Color? accentColor;
+  final bool isHotTrack;
+  final int? hotRank;
+  final Color? flameColor;
 
   @override
   Widget build(BuildContext context) {
@@ -1220,25 +1135,58 @@ class _TopTrackTile extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-            child: Row(
-              children: [
-                // Rank number with accent styling for top 3
+                  child: InkWell(
+                    onTap: onTap,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      child: Row(
+                        children: [                // Rank number with accent styling for top 3 and optional flame
                 SizedBox(
-                  width: 28,
-                  child: Text(
-                    '$rank',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: rank <= 3 ? FontWeight.bold : FontWeight.normal,
-                      color: rank <= 3
-                          ? (accentColor ?? theme.colorScheme.primary)
-                          : theme.colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
+                  width: 44,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '$rank',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: rank <= 3 ? FontWeight.bold : FontWeight.normal,
+                          color: rank <= 3
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurfaceVariant,
+                          fontFeatures: const [ui.FontFeature.tabularFigures()],
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      if (isHotTrack) ...[
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: hotRank != null
+                              ? '🔥 #$hotRank popular overall'
+                              : '🔥 Hot track',
+                          child: ShaderMask(
+                            shaderCallback: (bounds) {
+                              final baseColor = flameColor ?? Colors.orange;
+                              return LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [
+                                  baseColor,
+                                  Color.lerp(baseColor, Colors.yellow, 0.6) ?? Colors.orangeAccent,
+                                  Color.lerp(baseColor, Colors.white, 0.3) ?? Colors.amber,
+                                ],
+                                stops: const [0.0, 0.5, 1.0],
+                              ).createShader(bounds);
+                            },
+                            blendMode: BlendMode.srcIn,
+                            child: const Icon(
+                              Icons.local_fire_department,
+                              size: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1356,55 +1304,81 @@ class _CollapsibleHeader extends StatelessWidget {
     required this.icon,
     required this.isExpanded,
     required this.onToggle,
-    this.trailing,
-    this.accentColor,
+    this.onShowAll,
   });
 
   final String title;
   final IconData icon;
   final bool isExpanded;
   final VoidCallback onToggle;
-  final Widget? trailing;
-  final Color? accentColor;
+  final VoidCallback? onShowAll;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = accentColor ?? theme.colorScheme.primary;
+    final color = theme.colorScheme.primary;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: InkWell(
-        onTap: onToggle,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 22,
-                color: color,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      child: Row(
+        children: [
+          // Main toggle area - expanded to fill space
+          Expanded(
+            child: InkWell(
+              onTap: onToggle,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 22,
+                      color: color,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      isExpanded ? Icons.expand_less : Icons.expand_more,
+                      size: 20,
+                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: theme.textTheme.titleLarge?.copyWith(
+            ),
+          ),
+          if (onShowAll != null) ...[
+            const SizedBox(width: 8),
+            // Touch-friendly "See All" button
+            TextButton(
+              onPressed: onShowAll,
+              style: TextButton.styleFrom(
+                backgroundColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+                foregroundColor: theme.colorScheme.onSurfaceVariant,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                minimumSize: const Size(80, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              child: const Text(
+                'See All',
+                style: TextStyle(
+                  fontSize: 13,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const Spacer(),
-              if (trailing != null) ...[
-                trailing!,
-                const SizedBox(width: 8),
-              ],
-              Icon(
-                isExpanded ? Icons.expand_less : Icons.expand_more,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ],
-          ),
-        ),
+            ),
+          ],
+        ],
       ),
     );
   }

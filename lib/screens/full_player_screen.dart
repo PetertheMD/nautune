@@ -168,12 +168,15 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     for (final color in _paletteColors!) {
       totalLuminance += color.computeLuminance();
     }
-    final avgLuminance = totalLuminance / _paletteColors!.length;
+    // Weight the first (dominant/vibrant) color more heavily as it's often the primary background color
+    if (_paletteColors!.isNotEmpty) {
+      totalLuminance += _paletteColors![0].computeLuminance();
+    }
+    final avgLuminance = totalLuminance / (_paletteColors!.length + 1);
 
     // Determine if background is light or dark
-    // Use 0.4 threshold (leaning towards light) because gradients with dark overlay
-    // shift the effective luminance darker
-    final isLightBackground = avgLuminance > 0.4;
+    // Use 0.35 threshold (more aggressive about light backgrounds to avoid white-on-white)
+    final isLightBackground = avgLuminance > 0.35;
 
     if (isLightBackground) {
       // Light background: use dark text (Finamp's approach - #191C1E family)
@@ -190,6 +193,13 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) {
+        setState(() {
+          // Trigger rebuild to update visualizer visibility state
+        });
+      }
+    });
   }
 
   @override
@@ -220,7 +230,11 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
         
         // Listeners for progress, playback state, and loops
         _positionSub = _audioService.positionStream.listen((_) => mounted ? setState(() {}) : null);
-        _playingSub = _audioService.playingStream.listen((_) => mounted ? setState(() {}) : null);
+        _playingSub = _audioService.playingStream.listen((_) {
+          if (mounted) {
+            setState(() {});
+          }
+        });
         _loopSub = _audioService.loopStateStream.listen((_) => mounted ? setState(() {}) : null);
 
         // Init for current track
@@ -829,18 +843,6 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     
     // Trigger local build since we're using listen: false for AppState
     setState(() {});
-
-    // BATTERY FIX: Control iOS FFT capture based on visualizer visibility
-    // Stop FFT when visualizer is hidden to prevent battery drain
-    if (Platform.isIOS) {
-      if (newValue && _audioService.isPlaying) {
-        // Visualizer now visible - start FFT capture
-        IOSFFTService.instance.startCapture();
-      } else {
-        // Visualizer hidden - stop FFT capture to save battery
-        IOSFFTService.instance.stopCapture();
-      }
-    }
   }
 
   /// Build artwork with layout-specific styling
@@ -1067,6 +1069,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     required Widget artwork,
     required bool isDesktop,
     required ThemeData theme,
+    bool isVisible = true,
   }) {
     final visualizerEnabled = _appState.visualizerEnabled;
     final visualizerPosition = _appState.visualizerPosition;
@@ -1108,6 +1111,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                 type: _appState.visualizerType,
                 audioService: _audioService,
                 opacity: 0.9, // Higher opacity for album art position
+                isVisible: isVisible,
               ),
             ),
             ),
@@ -1527,6 +1531,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
           artwork: baseArtwork,
           isDesktop: isDesktop,
           theme: theme,
+          isVisible: _tabController.index == 0,
         );
 
         return Focus(
@@ -2106,6 +2111,13 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                         ?.copyWith(
                                           fontWeight: FontWeight.bold,
                                           color: _adaptiveTextPrimary,
+                                          shadows: [
+                                            Shadow(
+                                              color: Colors.black.withValues(alpha: 0.2),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
                                         ),
                                 textAlign: TextAlign.center,
                                 maxLines: 2,
@@ -2246,26 +2258,32 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                               ),
                               const SizedBox(width: 4),
                               Flexible(
-                                child: Text(
-                                  track.displayArtist,
-                                  style:
-                                      (isDesktop
-                                              ? theme.textTheme.headlineSmall
-                                              : theme.textTheme.titleMedium)
-                                          ?.copyWith(
-                                            color: _adaptiveTextPrimary ?? theme.colorScheme.tertiary,
-                                            decoration:
-                                                TextDecoration.underline,
-                                            decorationColor: (_adaptiveTextPrimary ?? theme
-                                                .colorScheme
-                                                .tertiary)
-                                                .withValues(alpha: 0.5),
-                                          ),
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
+                                                                  child: Text(
+                                                                  track.displayArtist,
+                                                                  style:
+                                                                      (isDesktop
+                                                                              ? theme.textTheme.headlineSmall
+                                                                              : theme.textTheme.titleMedium)
+                                                                          ?.copyWith(
+                                                                            color: _adaptiveTextPrimary ?? theme.colorScheme.tertiary,
+                                                                            decoration:
+                                                                                TextDecoration.underline,
+                                                                            decorationColor: (_adaptiveTextPrimary ?? theme
+                                                                                .colorScheme
+                                                                                .tertiary)
+                                                                                .withValues(alpha: 0.5),
+                                                                            shadows: [
+                                                                              Shadow(
+                                                                                color: Colors.black.withValues(alpha: 0.2),
+                                                                                blurRadius: 4,
+                                                                                offset: const Offset(0, 1),
+                                                                              ),
+                                                                            ],
+                                                                          ),
+                                                                  textAlign: TextAlign.center,
+                                                                  maxLines: 1,
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),                              ),
                             ],
                           ),
                         ),
@@ -2345,6 +2363,13 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                           .colorScheme
                                           .onSurfaceVariant)
                                           .withValues(alpha: 0.3),
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black.withValues(alpha: 0.2),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 1),
+                                        ),
+                                      ],
                                     ),
                                     textAlign: TextAlign.center,
                                     maxLines: 1,
@@ -2470,6 +2495,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                               type: _appState.visualizerType,
                               audioService: _audioService,
                               opacity: 0.4,
+                              isVisible: _tabController.index == 0,
                             ),
                           ),
                         ),

@@ -14,8 +14,8 @@
 - **Alternate App Icons**: Choose between Classic (purple), Sunset (orange), Crimson (red), and Emerald (green) icons across all platforms
 - **10-Band Equalizer** (Linux): Full graphic EQ with 12 presets (Rock, Pop, Jazz, Classical, and more)
 - **6 Audio Visualizers**: Ocean Waves, Spectrum Bars, Mirror Bars, Radial, Psychedelic, and 3D Globe styles
-- **Artist Grouping**: Automatically combines "Artist" with "Artist feat. X" and similar variations. Uses MusicBrainz IDs as a source of truth to protect legitimate band names (like *Earth, Wind & Fire* or *AC/DC*) from being split.
-- **Real-Time FFT**: True audio-reactive visualization using PulseAudio (Linux) and MTAudioProcessingTap (iOS)
+- **Artist Grouping**: Automatically combines "Artist" with "Artist feat. X" and similar variations. Uses MusicBrainz IDs as a source of truth to protect legitimate band names (like *Earth, Wind & Fire* or *AC/DC*) against being split.
+- **Real-Time FFT**: True audio-reactive visualization using PulseAudio (Linux), MTAudioProcessingTap (iOS), and Native Visualizer API (Android)
 - **Smart Playlists**: Tag-aware mood playlists (Chill, Energetic, Melancholy, Upbeat) using actual file tags
 - **Smart Pre-Cache**: Configurable pre-caching of current and upcoming tracks (3, 5, or 10) with WiFi-only option
 - **Smart Lyrics**: Multi-source lyrics with sync, caching, and pre-fetching
@@ -26,7 +26,7 @@
 - **Global Search**: Unified search across your entire library with instant results
 - **Smart Offline Mode**: Persistent offline preference, auto-detects airplane mode, seamless downloaded content playback
 - **A-B Repeat Loop**: Set loop markers on downloaded/cached tracks to repeat a section (long-press with haptic feedback on iOS, or use the A-B Loop button on desktop). Save loops for later recall.
-- **High-Fidelity Playback**: Native backends for Linux and iOS ensuring bit-perfect audio
+- **High-Fidelity Playback**: Native backends for Linux, iOS, and Android ensuring bit-perfect audio
 - **CarPlay Support**: Take your Jellyfin library on the road with CarPlay interface
 - **Personalized Home**: Discover, On This Day, and For You recommendation shelves
 
@@ -494,6 +494,7 @@ Now you can:
 | Linux | PulseAudio `parec` loopback | ✅ Instant |
 | iOS (downloaded) | MTAudioProcessingTap + vDSP | ✅ Instant |
 | iOS (streaming) | Cache then tap | ✅ After cache |
+| Android | Native Visualizer API | ✅ Instant |
 | iOS (gapless) | Auto-restart on transition | ✅ Seamless |
 
 **iOS FFT Reliability**: FFT shadow players are properly stopped before skip/next operations and correctly restarted during gapless playback transitions, ensuring visualizers stay in sync with the currently playing track.
@@ -587,7 +588,7 @@ Once connected:
 - **Local Storage**: Hive (NoSQL) for high-speed metadata caching
 - **Audio Engine**: Audioplayers with custom platform-specific optimizations
 - **Equalizer**: PulseAudio LADSPA (Linux only)
-- **FFT Processing**: Custom Cooley-Tukey (Linux), Apple Accelerate vDSP (iOS)
+- **FFT Processing**: Custom Cooley-Tukey (Linux), Apple Accelerate vDSP (iOS), Native Visualizer API (Android)
 - **Image Processing**: Material Color Utilities for vibrant palette generation
 
 ## 📂 File Structure (Linux)
@@ -662,16 +663,13 @@ flutter analyze
 
 | Feature | Platform | Status |
 |---------|----------|--------|
-| Android Build | Android | 🔜 Planned |
+| Android Build | Android | ✅ Complete |
 | Desktop Remote Control | iOS → Linux | 🔜 Planned |
 | Additional Visualizers | All | ✅ Complete |
 
 - **Android Build**: Native Android app with full feature parity (visualizers, offline, CarPlay equivalent via Android Auto).
 - **Desktop Remote Control**: Control desktop playback from iOS device over local network.
 
-## **KNOWN BUGS**
-
-- Alphabetical navigation in genres and Albums
 
 ## 🙏 Acknowledgments
 

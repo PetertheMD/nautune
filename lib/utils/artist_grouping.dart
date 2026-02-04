@@ -1,4 +1,5 @@
 import '../jellyfin/jellyfin_artist.dart';
+import 'string_utils.dart';
 
 /// Utility class for grouping artists.
 /// 
@@ -181,7 +182,8 @@ class ArtistGrouping {
     }
     
     // Sort the result by name
-    result.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    result.sort((a, b) => StringUtils.getSortName(a.name).toLowerCase()
+        .compareTo(StringUtils.getSortName(b.name).toLowerCase()));
     
     return result;
   }

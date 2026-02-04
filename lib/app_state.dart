@@ -30,6 +30,7 @@ import 'services/playlist_sync_queue.dart';
 import 'services/app_icon_service.dart';
 import 'services/power_mode_service.dart';
 import 'services/tray_service.dart';
+import 'services/ios_fft_service.dart';
 
 // Import SessionProvider - this is new
 import 'providers/session_provider.dart';
@@ -105,6 +106,11 @@ class NautuneAppState extends ChangeNotifier {
       });
     }
 
+    // Listen to playback state for visualizer battery saving (iOS)
+    _audioPlayerService.playingStream.listen((isPlaying) {
+      _updateNativeVisualizerState();
+    });
+
     // Listen to demo mode provider changes
     _demoModeProvider?.addListener(_onDemoModeChanged);
 
@@ -178,6 +184,7 @@ class NautuneAppState extends ChangeNotifier {
   bool _useListMode = false; // Persistent setting for album list/grid mode
   bool _artistGroupingEnabled = false; // Group artists like "Artist" and "Artist feat. X"
   bool _showingVisualizerOverArtwork = false; // Persistent visualizer toggle for album art position
+  int _visibleVisualizerCount = 0; // Track how many visualizers are actually in view
   StreamSubscription? _powerModeSub;
   SortOption _albumSortBy = SortOption.name;
   SortOrder _albumSortOrder = SortOrder.ascending;
@@ -766,12 +773,39 @@ class NautuneAppState extends ChangeNotifier {
     if (!PowerModeService.instance.isLowPowerMode) {
       if (_visualizerEnabled == enabled) return;
       _visualizerEnabled = enabled;
+      _updateNativeVisualizerState(); // Update native capture state
       notifyListeners();
     }
 
     unawaited(_playbackStateStore.saveUiState(
       visualizerEnabled: enabled,
     ));
+  }
+
+  /// Track when a visualizer becomes visible/invisible to save battery
+  void incrementVisibleVisualizerCount() {
+    _visibleVisualizerCount++;
+    _updateNativeVisualizerState();
+  }
+
+  void decrementVisibleVisualizerCount() {
+    _visibleVisualizerCount--;
+    if (_visibleVisualizerCount < 0) _visibleVisualizerCount = 0;
+    _updateNativeVisualizerState();
+  }
+
+  void _updateNativeVisualizerState() {
+    if (!Platform.isIOS) return;
+
+    final shouldBeCapturing = _visibleVisualizerCount > 0 && 
+                              _audioPlayerService.isPlaying && 
+                              _visualizerEnabled;
+                              
+    if (shouldBeCapturing) {
+      IOSFFTService.instance.startCapture();
+    } else {
+      IOSFFTService.instance.stopCapture();
+    }
   }
 
   /// Set visualizer type/style
@@ -886,6 +920,7 @@ class NautuneAppState extends ChangeNotifier {
         if (_visualizerEnabled) {
           _visualizerSuppressedByLowPower = true;
           _visualizerEnabled = false;
+          _updateNativeVisualizerState();
           notifyListeners();
           debugPrint('🔋 Visualizer disabled (Low Power Mode)');
         }
@@ -894,6 +929,7 @@ class NautuneAppState extends ChangeNotifier {
         if (_visualizerSuppressedByLowPower && _visualizerEnabledByUser) {
           _visualizerEnabled = true;
           _visualizerSuppressedByLowPower = false;
+          _updateNativeVisualizerState();
           notifyListeners();
           debugPrint('🔋 Visualizer restored (Low Power Mode off)');
         } else {
@@ -1186,6 +1222,9 @@ class NautuneAppState extends ChangeNotifier {
       if (Platform.isIOS && _carPlayService != null) {
         debugPrint('🚗 CarPlay: Refreshing content after app init');
       }
+      
+      // Ensure native visualizer state is correct (iOS FFT)
+      _updateNativeVisualizerState();
     }
   }
 

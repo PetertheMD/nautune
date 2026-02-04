@@ -160,11 +160,11 @@ extension GlobeQualityExtension on GlobeQuality {
   String get description {
     switch (this) {
       case GlobeQuality.powerSaving:
-        return 'Battery saver (400 points)';
+        return 'Battery saver (440 points)';
       case GlobeQuality.normal:
-        return 'Balanced (800 points)';
+        return 'Balanced (880 points)';
       case GlobeQuality.high:
-        return 'Show off mode (1500 points)';
+        return 'Show off mode (1650 points)';
     }
   }
 
@@ -172,11 +172,11 @@ extension GlobeQualityExtension on GlobeQuality {
   int get particleCount {
     switch (this) {
       case GlobeQuality.powerSaving:
-        return 400;
+        return 440;
       case GlobeQuality.normal:
-        return 800;
+        return 880;
       case GlobeQuality.high:
-        return 1500;
+        return 1650;
     }
   }
 

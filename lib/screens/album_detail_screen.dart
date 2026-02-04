@@ -14,6 +14,7 @@ import '../services/share_service.dart';
 import '../widgets/add_to_playlist_dialog.dart';
 import '../widgets/jellyfin_image.dart';
 import '../widgets/now_playing_bar.dart';
+import 'artist_detail_screen.dart';
 
 /// Top-level function for compute() - extracts colors from image bytes in isolate
 List<int> _extractColorsFromBytes(Uint8List pixels) {
@@ -253,11 +254,11 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
   }
 
   Future<void> _loadHotTracks(List<JellyfinTrack> tracks) async {
-    // Skip if offline, no network, or album has 3 or fewer tracks
+    // Skip if offline, no network, or album has fewer than 5 tracks
     if (_appState == null || _appState!.isOfflineMode || !_appState!.networkAvailable) {
       return;
     }
-    if (tracks.length <= 3) {
+    if (tracks.length < 5) {
       debugPrint('AlbumDetailScreen: Album has ${tracks.length} tracks, skipping hot track check');
       return;
     }
@@ -365,35 +366,38 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
     }
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: _paletteColors != null && _paletteColors!.length >= 3
-              ? LinearGradient(
-                  colors: [
-                    theme.scaffoldBackgroundColor,
-                    _paletteColors![_paletteColors!.length ~/ 2].withValues(alpha: 0.3),
-                    _paletteColors![0].withValues(alpha: 0.6),
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: const [0.0, 0.5, 1.0],
-                )
-              : null,
-        ),
-        child: CustomScrollView(
+      body: CustomScrollView(
         cacheExtent: 500, // Pre-render items above/below viewport for smoother scrolling
         slivers: [
           SliverAppBar(
-            expandedHeight: isDesktop ? 350 : 300,
+            expandedHeight: isDesktop ? 300 : 260,
             pinned: true,
+            stretch: true,
+            backgroundColor: theme.scaffoldBackgroundColor,
+            elevation: 0,
+            scrolledUnderElevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface.withValues(alpha: 0.7),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.arrow_back, size: 20),
+              ),
               onPressed: () => Navigator.of(context).pop(),
             ),
             actions: [
               // Instant Mix button
               IconButton(
-                icon: const Icon(Icons.auto_awesome),
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface.withValues(alpha: 0.7),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.auto_awesome, size: 20),
+                ),
                 tooltip: 'Instant Mix',
                 onPressed: () async {
                   try {
@@ -452,7 +456,14 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
               ),
               // Shuffle button
               IconButton(
-                icon: const Icon(Icons.shuffle),
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface.withValues(alpha: 0.7),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.shuffle, size: 20),
+                ),
                 tooltip: 'Shuffle',
                 onPressed: () {
                   if (_tracks != null && _tracks!.isNotEmpty) {
@@ -461,7 +472,14 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                 },
               ),
               IconButton(
-                icon: const Icon(Icons.playlist_add),
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface.withValues(alpha: 0.7),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.playlist_add, size: 20),
+                ),
                 tooltip: 'Add to Playlist',
                 onPressed: () async {
                   await showAddToPlaylistDialog(
@@ -473,55 +491,93 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  artwork,
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          theme.scaffoldBackgroundColor,
+              stretchModes: const [
+                StretchMode.zoomBackground,
+              ],
+              background: Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 40),
+                  child: SizedBox(
+                    width: isDesktop ? 200 : 160,
+                    height: isDesktop ? 200 : 160,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 16,
+                            spreadRadius: 2,
+                          ),
                         ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        stops: const [0.6, 1.0],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: artwork,
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            sliver: SliverToBoxAdapter(
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
                     album.name,
                     style: theme.textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
+                      color: theme.colorScheme.onSurface,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    album.displayArtist,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                  InkWell(
+                    onTap: () async {
+                      if (album.artistIds.isNotEmpty) {
+                        try {
+                          final navigator = Navigator.of(context);
+                          final artist = await _appState!.jellyfinService.getArtist(album.artistIds.first);
+                          if (artist != null && mounted) {
+                            navigator.push(
+                              MaterialPageRoute(
+                                builder: (context) => ArtistDetailScreen(artist: artist),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          debugPrint('Failed to navigate to artist: $e');
+                        }
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Text(
+                        album.displayArtist,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                      ),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                   if (album.productionYear != null) ...[
                     const SizedBox(height: 4),
                     Text(
                       '${album.productionYear}',
-                      style: theme.textTheme.bodyMedium,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                   const SizedBox(height: 24),
@@ -765,7 +821,6 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
               ),
             ),
         ],
-        ),
       ),
       bottomNavigationBar: _appState != null
           ? NowPlayingBar(
@@ -817,63 +872,59 @@ class _TrackTile extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
               child: Row(
                 children: [
-                  // Track number area with optional flame overlay
+                  // Track number area with optional flame
                   SizedBox(
-                    width: 48,
-                    child: Stack(
-                      clipBehavior: Clip.none,
+                    width: 54,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         // Track number or equalizer
-                        Center(
-                          child: isPlayingTrack
-                              ? Icon(
-                                  Icons.equalizer,
-                                  color: theme.colorScheme.primary,
-                                  size: 20,
-                                )
-                              : Text(
-                                  displayTrackNumber,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: theme.colorScheme.tertiary.withValues(alpha: 0.7),
-                                    fontFeatures: const [ui.FontFeature.tabularFigures()],
-                                  ),
-                                  textAlign: TextAlign.center,
+                        isPlayingTrack
+                            ? Icon(
+                                Icons.equalizer,
+                                color: theme.colorScheme.primary,
+                                size: 20,
+                              )
+                            : Text(
+                                displayTrackNumber,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.tertiary.withValues(alpha: 0.7),
+                                  fontFeatures: const [ui.FontFeature.tabularFigures()],
                                 ),
-                        ),
-                        // Flame icon overlay for hot tracks (positioned top-right)
-                        if (isHotTrack)
-                          Positioned(
-                            right: -2,
-                            top: -8,
-                            child: Tooltip(
-                              message: hotRank != null
-                                  ? '🔥 #$hotRank popular overall'
-                                  : '🔥 Hot track',
-                              child: ShaderMask(
-                                shaderCallback: (bounds) {
-                                  final baseColor = flameColor ?? Colors.orange;
-                                  return LinearGradient(
-                                    begin: Alignment.bottomCenter,
-                                    end: Alignment.topCenter,
-                                    colors: [
-                                      baseColor,
-                                      Color.lerp(baseColor, Colors.yellow, 0.6) ?? Colors.orangeAccent,
-                                      Color.lerp(baseColor, Colors.white, 0.3) ?? Colors.amber,
-                                    ],
-                                    stops: const [0.0, 0.5, 1.0],
-                                  ).createShader(bounds);
-                                },
-                                blendMode: BlendMode.srcIn,
-                                child: const Icon(
-                                  Icons.local_fire_department,
-                                  size: 14,
-                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                        // Flame icon for hot tracks
+                        if (isHotTrack) ...[
+                          const SizedBox(width: 4),
+                          Tooltip(
+                            message: hotRank != null
+                                ? '🔥 #$hotRank popular overall'
+                                : '🔥 Hot track',
+                            child: ShaderMask(
+                              shaderCallback: (bounds) {
+                                final baseColor = flameColor ?? Colors.orange;
+                                return LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [
+                                    baseColor,
+                                    Color.lerp(baseColor, Colors.yellow, 0.6) ?? Colors.orangeAccent,
+                                    Color.lerp(baseColor, Colors.white, 0.3) ?? Colors.amber,
+                                  ],
+                                  stops: const [0.0, 0.5, 1.0],
+                                ).createShader(bounds);
+                              },
+                              blendMode: BlendMode.srcIn,
+                              child: const Icon(
+                                Icons.local_fire_department,
+                                size: 14,
                               ),
                             ),
                           ),
+                        ],
                       ],
                     ),
                   ),

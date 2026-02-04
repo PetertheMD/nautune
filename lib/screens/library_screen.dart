@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 
+import '../utils/alphabet_list_helper.dart';
+import '../utils/string_utils.dart';
 import '../app_state.dart';
 import '../providers/syncplay_provider.dart';
 import '../providers/ui_state_provider.dart';
@@ -27,6 +29,7 @@ import '../widgets/now_playing_bar.dart';
 import '../widgets/skeleton_loader.dart';
 import '../widgets/sync_status_indicator.dart';
 import 'album_detail_screen.dart';
+import 'all_tracks_screen.dart';
 import 'artist_detail_screen.dart';
 import 'genre_detail_screen.dart';
 import 'offline_library_screen.dart';
@@ -739,10 +742,13 @@ class _LibraryTabState extends State<_LibraryTab> {
     
     // Header controls
     final header = Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
       child: Column(
         children: [
           SegmentedButton<String>(
+            style: SegmentedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+            ),
             segments: [
               const ButtonSegment(
                 value: 'albums',
@@ -771,7 +777,7 @@ class _LibraryTabState extends State<_LibraryTab> {
           // Sort controls
           if (!isOffline && _selectedView != 'genres')
             Padding(
-              padding: const EdgeInsets.only(top: 12),
+              padding: const EdgeInsets.only(top: 4),
               child: _SortControls(
                 appState: widget.appState,
                 isAlbums: _selectedView == 'albums',
@@ -945,7 +951,7 @@ class _SortControls extends StatelessWidget {
             _buildMenuItem(SortOption.playCount, currentSort),
           ],
           child: Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(20),
@@ -957,7 +963,7 @@ class _SortControls extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 4),
         // Sort order toggle
         IconButton(
           icon: Icon(
@@ -977,8 +983,10 @@ class _SortControls extends StatelessWidget {
               appState.setArtistSort(currentSort, newOrder);
             }
           },
+          visualDensity: VisualDensity.compact,
           style: IconButton.styleFrom(
             backgroundColor: theme.colorScheme.surfaceContainerHighest,
+            padding: const EdgeInsets.all(4),
           ),
         ),
       ],
@@ -1068,10 +1076,21 @@ class _AlbumsTab extends StatelessWidget {
             final letterGroups = showHeaders
                 ? AlphabetSectionBuilder.groupByLetter<JellyfinAlbum>(
                     albums!,
-                    (album) => album.name,
+                    (album) => StringUtils.getSortName(album.name),
                     appState.albumSortOrder,
                   )
                 : <(String, List<JellyfinAlbum>)>[];
+
+            final listOffsets = showHeaders
+                ? AlphabetListHelper.processItems<JellyfinAlbum>(
+                    items: albums!,
+                    getName: (album) => StringUtils.getSortName(album.name),
+                    headerHeight: 32,
+                    itemHeight: 72,
+                    crossAxisCount: 1,
+                    sectionPadding: 0,
+                  ).offsets
+                : <String, double>{};
 
             return Stack(
               children: [
@@ -1130,14 +1149,10 @@ class _AlbumsTab extends StatelessWidget {
                 ),
                 Positioned.fill(
                   child: AlphabetScrollbar(
-                    items: albums!,
-                    getItemName: (album) => (album as JellyfinAlbum).name,
                     scrollController: scrollController,
-                    itemHeight: 72, // List tile height
-                    crossAxisCount: 1,
+                    offsets: listOffsets,
                     sortOrder: appState.albumSortOrder,
                     sortBy: appState.albumSortBy,
-                    sectionPadding: 0,
                   ),
                 ),
               ],
@@ -1149,7 +1164,7 @@ class _AlbumsTab extends StatelessWidget {
           final gridLetterGroups = showGridHeaders
               ? AlphabetSectionBuilder.groupByLetter<JellyfinAlbum>(
                   albums!,
-                  (album) => album.name,
+                  (album) => StringUtils.getSortName(album.name),
                   appState.albumSortOrder,
                 )
               : <(String, List<JellyfinAlbum>)>[];
@@ -1158,6 +1173,18 @@ class _AlbumsTab extends StatelessWidget {
           // Remove the "+ 16" (spacing) from the card height calculation
           final cardHeight = ((constraints.maxWidth - 32 - (crossAxisCount - 1) * 16) / crossAxisCount) / 0.75;
           const double mainSpacing = 16.0;
+
+          final gridOffsets = showGridHeaders
+              ? AlphabetListHelper.processItems<JellyfinAlbum>(
+                  items: albums!,
+                  getName: (album) => StringUtils.getSortName(album.name),
+                  headerHeight: 32,
+                  itemHeight: cardHeight,
+                  crossAxisCount: crossAxisCount,
+                  sectionPadding: 16,
+                  mainAxisSpacing: mainSpacing,
+                ).offsets
+              : <String, double>{};
 
           return Stack(
             children: [
@@ -1230,15 +1257,10 @@ class _AlbumsTab extends StatelessWidget {
               ),
               Positioned.fill(
                 child: AlphabetScrollbar(
-                  items: albums!,
-                  getItemName: (album) => (album as JellyfinAlbum).name,
                   scrollController: scrollController,
-                  itemHeight: cardHeight, // Pass strict card height
-                  crossAxisCount: crossAxisCount,
+                  offsets: gridOffsets,
                   sortOrder: appState.albumSortOrder,
                   sortBy: appState.albumSortBy,
-                  sectionPadding: 16, // Matches Artist tab padding
-                  mainAxisSpacing: mainSpacing, // Pass the spacing explicitly
                 ),
               ),
             ],
@@ -1259,71 +1281,76 @@ class _AlbumListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return ListTile(
-      onTap: onTap,
-      onLongPress: () {
-        showModalBottomSheet(
-          context: context,
-          builder: (context) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.playlist_add),
-                  title: const Text('Add to Playlist'),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await showAddToPlaylistDialog(
-                      context: context,
-                      appState: appState,
-                      album: album,
-                    );
-                  },
+    return SizedBox(
+      height: 72,
+      child: Center(
+        child: ListTile(
+          onTap: onTap,
+          onLongPress: () {
+            showModalBottomSheet(
+              context: context,
+              builder: (context) => SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.playlist_add),
+                      title: const Text('Add to Playlist'),
+                      onTap: () async {
+                        Navigator.pop(context);
+                        await showAddToPlaylistDialog(
+                          context: context,
+                          appState: appState,
+                          album: album,
+                        );
+                      },
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            );
+          },
+          leading: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              width: 56,
+              height: 56,
+              child: album.primaryImageTag != null
+                  ? JellyfinImage(
+                      itemId: album.id,
+                      imageTag: album.primaryImageTag,
+                      boxFit: BoxFit.cover,
+                      errorBuilder: (context, url, error) => Image.asset(
+                        'assets/no_album_art.png',
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : Image.asset(
+                      'assets/no_album_art.png',
+                      fit: BoxFit.cover,
+                    ),
             ),
           ),
-        );
-      },
-      leading: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: SizedBox(
-          width: 56,
-          height: 56,
-          child: album.primaryImageTag != null
-              ? JellyfinImage(
-                  itemId: album.id,
-                  imageTag: album.primaryImageTag,
-                  boxFit: BoxFit.cover,
-                  errorBuilder: (context, url, error) => Image.asset(
-                    'assets/no_album_art.png',
-                    fit: BoxFit.cover,
+          title: Text(
+            album.name,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.tertiary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: album.artists.isNotEmpty
+              ? Text(
+                  album.displayArtist,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 )
-              : Image.asset(
-                  'assets/no_album_art.png',
-                  fit: BoxFit.cover,
-                ),
+              : null,
         ),
       ),
-      title: Text(
-        album.name,
-        style: theme.textTheme.titleSmall?.copyWith(
-          color: theme.colorScheme.tertiary,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: album.artists.isNotEmpty
-          ? Text(
-              album.displayArtist,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            )
-          : null,
     );
   }
 }
@@ -1334,12 +1361,14 @@ class _ShelfHeader extends StatelessWidget {
     this.subtitle,
     required this.onRefresh,
     required this.isLoading,
+    this.onSeeAll,
   });
 
   final String title;
   final String? subtitle;
   final VoidCallback onRefresh;
   final bool isLoading;
+  final VoidCallback? onSeeAll;
 
   @override
   Widget build(BuildContext context) {
@@ -1370,6 +1399,22 @@ class _ShelfHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (onSeeAll != null)
+            TextButton(
+              onPressed: onSeeAll,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'See All',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           if (isLoading)
             const SizedBox(
               width: 18,
@@ -1397,12 +1442,14 @@ class _ContinueListeningShelf extends StatelessWidget {
     required this.isLoading,
     required this.onPlay,
     required this.onRefresh,
+    this.onSeeAll,
   });
 
   final List<JellyfinTrack>? tracks;
   final bool isLoading;
   final void Function(JellyfinTrack) onPlay;
   final VoidCallback onRefresh;
+  final VoidCallback? onSeeAll;
 
   @override
   Widget build(BuildContext context) {
@@ -1416,6 +1463,7 @@ class _ContinueListeningShelf extends StatelessWidget {
           title: 'Continue Listening',
           onRefresh: onRefresh,
           isLoading: isLoading,
+          onSeeAll: onSeeAll,
         ),
         SizedBox(
           height: 140,
@@ -1761,12 +1809,14 @@ class _RecentlyPlayedShelf extends StatelessWidget {
     required this.isLoading,
     required this.onPlay,
     required this.onRefresh,
+    this.onSeeAll,
   });
 
   final List<JellyfinTrack>? tracks;
   final bool isLoading;
   final void Function(JellyfinTrack) onPlay;
   final VoidCallback onRefresh;
+  final VoidCallback? onSeeAll;
 
   @override
   Widget build(BuildContext context) {
@@ -1780,6 +1830,7 @@ class _RecentlyPlayedShelf extends StatelessWidget {
           title: 'Recently Played',
           onRefresh: onRefresh,
           isLoading: isLoading,
+          onSeeAll: onSeeAll,
         ),
         SizedBox(
           height: 140,
@@ -1818,12 +1869,14 @@ class _DiscoverShelf extends StatelessWidget {
     required this.isLoading,
     required this.onPlay,
     required this.onRefresh,
+    this.onSeeAll,
   });
 
   final List<JellyfinTrack>? tracks;
   final bool isLoading;
   final void Function(JellyfinTrack) onPlay;
   final VoidCallback onRefresh;
+  final VoidCallback? onSeeAll;
 
   @override
   Widget build(BuildContext context) {
@@ -1838,6 +1891,7 @@ class _DiscoverShelf extends StatelessWidget {
           subtitle: 'Albums you rarely play',
           onRefresh: onRefresh,
           isLoading: isLoading,
+          onSeeAll: onSeeAll,
         ),
         SizedBox(
           height: 140,
@@ -1877,6 +1931,7 @@ class _RecommendationsShelf extends StatelessWidget {
     required this.onPlay,
     required this.onRefresh,
     this.seedTrackName,
+    this.onSeeAll,
   });
 
   final List<JellyfinTrack>? tracks;
@@ -1884,6 +1939,7 @@ class _RecommendationsShelf extends StatelessWidget {
   final void Function(JellyfinTrack) onPlay;
   final VoidCallback onRefresh;
   final String? seedTrackName;
+  final VoidCallback? onSeeAll;
 
   @override
   Widget build(BuildContext context) {
@@ -1901,6 +1957,7 @@ class _RecommendationsShelf extends StatelessWidget {
           subtitle: subtitle,
           onRefresh: onRefresh,
           isLoading: isLoading,
+          onSeeAll: onSeeAll,
         ),
         SizedBox(
           height: 140,
@@ -2276,12 +2333,14 @@ class _OnThisDayShelf extends StatelessWidget {
     required this.isLoading,
     required this.onPlay,
     required this.onRefresh,
+    this.onSeeAll,
   });
 
   final List<JellyfinTrack>? tracks;
   final bool isLoading;
   final void Function(JellyfinTrack) onPlay;
   final VoidCallback onRefresh;
+  final VoidCallback? onSeeAll;
 
   @override
   Widget build(BuildContext context) {
@@ -2298,6 +2357,7 @@ class _OnThisDayShelf extends StatelessWidget {
           subtitle: 'Tracks you played on the $dayOrdinal',
           onRefresh: onRefresh,
           isLoading: isLoading,
+          onSeeAll: onSeeAll,
         ),
         SizedBox(
           height: 140,
@@ -3774,6 +3834,19 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
               );
             },
             onRefresh: () => widget.appState.refreshRecent(),
+            onSeeAll: continueTracks != null && continueTracks.isNotEmpty
+                ? () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => AllTracksScreen(
+                          title: 'Continue Listening',
+                          subtitle: '${continueTracks.length} tracks',
+                          tracks: continueTracks,
+                        ),
+                      ),
+                    );
+                  }
+                : null,
           ),
           const SizedBox(height: 20),
         ],
@@ -3789,6 +3862,19 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
               );
             },
             onRefresh: () => widget.appState.refreshRecentlyPlayed(),
+            onSeeAll: recentlyPlayed != null && recentlyPlayed.isNotEmpty
+                ? () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => AllTracksScreen(
+                          title: 'Recently Played',
+                          subtitle: '${recentlyPlayed.length} tracks',
+                          tracks: recentlyPlayed,
+                        ),
+                      ),
+                    );
+                  }
+                : null,
           ),
           const SizedBox(height: 20),
         ],
@@ -3814,6 +3900,19 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
               );
             },
             onRefresh: () => widget.appState.refreshDiscover(),
+            onSeeAll: discoverTracks != null && discoverTracks.isNotEmpty
+                ? () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => AllTracksScreen(
+                          title: 'Discover',
+                          subtitle: 'Rarely played albums',
+                          tracks: discoverTracks,
+                        ),
+                      ),
+                    );
+                  }
+                : null,
           ),
           const SizedBox(height: 20),
         ],
@@ -3829,6 +3928,19 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
               );
             },
             onRefresh: () => widget.appState.refreshOnThisDay(),
+            onSeeAll: onThisDayTracks != null && onThisDayTracks.isNotEmpty
+                ? () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => AllTracksScreen(
+                          title: 'On This Day',
+                          subtitle: 'History from this date',
+                          tracks: onThisDayTracks,
+                        ),
+                      ),
+                    );
+                  }
+                : null,
           ),
           const SizedBox(height: 20),
         ],
@@ -3845,6 +3957,21 @@ class _MostPlayedTabState extends State<_MostPlayedTab> {
               );
             },
             onRefresh: () => widget.appState.refreshRecommendations(),
+            onSeeAll: recommendationTracks != null && recommendationTracks.isNotEmpty
+                ? () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => AllTracksScreen(
+                          title: 'For You',
+                          subtitle: recommendationSeedName != null
+                              ? 'Based on "$recommendationSeedName"'
+                              : 'Based on your listening',
+                          tracks: recommendationTracks,
+                        ),
+                      ),
+                    );
+                  }
+                : null,
           ),
           const SizedBox(height: 20),
         ],
@@ -4219,13 +4346,17 @@ class _ArtistsTab extends StatelessWidget {
           final effectiveSortBy = artists != null ? SortOption.name : appState.artistSortBy;
           final effectiveSortOrder = artists != null ? SortOrder.ascending : appState.artistSortOrder;
           final showArtistHeaders = effectiveSortBy == SortOption.name;
-          final artistLetterGroups = showArtistHeaders
-              ? AlphabetSectionBuilder.groupByLetter<JellyfinArtist>(
-                  effectiveArtists,
-                  (artist) => artist.name,
-                  effectiveSortOrder,
+          
+          final listHelperResult = showArtistHeaders
+              ? AlphabetListHelper.processItems<JellyfinArtist>(
+                  items: effectiveArtists,
+                  getName: (artist) => StringUtils.getSortName(artist.name),
+                  headerHeight: 32,
+                  itemHeight: 72,
+                  crossAxisCount: 1,
+                  sectionPadding: 0,
                 )
-              : <(String, List<JellyfinArtist>)>[];
+              : (flatList: <AlphabetListItem<JellyfinArtist>>[], offsets: <String, double>{});
 
           if (useListMode) {
             return Stack(
@@ -4239,21 +4370,18 @@ class _ArtistsTab extends StatelessWidget {
                           ? SliverList(
                               delegate: SliverChildBuilderDelegate(
                                 (context, index) {
-                                  int currentIndex = 0;
-                                  for (final (letter, items) in artistLetterGroups) {
-                                    if (index == currentIndex) {
-                                      return _AlphabetSectionHeader(letter: letter);
-                                    }
-                                    currentIndex++;
-                                    if (index < currentIndex + items.length) {
-                                      final artist = items[index - currentIndex];
-                                      return _ArtistListTile(artist: artist, appState: appState);
-                                    }
-                                    currentIndex += items.length;
+                                  if (index >= listHelperResult.flatList.length) {
+                                    return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()));
                                   }
-                                  return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()));
+                                  final item = listHelperResult.flatList[index];
+                                  if (item is AlphabetHeaderItem<JellyfinArtist>) {
+                                    return _AlphabetSectionHeader(letter: item.letter);
+                                  } else if (item is AlphabetContentItem<JellyfinArtist>) {
+                                    return _ArtistListTile(artist: item.item, appState: appState);
+                                  }
+                                  return null;
                                 },
-                                childCount: artistLetterGroups.fold(0, (sum, g) => sum + 1 + g.$2.length) + (effectiveIsLoadingMore ? 1 : 0),
+                                childCount: listHelperResult.flatList.length + (effectiveIsLoadingMore ? 1 : 0),
                               ),
                             )
                           : SliverList(
@@ -4272,14 +4400,10 @@ class _ArtistsTab extends StatelessWidget {
                   ],
                 ),
                 AlphabetScrollbar(
-                  items: effectiveArtists,
-                  getItemName: (artist) => (artist as JellyfinArtist).name,
                   scrollController: controller,
-                  itemHeight: 72,
-                  crossAxisCount: 1,
+                  offsets: listHelperResult.offsets,
                   sortOrder: effectiveSortOrder,
                   sortBy: effectiveSortBy,
-                  sectionPadding: 0,
                 ),
               ],
             );
@@ -4287,6 +4411,26 @@ class _ArtistsTab extends StatelessWidget {
 
           // Grid mode rendering
           final artistItemHeight = ((constraints.maxWidth - 32 - (crossAxisCount - 1) * 12) / crossAxisCount) / 0.75;
+          
+          final artistLetterGroups = showArtistHeaders
+              ? AlphabetSectionBuilder.groupByLetter<JellyfinArtist>(
+                  effectiveArtists,
+                  (artist) => StringUtils.getSortName(artist.name),
+                  effectiveSortOrder,
+                )
+              : <(String, List<JellyfinArtist>)>[];
+              
+          final gridHelperResult = showArtistHeaders
+              ? AlphabetListHelper.processItems<JellyfinArtist>(
+                  items: effectiveArtists,
+                  getName: (artist) => StringUtils.getSortName(artist.name),
+                  headerHeight: 32,
+                  itemHeight: artistItemHeight,
+                  crossAxisCount: crossAxisCount,
+                  sectionPadding: 16, // 8 top + 8 bottom around grid
+                  mainAxisSpacing: 12,
+                )
+              : (flatList: <AlphabetListItem<JellyfinArtist>>[], offsets: <String, double>{});
 
           return Stack(
             children: [
@@ -4349,15 +4493,10 @@ class _ArtistsTab extends StatelessWidget {
               ),
               Positioned.fill(
                 child: AlphabetScrollbar(
-                  items: effectiveArtists,
-                  getItemName: (artist) => (artist as JellyfinArtist).name,
                   scrollController: controller,
-                  itemHeight: artistItemHeight,
-                  crossAxisCount: crossAxisCount,
+                  offsets: gridHelperResult.offsets,
                   sortOrder: effectiveSortOrder,
                   sortBy: effectiveSortBy,
-                  sectionPadding: 16,
-                  mainAxisSpacing: 12,
                 ),
               ),
             ],
@@ -4513,10 +4652,20 @@ class _GenresTabState extends State<_GenresTab> {
           // Genres are always sorted by name
           final genreLetterGroups = AlphabetSectionBuilder.groupByLetter<JellyfinGenre>(
             genres,
-            (genre) => genre.name,
+            (genre) => StringUtils.getSortName(genre.name),
             SortOrder.ascending,
           );
           final genreItemHeight = ((constraints.maxWidth - 32 - (crossAxisCount - 1) * 12) / crossAxisCount) / 1.5;
+
+          final genreOffsets = AlphabetListHelper.processItems<JellyfinGenre>(
+            items: genres,
+            getName: (genre) => StringUtils.getSortName(genre.name),
+            headerHeight: 32,
+            itemHeight: genreItemHeight,
+            crossAxisCount: crossAxisCount,
+            sectionPadding: 16, // 8 top + 8 bottom
+            mainAxisSpacing: 12,
+          ).offsets;
 
           return Stack(
             children: [
@@ -4551,13 +4700,10 @@ class _GenresTabState extends State<_GenresTab> {
               ),
               Positioned.fill(
                 child: AlphabetScrollbar(
-                  items: genres,
-                  getItemName: (genre) => (genre as JellyfinGenre).name,
                   scrollController: _genresScrollController,
-                  itemHeight: genreItemHeight,
-                  crossAxisCount: crossAxisCount,
-                  sectionPadding: 8,
-                  mainAxisSpacing: 12,
+                  offsets: genreOffsets,
+                  sortOrder: SortOrder.ascending,
+                  sortBy: SortOption.name,
                 ),
               ),
             ],
@@ -5690,7 +5836,7 @@ class _AlphabetSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      height: 40,
+      height: 32,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       alignment: Alignment.centerLeft,
       child: Text(
@@ -5725,8 +5871,22 @@ class AlphabetSectionBuilder {
     for (final item in items) {
       final name = getItemName(item).toUpperCase();
       if (name.isEmpty) continue;
+      
       final firstChar = name[0];
-      final letter = RegExp(r'[0-9]').hasMatch(firstChar) ? '#' : firstChar;
+      String letter;
+      
+      // If it's a digit, group under #
+      if (RegExp(r'[0-9]').hasMatch(firstChar)) {
+        letter = '#';
+      } 
+      // If it's a letter (including accents like Ü), use it as is
+      else if (RegExp(r'[A-ZÀ-ÖØ-Þ]').hasMatch(firstChar)) {
+        letter = firstChar;
+      }
+      // Everything else (symbols that weren't stripped) goes to #
+      else {
+        letter = '#';
+      }
       
       if (!letterGroups.containsKey(letter)) {
         orderedLetters.add(letter);
@@ -5761,8 +5921,17 @@ class LetterPositions {
     for (int i = 0; i < items.length; i++) {
       final name = getItemName(items[i]).toUpperCase();
       if (name.isEmpty) continue;
+      
       final firstChar = name[0];
-      final letter = RegExp(r'[0-9]').hasMatch(firstChar) ? '#' : firstChar;
+      String letter;
+      
+      if (RegExp(r'[0-9]').hasMatch(firstChar)) {
+        letter = '#';
+      } else if (RegExp(r'[A-ZÀ-ÖØ-Þ]').hasMatch(firstChar)) {
+        letter = firstChar;
+      } else {
+        letter = '#';
+      }
       
       if (!letterCounts.containsKey(letter)) {
         orderedLetters.add(letter);
@@ -5788,7 +5957,14 @@ class LetterPositions {
     final name = getItemName(item).toUpperCase();
     if (name.isEmpty) return '#';
     final firstChar = name[0];
-    return RegExp(r'[0-9]').hasMatch(firstChar) ? '#' : firstChar;
+    
+    if (RegExp(r'[0-9]').hasMatch(firstChar)) {
+      return '#';
+    } else if (RegExp(r'[A-ZÀ-ÖØ-Þ]').hasMatch(firstChar)) {
+      return firstChar;
+    } else {
+      return '#';
+    }
   }
 }
 
@@ -5796,30 +5972,16 @@ class LetterPositions {
 class AlphabetScrollbar extends StatefulWidget {
   const AlphabetScrollbar({
     super.key,
-    required this.items,
-    required this.getItemName,
     required this.scrollController,
-    required this.itemHeight,
-    required this.crossAxisCount,
+    required this.offsets,
     this.sortOrder = SortOrder.ascending,
     this.sortBy,
-    this.headerHeight = 40.0,
-    this.useHeaders = true,
-    this.sectionPadding = 0.0,
-    this.mainAxisSpacing = 0.0,
   });
 
-  final List items;
-  final String Function(dynamic) getItemName;
   final ScrollController scrollController;
-  final double itemHeight;
-  final int crossAxisCount;
+  final Map<String, double> offsets;
   final SortOrder sortOrder;
   final SortOption? sortBy;
-  final double headerHeight;
-  final bool useHeaders;
-  final double sectionPadding;
-  final double mainAxisSpacing;
 
   @override
   State<AlphabetScrollbar> createState() => _AlphabetScrollbarState();
@@ -5834,52 +5996,69 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
   double _bubbleY = 0.0;
 
   void _scrollToLetter(String letter) {
-    if (widget.items.isEmpty) return;
+    if (widget.offsets.isEmpty) return;
     
-    final groups = AlphabetSectionBuilder.groupByLetter<dynamic>(
-      widget.items,
-      widget.getItemName,
-      widget.sortOrder,
-    );
+    // Find exact match
+    if (widget.offsets.containsKey(letter)) {
+      _jumpTo(widget.offsets[letter]!);
+      return;
+    }
+
+    // Find nearest match based on sort order
+    // "Smart Letter Jumping": jump to next available section
+    final availableLetters = widget.offsets.keys.toList();
     
-    double offset = 0.0;
+    // If Descending, reverse the search logic or the list?
+    // If Z-A, and I click 'C', I want 'C' or 'B' (next visible)? 
+    // Usually lists are A-Z. If Z-A, "Next" means "Previous" in alphabet but "Next" in list?
+    // Let's assume standard behavior: Find first available letter that comes *after* target in the list.
     
-    for (final (groupLetter, groupItems) in groups) {
-      if (groupLetter == letter) break;
-      
-      // Stop if we've passed the target letter (handling sort order)
-      if (widget.sortOrder == SortOrder.ascending) {
-         if (groupLetter.compareTo(letter) > 0) break;
-      } else {
-         if (groupLetter.compareTo(letter) < 0) break;
-      }
-      
-      // 1. Header height
-      offset += widget.headerHeight;
-      
-      // 2. Section padding
-      offset += widget.sectionPadding; // e.g., top padding
-      
-      // 3. Items height calculation
-      if (widget.crossAxisCount > 1) {
-        // Grid: Rows * CardHeight + (Rows) * Spacing
-        // Note: SliverGrid adds spacing after every row except the last, 
-        // but simple math often approximates spacing after every row.
-        final rows = (groupItems.length / widget.crossAxisCount).ceil();
-        offset += rows * widget.itemHeight;
-        if (rows > 0) offset += (rows - 1) * widget.mainAxisSpacing;
-      } else {
-        // List
-        offset += groupItems.length * widget.itemHeight;
-      }
-      
-      // Add bottom padding of section if applicable
-      offset += widget.sectionPadding; 
+    // BUT offsets map keys are just letters. The LIST order is what matters.
+    // If ascending: List is A, B, D. I click C. I want D.
+    // If descending: List is D, B, A. I click C. I want B.
+    
+    String? target;
+    
+    if (widget.sortOrder == SortOrder.ascending) {
+       // Find first available > letter
+       for (final l in availableLetters) {
+         if (l.compareTo(letter) > 0) {
+           target = l;
+           break;
+         }
+       }
+    } else {
+       // Descending: List is Z..A.
+       // Find first available < letter (since list goes down)
+       // e.g. Click C. Available: B, A. "B" is < C. "B" appears first in list?
+       // Wait. 'B'.compareTo('C') is -1.
+       // We want the first letter in the list (which is sorted Z->A) that is "after" C in list position.
+       // That means a letter "alphabetically smaller" than C.
+       // We need to iterate the available letters in *Reverse Alphabetical* order?
+       // availableLetters is sorted A-Z.
+       // Iterate backwards.
+       for (final l in availableLetters.reversed) {
+          if (l.compareTo(letter) < 0) {
+            target = l;
+            break;
+          }
+       }
     }
     
+    if (target != null) {
+      _jumpTo(widget.offsets[target]!);
+    } else {
+      // If no "next" letter found, maybe go to end?
+      // Or if strictly larger/smaller check failed, maybe we are at the end/beginning.
+      // E.g. Click 'Z', only 'A' exists.
+      // If Ascending, 'A' < 'Z', loop finishes. target null.
+      // We should probably just stay put or go to max extent?
+    }
+  }
+
+  void _jumpTo(double offset) {
     if (widget.scrollController.hasClients) {
       final maxScroll = widget.scrollController.position.maxScrollExtent;
-      // Clamp to ensure we don't crash by scrolling past bounds
       widget.scrollController.jumpTo(offset.clamp(0.0, maxScroll));
     }
   }

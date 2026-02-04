@@ -3,10 +3,14 @@ import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../app_state.dart';
 import '../../services/audio_player_service.dart';
-import '../../services/pulseaudio_fft_service.dart';
-import '../../services/ios_fft_service.dart';
+import 'package:nautune/services/pulseaudio_fft_service.dart';
+import 'package:nautune/services/ios_fft_service.dart';
+import 'package:nautune/services/android_fft_service.dart';
+
 import '../../services/power_mode_service.dart';
 
 /// Abstract base class for all audio visualizers.
@@ -16,10 +20,12 @@ abstract class BaseVisualizer extends StatefulWidget {
     super.key,
     required this.audioService,
     this.opacity = 0.6,
+    this.isVisible = true,
   });
 
   final AudioPlayerService audioService;
   final double opacity;
+  final bool isVisible;
 }
 
 /// Base state class with FFT subscription and smoothing logic.
@@ -27,6 +33,7 @@ abstract class BaseVisualizer extends StatefulWidget {
 abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
     with SingleTickerProviderStateMixin {
   late AnimationController animationController;
+  NautuneAppState? _appState;
 
   // Smoothed values used by visualizers
   double smoothBass = 0.0;
@@ -42,12 +49,8 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
   double _targetAmplitude = 0.0;
   List<double> _targetSpectrum = [];
 
-  // Frame rate throttling
-  DateTime _lastFrameTime = DateTime.now();
-  static const _frameIntervalReal = Duration(milliseconds: 16);
-  static const _frameIntervalFallback = Duration(milliseconds: 33);
-
   double lastPaintedTime = 0;
+  double _currentNyquist = 22050.0;
 
   StreamSubscription? _playingSubscription;
   StreamSubscription? _frequencySubscription;
@@ -60,17 +63,24 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
   bool get usePulseAudioFFT =>
       Platform.isLinux && PulseAudioFFTService.instance.isAvailable;
   bool get useIOSFFT => Platform.isIOS && IOSFFTService.instance.isAvailable;
-  bool get useRealFFT => usePulseAudioFFT || useIOSFFT;
+  bool get useAndroidFFT => Platform.isAndroid;
+  bool get useRealFFT => usePulseAudioFFT || useIOSFFT || useAndroidFFT;
 
   /// Number of spectrum bars to use (subclasses can override)
   int get spectrumBarCount => 64;
 
-  // Frequency range for bar mapping (20Hz to 14kHz)
+  // Frequency range for bar mapping (20Hz to 20kHz)
   static const double _minHz = 20.0;
-  static const double _maxHz = 14000.0;
+  static const double _maxHz = 20000.0;
 
   // Bar smoothing cache (fast attack/decay, very light to avoid latency).
   List<double> _barEma = const [];
+
+  // Cache for log-frequency mapping
+  List<double>? _cachedBinIndices;
+  int? _lastMappedBarCount;
+  double? _lastMappedNyquist;
+  int? _lastMappedSpectrumLen;
 
   @override
   void initState() {
@@ -80,18 +90,20 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
       duration: const Duration(seconds: 10),
     );
 
-    _initFFTSource();
+    if (widget.isVisible) {
+      _initFFTSource();
+    }
 
     _playingSubscription = widget.audioService.playingStream.listen((playing) {
       if (!mounted) return;
-      if (playing) {
+      if (playing && widget.isVisible) {
         animationController.repeat();
       } else {
         animationController.stop();
       }
     });
 
-    if (widget.audioService.isPlaying) {
+    if (widget.audioService.isPlaying && widget.isVisible) {
       animationController.repeat();
     }
     
@@ -106,7 +118,41 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final newAppState = Provider.of<NautuneAppState>(context, listen: false);
+    if (_appState != newAppState) {
+      if (widget.isVisible) {
+        _appState?.decrementVisibleVisualizerCount();
+        newAppState.incrementVisibleVisualizerCount();
+      }
+      _appState = newAppState;
+    }
+  }
+
+  @override
+  void didUpdateWidget(T oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    if (widget.isVisible != oldWidget.isVisible) {
+      if (widget.isVisible) {
+        _initFFTSource();
+        _appState?.incrementVisibleVisualizerCount();
+        if (widget.audioService.isPlaying) {
+          animationController.repeat();
+        }
+      } else {
+        _cleanupFFTSource();
+        _appState?.decrementVisibleVisualizerCount();
+        animationController.stop();
+      }
+    }
+  }
+
   void _initFFTSource() {
+    if (_fftSubscription != null || _frequencySubscription != null) return;
+
     // 1. Linux PulseAudio (Real FFT)
     if (usePulseAudioFFT) {
       _fftSubscription = PulseAudioFFTService.instance.fftStream.listen((fft) {
@@ -125,15 +171,28 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
         const iosScale = 0.65;
         _targetBass = fft.bass * iosScale;
         _targetMid = fft.mid * iosScale;
-        _targetTreble = fft.treble * iosScale;
-        _targetAmplitude = fft.amplitude * iosScale;
+        _targetTreble = fft.treble;
+        _targetAmplitude = fft.amplitude;
         // Generate a simple spectrum from 3 bands
         _targetSpectrum = _generateFakeSpectrum(_targetBass, _targetMid, _targetTreble);
       });
       return;
     }
 
-    // 3. Fallback to basic frequency bands
+    // 3. Android Native FFT
+    if (Platform.isAndroid) {
+      _fftSubscription = AndroidFFTService.instance.fftStream.listen((data) {
+        _targetBass = data.bass;
+        _targetMid = data.mid;
+        _targetTreble = data.treble;
+        _targetAmplitude = data.amplitude;
+        _targetSpectrum = data.spectrum;
+        _currentNyquist = data.sampleRate / 2.0;
+      });
+      return;
+    }
+
+    // 4. Fallback to basic frequency bands
     _frequencySubscription = widget.audioService.frequencyBandsStream.listen((bands) {
       _targetBass = bands.bass;
       _targetMid = bands.mid;
@@ -141,6 +200,13 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
       _targetAmplitude = ((bands.bass + bands.mid + bands.treble) / 3).clamp(0.0, 1.0);
       _targetSpectrum = _generateFakeSpectrum(bands.bass, bands.mid, bands.treble);
     });
+  }
+
+  void _cleanupFFTSource() {
+    _fftSubscription?.cancel();
+    _fftSubscription = null;
+    _frequencySubscription?.cancel();
+    _frequencySubscription = null;
   }
 
   List<double> _generateFakeSpectrum(double bass, double mid, double treble) {
@@ -169,8 +235,10 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
 
   @override
   void dispose() {
-    _fftSubscription?.cancel();
-    _frequencySubscription?.cancel();
+    if (widget.isVisible) {
+      _appState?.decrementVisibleVisualizerCount();
+    }
+    _cleanupFFTSource();
     _playingSubscription?.cancel();
     _lowPowerModeSubscription?.cancel();
     animationController.dispose();
@@ -179,23 +247,36 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
 
   // Update and smooth values
   void updateSmoothedValues() {
-    final now = DateTime.now();
-    final frameInterval = useRealFFT ? _frameIntervalReal : _frameIntervalFallback;
-    if (now.difference(_lastFrameTime) < frameInterval) return;
-    _lastFrameTime = now;
-
+    // We update every frame (vsync) for maximum smoothness on 90Hz/120Hz screens.
+    // Manual throttling here causes jitter/stuttering because it quantizes movement.
+    
     if (useRealFFT) {
-      // Light band smoothing only
-      const attack = 0.75;
-      const decay = 0.35;
+      // Light band smoothing for real-time FFT sources
+      // High attack for snappy response, moderate decay for stability
+      final attack = Platform.isAndroid ? 0.85 : 0.75;
+      final decay = Platform.isAndroid ? 0.45 : 0.35;
 
       smoothBass += (_targetBass - smoothBass) * (_targetBass > smoothBass ? attack : decay);
       smoothMid += (_targetMid - smoothMid) * (_targetMid > smoothMid ? attack : decay);
       smoothTreble += (_targetTreble - smoothTreble) * (_targetTreble > smoothTreble ? attack : decay);
       smoothAmplitude += (_targetAmplitude - smoothAmplitude) * (_targetAmplitude > smoothAmplitude ? attack : decay);
 
-      // Spectrum direct
-      smoothSpectrum = _targetSpectrum;
+      // Spectrum smoothing (CRITICAL for buttery smooth Android)
+      // Since Android capture rate is ~20Hz, we must smooth/interpolate in Flutter
+      // to eliminate jitter at 60Hz+ rendering.
+      if (smoothSpectrum.length != _targetSpectrum.length) {
+        smoothSpectrum = List<double>.from(_targetSpectrum);
+      } else {
+        // Asymmetric smoothing: fast attack (rise), slower decay (fall)
+        final barAttack = Platform.isAndroid ? 0.75 : 0.70;
+        final barDecay = Platform.isAndroid ? 0.35 : 0.40;
+        
+        for (int i = 0; i < _targetSpectrum.length; i++) {
+          final target = _targetSpectrum[i];
+          final current = smoothSpectrum[i];
+          smoothSpectrum[i] += (target - current) * (target > current ? barAttack : barDecay);
+        }
+      }
     } else {
       final attackFactor = Platform.isIOS ? 0.4 : 0.3;
       final decayFactor = Platform.isIOS ? 0.35 : 0.08;
@@ -248,11 +329,13 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
       barCount: barCount,
       minHz: _minHz,
       maxHz: _maxHz,
+      nyquist: _currentNyquist,
     );
 
     // Very light smoothing to avoid shimmer (doesn't add much latency)
-    final attack = useRealFFT ? 0.55 : 0.40;
-    final decay = useRealFFT ? 0.25 : 0.18;
+    // Snappier on Android to reduce perceived lag
+    final attack = Platform.isAndroid ? 0.80 : (useRealFFT ? 0.55 : 0.40);
+    final decay = Platform.isAndroid ? 0.40 : (useRealFFT ? 0.25 : 0.18);
 
     for (int i = 0; i < barCount; i++) {
       final x = rawBars[i];
@@ -271,19 +354,31 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
     required int barCount,
     required double minHz,
     required double maxHz,
+    double nyquist = 22050.0,
   }) {
     final len = spectrum.length;
     if (len == 0) return List<double>.filled(barCount, 0.0);
 
-    const nyquist = 22050.0;
-    final lo = minHz.clamp(20.0, maxHz - 100.0);
-    final hi = maxHz.clamp(lo + 100.0, nyquist);
+    // Pre-calculate mapping if needed
+    if (_cachedBinIndices == null || 
+        _lastMappedBarCount != barCount || 
+        _lastMappedNyquist != nyquist || 
+        _lastMappedSpectrumLen != len) {
+      
+      _lastMappedBarCount = barCount;
+      _lastMappedNyquist = nyquist;
+      _lastMappedSpectrumLen = len;
+      _cachedBinIndices = List<double>.filled(barCount + 1, 0.0);
 
-    // Helpers for sampling
-    double getBinIndex(int barIdx) {
-      final t = barIdx / barCount;
-      final hz = lo * math.pow(hi / lo, t).toDouble();
-      return (hz / nyquist) * len;
+      final lo = minHz.clamp(20.0, maxHz - 100.0);
+      final hi = maxHz.clamp(lo + 100.0, nyquist);
+      final ratio = hi / lo;
+
+      for (int i = 0; i <= barCount; i++) {
+        final t = i / barCount;
+        final hz = lo * math.pow(ratio, t);
+        _cachedBinIndices![i] = (hz / nyquist) * len;
+      }
     }
 
     double sampleSpectrum(double binIdx) {
@@ -306,8 +401,8 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
     final bars = List<double>.filled(barCount, 0.0);
 
     for (int i = 0; i < barCount; i++) {
-      final idx0 = getBinIndex(i);
-      final idx1 = getBinIndex(i + 1);
+      final idx0 = _cachedBinIndices![i];
+      final idx1 = _cachedBinIndices![i+1];
       
       double val;
       // Sample or average the spectrum for this bar
@@ -365,8 +460,8 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
 
   @override
   Widget build(BuildContext context) {
-    // Disable visualization in iOS Low Power Mode for battery efficiency
-    if (Platform.isIOS && _isLowPowerMode) {
+    // Disable visualization when not visible or in iOS Low Power Mode for battery efficiency
+    if (!widget.isVisible || (Platform.isIOS && _isLowPowerMode)) {
       return const SizedBox.shrink();
     }
     

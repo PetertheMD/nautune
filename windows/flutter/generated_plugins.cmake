@@ -8,6 +8,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   battery_plus
   connectivity_plus
   flutter_secure_storage_windows
+  permission_handler_windows
   screen_retriever_windows
   tray_manager
   url_launcher_windows

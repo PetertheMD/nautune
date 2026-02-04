@@ -1,3 +1,50 @@
+### v6.7.1 - UI Tightening & Bugfixes
+
+**UI Tightening**
+- **Library Screen**: Reduced vertical padding in header and sort controls for better information density.
+- **Album Detail**: Compacted album info section and reduced track tile vertical padding.
+- **Artist Detail**: Reduced top padding in artist info and tightened track tile spacing.
+- **Playlist Detail**: Improved list density by reducing padding in reorderable lists and track tiles.
+
+**Bugfixes**
+- **Build Fix (iOS)**: Resolved missing `IOSFFTService` import in `app_state.dart` that caused compilation failures.
+- **Visualizer Fix**: Fixed a "member not found" error in the Butterchurn visualizer by correctly scoping the `_rainbowColors` static member.
+
+### v6.7.0 - Android Support, Hot Track Icons & Visualizer Polish
+
+**Android Native Support**
+- **Native Visualizer API**: Added real-time FFT visualization for Android using native `Visualizer` API
+- **Session 0 Integration**: High-compatibility global mix capture works across different audio configurations
+- **Microphone Permissions**: Added permission handling for real-time audio capture
+- **Performance Optimized**: Native processing with asymmetric smoothing for buttery smooth 60fps+ rendering
+- **Full Feature Parity**: Visualizers, offline mode, and analytics now fully supported on Android
+
+**"Hot" Track Indicators**
+- **Flame Icons**: Popular tracks (matched from global ListenBrainz stats) now display a subtle flame icon next to the song number
+- **Top 3 Highlight**: Only the top 3 globally popular tracks per album or artist page receive the indicator to maintain UI cleanliness
+- **Smart Threshold**: Hot track detection only active for albums with 5 or more tracks
+- **Dynamic Gradient**: Flames use a theme-matched gradient extracted from the artwork palette
+- **Proper Alignment**: All indicators now perfectly centered and aligned in a horizontal row next to track numbers
+
+**3D Globe Visualizer Enhancements**
+- **Increased Scale**: Globe diameter increased by 10% to fill more of the album art square
+- **Higher Density**: Particle count increased by 10% across all quality levels (High: 1650 points)
+- **Visual Fidelity**: Added sphere highlights to each particle for a more 3D, premium look
+- **Improved Smoothness**: Optimized rotation logic and spectrum smoothing for a mesmerizing experience
+
+**Artist Page UI Overhaul**
+- **Touch-Friendly Headers**: Refactored collapsible headers with larger hit targets for mobile users
+- **Separated Actions**: "See All" buttons now separate from section toggle to prevent accidental navigation
+- **Simplified Wording**: Updated "Show All" to "See All" for a cleaner, standard aesthetic
+- **Responsive Layout**: Reduced vertical padding for better information density on smaller screens
+
+**Library Navigation & Polish**
+- **Alphabetical Jump Fix**: Precise offset calculation for alphabetical navigation in Albums and Genres
+- **Sort Name Support**: "Smart" sorting now ignores common prefixes (The, A, An) for better jump accuracy
+- **Unicode Support**: Improved grouping logic for non-standard and accented characters
+- **Now Playing Shadows**: Added subtle text shadows to artist and title labels for better readability on bright backgrounds
+- **Spectrum Smoothing**: Enhanced peak-hold and fall logic for more natural visual reactivity
+
 ### v6.6.1 - Alphabetical Navigation Tuning
 - **Library Exploration**: Fine-tuned alphabetical "jump" scroll positions for Albums and Genres tabs
 - **Navigation Consistency**: Aligned scroll padding to match the high-performance Artist navigation

@@ -257,7 +257,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                       ),
                     )
                   : ReorderableListView.builder(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                       itemCount: _tracks!.length,
                       onReorder: _onReorder,
                       itemBuilder: (context, index) {
@@ -266,6 +266,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                         final durationText = duration != null ? _formatDuration(duration) : '--:--';
 
                         return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                           key: ValueKey(track.id), // Important for ReorderableListView
                           leading: ClipRRect(
                             borderRadius: BorderRadius.circular(8),

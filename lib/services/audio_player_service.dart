@@ -23,8 +23,10 @@ import 'playback_state_store.dart';
 import '../models/playback_state.dart';
 import '../models/play_stats.dart';
 import 'local_cache_service.dart';
-import 'ios_fft_service.dart';
-import 'pulseaudio_fft_service.dart';
+import 'package:nautune/services/ios_fft_service.dart';
+import 'package:nautune/services/android_fft_service.dart';
+import 'package:nautune/services/pulseaudio_fft_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'connectivity_service.dart';
 import 'waveform_service.dart';
 import '../models/loop_state.dart';
@@ -174,6 +176,8 @@ class AudioPlayerService {
   final _frequencyBandsController = BehaviorSubject<FrequencyBands>.seeded(FrequencyBands.zero);
   StreamSubscription<AudioInterruptionEvent>? _interruptionSubscription;
   StreamSubscription<void>? _becomingNoisySubscription;
+  StreamSubscription? _androidFftSub;
+  DateTime _lastRealVisualizerTime = DateTime.fromMillisecondsSinceEpoch(0);
 
   void setDownloadService(DownloadService service) {
     _downloadService = service;
@@ -582,6 +586,19 @@ class AudioPlayerService {
     if (Platform.isLinux) {
       unawaited(PulseAudioFFTService.instance.initialize());
     }
+    if (Platform.isAndroid) {
+      // Request microphone permission for Visualizer (required for Session ID 0)
+      unawaited(Permission.microphone.request().then((status) {
+        if (status.isGranted) {
+          debugPrint('✅ Android Microphone permission granted for Visualizer');
+          AndroidFFTService.instance.initialize();
+          _androidFftSub?.cancel();
+          _androidFftSub = AndroidFFTService.instance.fftStream.listen(_processAndroidFftData);
+        } else {
+          debugPrint('❌ Android Microphone permission denied - Visualizer will fallback to simulation');
+        }
+      }));
+    }
 
     try {
       final session = await AudioSession.instance;
@@ -685,11 +702,18 @@ class AudioPlayerService {
       
       if (isPlaying) {
         _startPositionSaving();
+        if (Platform.isAndroid) {
+          // Use Session ID 0 (Global Mix) for best compatibility
+          unawaited(AndroidFFTService.instance.startVisualizer(0));
+        }
         unawaited(_stateStore.savePlaybackSnapshot(isPlaying: true));
       } else {
         _stopPositionSaving();
         _saveCurrentPosition();
         _emitIdleVisualizer();
+        if (Platform.isAndroid) {
+          unawaited(AndroidFFTService.instance.stopVisualizer());
+        }
         unawaited(_stateStore.savePlaybackSnapshot(isPlaying: false));
       }
     });
@@ -1350,6 +1374,9 @@ class AudioPlayerService {
   Future<void> pause() async {
     HapticService.lightTap();
     await _fadeOutAndPause();
+    if (Platform.isIOS) {
+      await IOSFFTService.instance.stopCapture();
+    }
     final position = await _player.getCurrentPosition();
     if (position != null) {
       _lastPosition = position;
@@ -2058,7 +2085,55 @@ class AudioPlayerService {
         '(gain: ${gain.toStringAsFixed(1)}dB, genres: ${genres.take(3).join(", ")})');
   }
 
+  void _processAndroidFftData(AndroidFFTData data) {
+    _lastRealVisualizerTime = DateTime.now();
+
+    final hasVisualizerListeners = _visualizerController.hasListener;
+    final hasFrequencyListeners = _frequencyBandsController.hasListener;
+    if (!hasVisualizerListeners && !hasFrequencyListeners) return;
+
+    if (hasFrequencyListeners) {
+      _frequencyBandsController.add(FrequencyBands(
+        bass: data.bass,
+        mid: data.mid,
+        treble: data.treble,
+      ));
+    }
+
+    if (hasVisualizerListeners) {
+      if (data.spectrum.isNotEmpty) {
+        // Use high-fidelity spectrum data if available
+        // Resample/extract requested number of bars from the 64-bar raw spectrum
+        for (int i = 0; i < _visualizerBarCount; i++) {
+          final sourceIdx = (i * data.spectrum.length / _visualizerBarCount).floor();
+          _visualizerBars[i] = data.spectrum[sourceIdx].clamp(0.0, 1.0);
+        }
+      } else {
+        // Fallback to 3-band expansion if spectrum is missing
+        for (int i = 0; i < _visualizerBarCount; i++) {
+          final ratio = i / _visualizerBarCount;
+          double value;
+          if (ratio < 0.33) {
+             value = data.bass;
+          } else if (ratio < 0.66) {
+             value = data.mid;
+          } else {
+             value = data.treble;
+          }
+          final modulation = 0.8 + 0.2 * sin(i * 0.5); 
+          _visualizerBars[i] = (value * modulation).clamp(0.0, 1.0);
+        }
+      }
+      _visualizerController.add(List<double>.from(_visualizerBars));
+    }
+  }
+
   void _emitVisualizerFrame(Duration position) {
+    // If we have real FFT data recently (within 200ms), don't emit simulated data
+    if (DateTime.now().difference(_lastRealVisualizerTime).inMilliseconds < 200) {
+      return;
+    }
+
     final hasVisualizerListeners = _visualizerController.hasListener;
     final hasFrequencyListeners = _frequencyBandsController.hasListener;
     if (!hasVisualizerListeners && !hasFrequencyListeners) return;
@@ -2084,9 +2159,9 @@ class AudioPlayerService {
       final wave = (sin(t * freq + index * 0.45) + 1) * 0.5;
       final ripple = (sin((t * freq * 0.6) + index) + 1) * 0.25;
 
-      // Bass region (0-7) gets genre-based emphasis
-      final bassBoost = index < 8 ? _bassEmphasis * 0.4 : 0.0;
-      final value = ((wave * 0.7) + (ripple * 0.3) + bassBoost) * volumeMultiplier;
+      // Bass region (0-7) gets genre-based emphasis as a multiplier
+      final bassMultiplier = index < 8 ? (1.0 + _bassEmphasis * 0.5) : 1.0;
+      final value = ((wave * 0.7) + (ripple * 0.3)) * bassMultiplier * volumeMultiplier;
       _visualizerBars[index] = value.clamp(0.0, 1.0);
     }
 
@@ -2103,7 +2178,8 @@ class AudioPlayerService {
         bassSum += _visualizerBars[i];
       }
       final rawBass = bassSum / 8;
-      final bass = (rawBass + _bassEmphasis * 0.2).clamp(0.0, 1.0);
+      // Use multiplier instead of addition to ensure 0 stays 0
+      final bass = (rawBass * (1.0 + _bassEmphasis * 0.4)).clamp(0.0, 1.0);
 
       // Calculate mid (indices 8-15)
       double midSum = 0.0;

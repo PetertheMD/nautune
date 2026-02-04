@@ -9,6 +9,7 @@ class SpectrumRadialVisualizer extends BaseVisualizer {
     super.key,
     required super.audioService,
     super.opacity = 0.6,
+    super.isVisible = true,
   });
 
   @override
@@ -20,24 +21,36 @@ class _SpectrumRadialVisualizerState extends BaseVisualizerState<SpectrumRadialV
 
   // Peak hold values
   final List<double> _peakValues = List<double>.filled(_barCount, 0.0);
-  final List<int> _peakHoldFrames = List<int>.filled(_barCount, 0);
-  static const int _peakHoldDuration = 10;
-  static const double _peakFallSpeed = 0.03;
+  final List<double> _peakHoldTimes = List<double>.filled(_barCount, 0.0);
+  
+  static const double _peakHoldDurationSeconds = 0.33;
+  static const double _peakFallSpeedSeconds = 0.9;
+  
+  DateTime? _lastUpdateTime;
 
   @override
   int get spectrumBarCount => _barCount;
 
   void _updatePeaks(List<double> bars) {
+    final now = DateTime.now();
+    final dt = _lastUpdateTime == null 
+        ? 0.016 
+        : now.difference(_lastUpdateTime!).inMicroseconds / 1000000.0;
+    _lastUpdateTime = now;
+
+    // Cap dt to prevent huge jumps if paused/backgrounded
+    final safeDt = dt > 0.1 ? 0.1 : dt;
+
     for (int i = 0; i < _barCount && i < bars.length; i++) {
       final value = bars[i];
 
       if (value >= _peakValues[i]) {
         _peakValues[i] = value;
-        _peakHoldFrames[i] = _peakHoldDuration;
-      } else if (_peakHoldFrames[i] > 0) {
-        _peakHoldFrames[i]--;
+        _peakHoldTimes[i] = _peakHoldDurationSeconds;
+      } else if (_peakHoldTimes[i] > 0) {
+        _peakHoldTimes[i] -= safeDt;
       } else {
-        _peakValues[i] = max(0.0, _peakValues[i] - _peakFallSpeed);
+        _peakValues[i] = max(0.0, _peakValues[i] - _peakFallSpeedSeconds * safeDt);
       }
     }
   }
@@ -87,6 +100,12 @@ class _SpectrumRadialPainter extends CustomPainter {
   static const MaskFilter _blurFilter8 = MaskFilter.blur(BlurStyle.normal, 8);
   static const MaskFilter _blurFilter12 = MaskFilter.blur(BlurStyle.normal, 12);
 
+  // Pre-calculated color lookups for performance
+  static final List<Color> _rainbowBase = List.generate(360, (h) => 
+      HSLColor.fromAHSL(1.0, h.toDouble(), 0.7, 0.4).toColor());
+  static final List<Color> _rainbowBright = List.generate(360, (h) => 
+      HSLColor.fromAHSL(1.0, h.toDouble(), 1.0, 0.7).toColor());
+
   _SpectrumRadialPainter({
     required this.bars,
     required this.peaks,
@@ -113,13 +132,12 @@ class _SpectrumRadialPainter extends CustomPainter {
   }
 
   /// Get color based on angle position
+  /// Uses pre-computed rainbow lookup for performance
   Color _getBarColor(double angle, double value) {
-    // Rainbow hue based on angle
-    final hue = ((angle / (2 * pi)) * 360 + time * 20) % 360;
-    final saturation = 0.7 + value * 0.3;
-    final lightness = 0.4 + value * 0.3;
-
-    return HSLColor.fromAHSL(1.0, hue, saturation.clamp(0.0, 1.0), lightness.clamp(0.0, 0.8)).toColor();
+    final hue = ((angle / (2 * pi)) * 360 + time * 20).round() % 360;
+    final h = hue < 0 ? hue + 360 : hue;
+    
+    return Color.lerp(_rainbowBase[h], _rainbowBright[h], value) ?? _rainbowBase[h];
   }
 
   @override
@@ -231,7 +249,7 @@ class _SpectrumRadialPainter extends CustomPainter {
   bool shouldRepaint(covariant _SpectrumRadialPainter old) {
     // Threshold-based repaint for battery optimization
     // Always repaint if time changed significantly (animation) or audio values changed
-    const tolerance = 0.01;
+    const tolerance = 0.002;
     const timeTolerance = 0.05; // Skip frames during slow animations
 
     // Skip if nothing meaningful changed

@@ -14,12 +14,16 @@ class AllTracksScreen extends StatelessWidget {
     required this.tracks,
     this.subtitle,
     this.accentColor,
+    this.hotTrackRanks,
+    this.flameColor,
   });
 
   final String title;
   final String? subtitle;
   final List<JellyfinTrack> tracks;
   final Color? accentColor;
+  final Map<String, int>? hotTrackRanks;
+  final Color? flameColor;
 
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes;
@@ -107,6 +111,8 @@ class AllTracksScreen extends StatelessWidget {
                 final duration = track.runTimeTicks != null
                     ? Duration(microseconds: track.runTimeTicks! ~/ 10)
                     : Duration.zero;
+                final isHot = hotTrackRanks?.containsKey(track.id) ?? false;
+                final hotRank = hotTrackRanks?[track.id];
 
                 return ListTile(
                   leading: ClipRRect(
@@ -152,7 +158,7 @@ class AllTracksScreen extends StatelessWidget {
                       // Favorite indicator
                       if (track.isFavorite)
                         Padding(
-                          padding: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.only(right: 12),
                           child: Icon(
                             Icons.favorite,
                             size: 16,
@@ -166,24 +172,57 @@ class AllTracksScreen extends StatelessWidget {
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      // Rank badge for popular tracks (first 5)
-                      if (index < 5) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: effectiveAccent.withValues(alpha: 0.15),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${index + 1}',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: effectiveAccent,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                      // Hot track indicator or rank
+                      if (isHot || (index < 5 && title.contains('Popular'))) ...[
+                        const SizedBox(width: 12),
+                        SizedBox(
+                          width: 40,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              if (isHot)
+                                Tooltip(
+                                  message: hotRank != null ? '🔥 #$hotRank Popular' : '🔥 Hot track',
+                                  child: ShaderMask(
+                                    shaderCallback: (bounds) {
+                                      final baseColor = flameColor ?? Colors.orange;
+                                      return LinearGradient(
+                                        begin: Alignment.bottomCenter,
+                                        end: Alignment.topCenter,
+                                        colors: [
+                                          baseColor,
+                                          Color.lerp(baseColor, Colors.yellow, 0.6) ?? Colors.orangeAccent,
+                                          Color.lerp(baseColor, Colors.white, 0.3) ?? Colors.amber,
+                                        ],
+                                        stops: const [0.0, 0.5, 1.0],
+                                      ).createShader(bounds);
+                                    },
+                                    blendMode: BlendMode.srcIn,
+                                    child: const Icon(
+                                      Icons.local_fire_department,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ),
+                              if (!isHot && index < 5 && title.contains('Popular'))
+                                Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: effectiveAccent.withValues(alpha: 0.15),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      '${index + 1}',
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        color: effectiveAccent,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       ],

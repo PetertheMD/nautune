@@ -16,12 +16,14 @@ class VisualizerFactory extends StatelessWidget {
     required this.audioService,
     this.opacity = 0.6,
     this.globeQuality = GlobeQuality.normal,
+    this.isVisible = true,
   });
 
   final VisualizerType type;
   final AudioPlayerService audioService;
   final double opacity;
   final GlobeQuality globeQuality;
+  final bool isVisible;
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +33,7 @@ class VisualizerFactory extends StatelessWidget {
           key: const ValueKey('bioluminescent'),
           audioService: audioService,
           opacity: opacity,
+          isVisible: isVisible,
         );
 
       case VisualizerType.spectrumBars:
@@ -38,6 +41,7 @@ class VisualizerFactory extends StatelessWidget {
           key: const ValueKey('spectrumBars'),
           audioService: audioService,
           opacity: opacity,
+          isVisible: isVisible,
         );
 
       case VisualizerType.spectrumMirror:
@@ -45,6 +49,7 @@ class VisualizerFactory extends StatelessWidget {
           key: const ValueKey('spectrumMirror'),
           audioService: audioService,
           opacity: opacity,
+          isVisible: isVisible,
         );
 
       case VisualizerType.spectrumRadial:
@@ -52,6 +57,7 @@ class VisualizerFactory extends StatelessWidget {
           key: const ValueKey('spectrumRadial'),
           audioService: audioService,
           opacity: opacity,
+          isVisible: isVisible,
         );
 
       case VisualizerType.butterchurn:
@@ -59,6 +65,7 @@ class VisualizerFactory extends StatelessWidget {
           key: const ValueKey('butterchurn'),
           audioService: audioService,
           opacity: opacity,
+          isVisible: isVisible,
         );
 
       case VisualizerType.globe:
@@ -67,6 +74,7 @@ class VisualizerFactory extends StatelessWidget {
           audioService: audioService,
           opacity: opacity,
           quality: globeQuality,
+          isVisible: isVisible,
         );
     }
   }

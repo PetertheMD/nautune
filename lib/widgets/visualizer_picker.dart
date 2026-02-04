@@ -306,22 +306,22 @@ class _GlobePreviewPainter extends CustomPainter {
     final paint = Paint()..color = primary.withValues(alpha: 0.6);
 
     // Draw a simplified sphere of dots
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 18; i++) {
         // Distribute dots somewhat randomly but spherically
         final radius = size.width * 0.25;
         final x = center.dx + radius * 0.8 * (i % 5 - 2) * 0.5;
         final y = center.dy + radius * 0.8 * ((i * 3) % 5 - 2) * 0.5;
         
-        final sizeScale = ((i % 3) + 1.0) * 1.5;
+        final sizeScale = ((i % 3) + 1.0) * 0.8;
         
-        paint.color = primary.withValues(alpha: 0.4 + (i%5)*0.1);
+        paint.color = primary.withValues(alpha: 0.3 + (i%5)*0.1);
         canvas.drawCircle(Offset(x, y), sizeScale, paint);
     }
     
     // Draw some 'outer' dots
-    paint.color = primary.withValues(alpha: 0.3);
-    canvas.drawCircle(Offset(center.dx - 20, center.dy - 20), 4, paint);
-    canvas.drawCircle(Offset(center.dx + 25, center.dy + 15), 3, paint);
+    paint.color = primary.withValues(alpha: 0.2);
+    canvas.drawCircle(Offset(center.dx - 20, center.dy - 20), 2.5, paint);
+    canvas.drawCircle(Offset(center.dx + 25, center.dy + 15), 1.8, paint);
   }
 
   @override

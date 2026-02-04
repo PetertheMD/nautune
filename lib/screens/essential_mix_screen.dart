@@ -12,10 +12,11 @@ import '../providers/demo_mode_provider.dart';
 import '../models/waveform_data.dart';
 import '../services/audio_player_service.dart';
 import '../services/essential_mix_service.dart';
-import '../services/ios_fft_service.dart';
-import '../services/listening_analytics_service.dart';
-import '../services/power_mode_service.dart';
-import '../services/pulseaudio_fft_service.dart';
+import 'package:nautune/services/android_fft_service.dart';
+import 'package:nautune/services/ios_fft_service.dart';
+import 'package:nautune/services/listening_analytics_service.dart';
+import 'package:nautune/services/power_mode_service.dart';
+import 'package:nautune/services/pulseaudio_fft_service.dart';
 import '../services/waveform_service.dart';
 
 /// Essential Mix Easter Egg screen - Full player UI for the Soulwax/2ManyDJs mix.
@@ -306,6 +307,12 @@ class _EssentialMixScreenState extends State<EssentialMixScreen>
       });
     } else if (Platform.isLinux) {
       _fftSubscription = PulseAudioFFTService.instance.fftStream.listen((data) {
+        _targetBass = data.bass;
+        _targetMid = data.mid;
+        _targetTreble = data.treble;
+      });
+    } else if (Platform.isAndroid) {
+      _fftSubscription = AndroidFFTService.instance.fftStream.listen((data) {
         _targetBass = data.bass;
         _targetMid = data.mid;
         _targetTreble = data.treble;

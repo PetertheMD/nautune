@@ -88,10 +88,15 @@ class NautuneColorPalette {
         onSurface: onSurface,
         onSurfaceVariant: onSurfaceVariant,
         onPrimary: Colors.white,
+        onPrimaryContainer: Colors.white,
         onSecondary: onSurface,
+        onSecondaryContainer: onSurface,
         outline: const Color(0xFF727A7F),
       ),
       textTheme: TextTheme(
+        headlineLarge: TextStyle(color: onSurface, fontWeight: FontWeight.bold),
+        headlineMedium: TextStyle(color: onSurface, fontWeight: FontWeight.bold),
+        headlineSmall: TextStyle(color: onSurface, fontWeight: FontWeight.bold),
         bodyMedium: TextStyle(color: onSurface),
         bodySmall: TextStyle(color: onSurface),
         bodyLarge: TextStyle(color: onSurface),
@@ -178,6 +183,9 @@ class NautuneColorPalette {
   }
 
   ThemeData _buildDarkTheme() {
+    // Determine a high-contrast color for elements on top of the primary color
+    final onPrimaryColor = primary.computeLuminance() > 0.5 ? surface : textPrimary;
+
     return ThemeData.dark().copyWith(
       scaffoldBackgroundColor: surface,
       colorScheme: ColorScheme.dark(
@@ -186,10 +194,16 @@ class NautuneColorPalette {
         tertiary: textPrimary,
         surface: surface,
         onSurface: textPrimary,
-        onPrimary: textPrimary,
+        onSurfaceVariant: textSecondary,
+        onPrimary: onPrimaryColor,
+        onPrimaryContainer: onPrimaryColor,
         onSecondary: textSecondary,
+        onSecondaryContainer: textPrimary,
       ),
       textTheme: TextTheme(
+        headlineLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
+        headlineMedium: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
+        headlineSmall: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
         bodyMedium: TextStyle(color: textPrimary),
         bodySmall: TextStyle(color: textPrimary),
         bodyLarge: TextStyle(color: textPrimary),
@@ -211,6 +225,7 @@ class NautuneColorPalette {
       ),
       listTileTheme: ListTileThemeData(
         textColor: textPrimary,
+        subtitleTextStyle: TextStyle(color: textSecondary),
         iconColor: primary,
       ),
       iconTheme: IconThemeData(
@@ -332,6 +347,17 @@ class NautunePalettes {
     textSecondary: Color(0xFF8D6E63), // Warm brown
   );
 
+  /// Midnight Slate - Professional black and grey theme
+  static const midnightSlate = NautuneColorPalette(
+    id: 'midnight_slate',
+    name: 'Midnight Slate',
+    primary: Color(0xFFF5F5F5),      // High-contrast white-grey
+    secondary: Color(0xFF757575),    // Professional medium grey
+    surface: Color(0xFF121212),      // Deep charcoal/black
+    textPrimary: Color(0xFFFFFFFF),  // Pure white text
+    textSecondary: Color(0xFFBDBDBD), // Muted light grey text
+  );
+
   /// Light Lavender - Clean white with dark purple accents
   static const lightLavender = NautuneColorPalette(
     id: 'light_lavender',
@@ -370,6 +396,7 @@ class NautunePalettes {
   /// List of all preset palettes (excludes custom)
   static const List<NautuneColorPalette> presets = [
     purpleOcean,
+    midnightSlate,
     lightLavender,
     glacialGlass,
     oledPeach,
@@ -381,6 +408,7 @@ class NautunePalettes {
   /// List of all available palettes including custom
   static const List<NautuneColorPalette> all = [
     purpleOcean,
+    midnightSlate,
     lightLavender,
     glacialGlass,
     oledPeach,

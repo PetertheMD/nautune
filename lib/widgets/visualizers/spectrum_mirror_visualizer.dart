@@ -10,6 +10,7 @@ class SpectrumMirrorVisualizer extends BaseVisualizer {
     super.key,
     required super.audioService,
     super.opacity = 0.6,
+    super.isVisible = true,
   });
 
   @override
@@ -21,24 +22,36 @@ class _SpectrumMirrorVisualizerState extends BaseVisualizerState<SpectrumMirrorV
 
   // Peak hold values
   final List<double> _peakValues = List<double>.filled(_barCount, 0.0);
-  final List<int> _peakHoldFrames = List<int>.filled(_barCount, 0);
-  static const int _peakHoldDuration = 12;
-  static const double _peakFallSpeed = 0.025;
+  final List<double> _peakHoldTimes = List<double>.filled(_barCount, 0.0);
+  
+  static const double _peakHoldDurationSeconds = 0.4;
+  static const double _peakFallSpeedSeconds = 0.75;
+  
+  DateTime? _lastUpdateTime;
 
   @override
   int get spectrumBarCount => _barCount;
 
   void _updatePeaks(List<double> bars) {
+    final now = DateTime.now();
+    final dt = _lastUpdateTime == null 
+        ? 0.016 
+        : now.difference(_lastUpdateTime!).inMicroseconds / 1000000.0;
+    _lastUpdateTime = now;
+
+    // Cap dt to prevent huge jumps
+    final safeDt = dt > 0.1 ? 0.1 : dt;
+
     for (int i = 0; i < _barCount && i < bars.length; i++) {
       final value = bars[i];
 
       if (value >= _peakValues[i]) {
         _peakValues[i] = value;
-        _peakHoldFrames[i] = _peakHoldDuration;
-      } else if (_peakHoldFrames[i] > 0) {
-        _peakHoldFrames[i]--;
+        _peakHoldTimes[i] = _peakHoldDurationSeconds;
+      } else if (_peakHoldTimes[i] > 0) {
+        _peakHoldTimes[i] -= safeDt;
       } else {
-        _peakValues[i] = max(0.0, _peakValues[i] - _peakFallSpeed);
+        _peakValues[i] = max(0.0, _peakValues[i] - _peakFallSpeedSeconds * safeDt);
       }
     }
   }
@@ -81,13 +94,12 @@ class _SpectrumMirrorPainter extends CustomPainter {
   static const MaskFilter _blurFilter6 = MaskFilter.blur(BlurStyle.normal, 6);
   static const MaskFilter _blurFilter10 = MaskFilter.blur(BlurStyle.normal, 10);
 
-  // Cache for pre-computed HSL values from primary color
+  // Cache for pre-computed colors from primary color
   static Color? _cachedPrimaryColor;
-  static double _cachedBaseHue = 0.0;
-  static double _cachedBaseSaturation = 0.5;
-  static double _cachedBaseLightness = 0.5;
+  static final List<Color> _baseColors = List.filled(64, Colors.black);
+  static final List<Color> _brightColors = List.filled(64, Colors.white);
 
-  // Pre-computed hue offsets for bar indices (avoids per-bar computation)
+  // Pre-computed hue offsets for bar indices
   static final List<double> _hueOffsets = List.generate(64, (i) => (i / 64) * 60 - 30);
 
   // Gradient cache to avoid creating new shaders every frame
@@ -114,28 +126,41 @@ class _SpectrumMirrorPainter extends CustomPainter {
       ..strokeWidth = 2.0
       ..maskFilter = _blurFilter6;
 
-    // Cache HSL conversion of primary color (expensive operation)
+    // Cache HSL conversion and pre-compute bar colors
     if (_cachedPrimaryColor != primaryColor) {
       _cachedPrimaryColor = primaryColor;
       final primaryHsl = HSLColor.fromColor(primaryColor);
-      _cachedBaseHue = primaryHsl.hue;
-      _cachedBaseSaturation = primaryHsl.saturation;
-      _cachedBaseLightness = primaryHsl.lightness;
+      final baseHue = primaryHsl.hue;
+      final baseSat = primaryHsl.saturation;
+      final baseLight = primaryHsl.lightness;
+
+      for (int i = 0; i < 64; i++) {
+        final hue = (baseHue + _hueOffsets[i]) % 360;
+        
+        // Base color (minimum value)
+        _baseColors[i] = HSLColor.fromAHSL(
+          1.0, 
+          hue, 
+          baseSat * 0.7, 
+          baseLight * 0.8
+        ).toColor();
+        
+        // Bright color (maximum value)
+        _brightColors[i] = HSLColor.fromAHSL(
+          1.0, 
+          hue, 
+          baseSat, 
+          (baseLight * 1.2).clamp(0.0, 0.9)
+        ).toColor();
+      }
     }
   }
 
   /// Get color based on frequency position
-  /// Uses cached HSL values to avoid per-bar HSL conversion
+  /// Uses lerp between pre-computed colors for performance
   Color _getBarColor(int index, int total, double value) {
-    // Use cached hue offset instead of computing every time
-    final hueShift = _hueOffsets[index.clamp(0, 63)];
-    final newHue = (_cachedBaseHue + hueShift) % 360;
-
-    // Boost saturation and lightness with value
-    final saturation = (_cachedBaseSaturation * (0.7 + value * 0.3)).clamp(0.0, 1.0);
-    final lightness = (_cachedBaseLightness * (0.8 + value * 0.4)).clamp(0.0, 0.9);
-
-    return HSLColor.fromAHSL(1.0, newHue, saturation, lightness).toColor();
+    final i = index.clamp(0, 63);
+    return Color.lerp(_baseColors[i], _brightColors[i], value) ?? _baseColors[i];
   }
 
   /// Get cached gradient shader for top bar
@@ -333,7 +358,7 @@ class _SpectrumMirrorPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SpectrumMirrorPainter old) {
-    const tolerance = 0.005;
+    const tolerance = 0.001;
     if (bars.length != old.bars.length) return true;
     if ((bass - old.bass).abs() > tolerance) return true;
     if ((amplitude - old.amplitude).abs() > tolerance) return true;

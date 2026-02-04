@@ -10,6 +10,7 @@ class BioluminescentVisualizer extends BaseVisualizer {
     super.key,
     required super.audioService,
     super.opacity = 0.6,
+    super.isVisible = true,
   });
 
   @override

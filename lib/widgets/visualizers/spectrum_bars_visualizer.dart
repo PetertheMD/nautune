@@ -9,6 +9,7 @@ class SpectrumBarsVisualizer extends BaseVisualizer {
     super.key,
     required super.audioService,
     super.opacity = 0.6,
+    super.isVisible = true,
   });
 
   @override
@@ -20,27 +21,40 @@ class _SpectrumBarsVisualizerState extends BaseVisualizerState<SpectrumBarsVisua
 
   // Peak hold values (fall slowly)
   final List<double> _peakValues = List<double>.filled(_barCount, 0.0);
-  final List<int> _peakHoldFrames = List<int>.filled(_barCount, 0);
-  static const int _peakHoldDuration = 15; // Frames to hold peak
-  static const double _peakFallSpeed = 0.02;
+  // Remaining hold time in seconds for each bar
+  final List<double> _peakHoldTimes = List<double>.filled(_barCount, 0.0);
+  
+  static const double _peakHoldDurationSeconds = 0.5;
+  static const double _peakFallSpeedSeconds = 0.6;
+  
+  DateTime? _lastUpdateTime;
 
   @override
   int get spectrumBarCount => _barCount;
 
   void _updatePeaks(List<double> bars) {
+    final now = DateTime.now();
+    final dt = _lastUpdateTime == null 
+        ? 0.016 
+        : now.difference(_lastUpdateTime!).inMicroseconds / 1000000.0;
+    _lastUpdateTime = now;
+
+    // Cap dt to prevent huge jumps if paused/backgrounded
+    final safeDt = dt > 0.1 ? 0.1 : dt;
+
     for (int i = 0; i < _barCount && i < bars.length; i++) {
         final value = bars[i];
         
         // Rise instantly, fall slowly
         if (value >= _peakValues[i]) {
             _peakValues[i] = value;
-            _peakHoldFrames[i] = _peakHoldDuration;
-        } else if (_peakHoldFrames[i] > 0) {
+            _peakHoldTimes[i] = _peakHoldDurationSeconds;
+        } else if (_peakHoldTimes[i] > 0) {
             // Hold the peak for a moment
-            _peakHoldFrames[i]--;
+            _peakHoldTimes[i] -= safeDt;
         } else {
             // Drop it like it's hot (but slowly)
-            _peakValues[i] = max(0.0, _peakValues[i] - _peakFallSpeed);
+            _peakValues[i] = max(0.0, _peakValues[i] - _peakFallSpeedSeconds * safeDt);
         }
     }
   }
@@ -83,9 +97,8 @@ class _SpectrumBarsPainter extends CustomPainter {
 
   // Pre-computed color data (regenerated when primaryColor changes)
   static Color? _cachedPrimaryColor;
-  static final List<double> _hues = List.filled(48, 0.0);
-  static final List<double> _saturations = List.filled(48, 0.0);
-  static final List<double> _lightnesses = List.filled(48, 0.0);
+  static final List<Color> _baseColors = List.filled(48, Colors.black);
+  static final List<Color> _brightColors = List.filled(48, Colors.white);
 
   _SpectrumBarsPainter({
     required this.bars,
@@ -100,29 +113,40 @@ class _SpectrumBarsPainter extends CustomPainter {
       ..style = PaintingStyle.fill
       ..maskFilter = _blurFilter8;
 
-    // Regenerate HSL values if the theme changed
+    // Regenerate color arrays if the theme changed
     if (_cachedPrimaryColor != primaryColor) {
       _cachedPrimaryColor = primaryColor;
       final primaryHsl = HSLColor.fromColor(primaryColor);
       final baseHue = primaryHsl.hue;
       final baseSat = primaryHsl.saturation;
       
-      // Pre-compute HSL values for all 48 bars (done once per theme change)
       for (int i = 0; i < 48; i++) {
         final hueShift = -30 + (i / 48) * 70;
-        _hues[i] = (baseHue + hueShift) % 360;
-        _saturations[i] = baseSat * 0.85;
-        _lightnesses[i] = 0.45 + (1 - i / 48) * 0.15;
+        final hue = (baseHue + hueShift) % 360;
+        
+        // Base color (minimum value)
+        _baseColors[i] = HSLColor.fromAHSL(
+          1.0, 
+          hue, 
+          baseSat * 0.85 * 0.8, 
+          0.45 + (1 - i / 48) * 0.15
+        ).toColor();
+        
+        // Bright color (maximum value)
+        _brightColors[i] = HSLColor.fromAHSL(
+          1.0, 
+          hue, 
+          baseSat * 0.85, 
+          (0.45 + (1 - i / 48) * 0.15 + 0.25).clamp(0.0, 0.85)
+        ).toColor();
       }
     }
   }
 
-  // Fast color generation using pre-computed HSL - no conversions needed
+  // Fast color generation using lerp between pre-computed colors
   Color _getBarColor(int index, double value) {
     final i = index.clamp(0, 47);
-    final lightness = (_lightnesses[i] + value * 0.25).clamp(0.0, 0.85);
-    final saturation = (_saturations[i] * (0.8 + value * 0.2)).clamp(0.0, 1.0);
-    return HSLColor.fromAHSL(1.0, _hues[i], saturation, lightness).toColor();
+    return Color.lerp(_baseColors[i], _brightColors[i], value) ?? _baseColors[i];
   }
 
   @override
@@ -211,7 +235,7 @@ class _SpectrumBarsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SpectrumBarsPainter old) {
-    const tolerance = 0.005;
+    const tolerance = 0.001;
 
     if (bars.length != old.bars.length) return true;
     if (peaks.length != old.peaks.length) return true;
