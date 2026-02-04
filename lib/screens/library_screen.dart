@@ -1237,7 +1237,7 @@ class _AlbumsTab extends StatelessWidget {
                   crossAxisCount: crossAxisCount,
                   sortOrder: appState.albumSortOrder,
                   sortBy: appState.albumSortBy,
-                  sectionPadding: 8, // Half of vertical padding (16 total usually)
+                  sectionPadding: 16, // Matches Artist tab padding
                   mainAxisSpacing: mainSpacing, // Pass the spacing explicitly
                 ),
               ),
@@ -2971,7 +2971,7 @@ class _PlaylistsTabState extends State<_PlaylistsTab> {
               colors: gradientColors,
             ),
           ),
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -2981,7 +2981,7 @@ class _PlaylistsTabState extends State<_PlaylistsTab> {
                   Expanded(
                     child: Text(
                       mood.displayName,
-                      style: theme.textTheme.titleMedium?.copyWith(
+                      style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
@@ -2989,8 +2989,8 @@ class _PlaylistsTabState extends State<_PlaylistsTab> {
                   ),
                   if (isLoading)
                     const SizedBox(
-                      width: 16,
-                      height: 16,
+                      width: 14,
+                      height: 14,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         color: Colors.white,
@@ -2998,13 +2998,14 @@ class _PlaylistsTabState extends State<_PlaylistsTab> {
                     ),
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 mood.subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
+                style: theme.textTheme.labelSmall?.copyWith(
                   color: Colors.white.withValues(alpha: 0.8),
+                  fontSize: 10,
                 ),
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ],
@@ -4555,7 +4556,7 @@ class _GenresTabState extends State<_GenresTab> {
                   scrollController: _genresScrollController,
                   itemHeight: genreItemHeight,
                   crossAxisCount: crossAxisCount,
-                  sectionPadding: 16,
+                  sectionPadding: 8,
                   mainAxisSpacing: 12,
                 ),
               ),

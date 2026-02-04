@@ -1,3 +1,7 @@
+### v6.6.1 - Alphabetical Navigation Tuning
+- **Library Exploration**: Fine-tuned alphabetical "jump" scroll positions for Albums and Genres tabs
+- **Navigation Consistency**: Aligned scroll padding to match the high-performance Artist navigation
+
 ### v6.6.0 - 3D Globe Visualizer, Artist Grouping & Theme Enhancements
 
 **New Visualizer: 3D Globe**

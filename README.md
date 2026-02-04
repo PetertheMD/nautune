@@ -669,6 +669,10 @@ flutter analyze
 - **Android Build**: Native Android app with full feature parity (visualizers, offline, CarPlay equivalent via Android Auto).
 - **Desktop Remote Control**: Control desktop playback from iOS device over local network.
 
+## **KNOWN BUGS**
+
+- Alphabetical navigation in genres and Albums
+
 ## 🙏 Acknowledgments
 
 ### Other People Network

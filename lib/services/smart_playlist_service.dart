@@ -249,6 +249,43 @@ class SmartPlaylistService {
   /// Handles: spaces, slashes, ampersands, commas, hyphens, parentheses
   static final _wordSplitRegex = RegExp(r'[\s/&,\-\(\)]+');
 
+  /// Levenshtein distance threshold for fuzzy matching (max edit distance)
+  static const _fuzzyMatchThreshold = 2;
+
+  /// Minimum keyword length for fuzzy matching to avoid false positives
+  static const _minFuzzyKeywordLength = 4;
+
+  /// Calculate Levenshtein distance between two strings
+  static int _levenshteinDistance(String s1, String s2) {
+    if (s1.isEmpty) return s2.length;
+    if (s2.isEmpty) return s1.length;
+    
+    final len1 = s1.length;
+    final len2 = s2.length;
+    
+    // Create two rows for dynamic programming
+    var prev = List<int>.generate(len2 + 1, (i) => i);
+    var curr = List<int>.filled(len2 + 1, 0);
+    
+    for (var i = 1; i <= len1; i++) {
+      curr[0] = i;
+      for (var j = 1; j <= len2; j++) {
+        final cost = s1[i - 1] == s2[j - 1] ? 0 : 1;
+        curr[j] = [
+          curr[j - 1] + 1,      // insertion
+          prev[j] + 1,          // deletion
+          prev[j - 1] + cost,   // substitution
+        ].reduce((a, b) => a < b ? a : b);
+      }
+      // Swap rows
+      final temp = prev;
+      prev = curr;
+      curr = temp;
+    }
+    
+    return prev[len2];
+  }
+
   /// Get the mood for a given genre (case-insensitive, multi-strategy matching)
   /// 
   /// Matching strategies (in order of priority):
@@ -256,6 +293,8 @@ class SmartPlaylistService {
   /// 2. Substring match - e.g., "Indie Pop" contains "indie"
   /// 3. Word tokenization - splits genre into words and matches each
   ///    e.g., "Progressive/Death/Metal" → ["progressive", "death", "metal"] → matches "metal"
+  /// 4. Prefix/Suffix match - e.g., "jazzfusion" starts with "jazz"
+  /// 5. Fuzzy match (Levenshtein) - for typos, e.g., "rocck" matches "rock"
   Mood? getMoodForGenre(String genre) {
     final normalized = genre.toLowerCase().trim();
     
@@ -296,6 +335,59 @@ class SmartPlaylistService {
           // Single-word keyword - check if it's in the word list
           if (words.contains(keyword)) {
             return _genreMoodMap[keyword];
+          }
+        }
+      }
+    }
+    
+    // Strategy 4: Prefix/Suffix matching for compound genres without separators
+    // e.g., "jazzfunk" starts with "jazz", "indierock" ends with "rock"
+    for (final keyword in sortedKeys) {
+      // Only check single-word keywords of reasonable length
+      if (!keyword.contains(' ') && keyword.length >= 3) {
+        if (normalized.startsWith(keyword) || normalized.endsWith(keyword)) {
+          return _genreMoodMap[keyword];
+        }
+      }
+    }
+    
+    // Strategy 5: Fuzzy matching (Levenshtein distance) for typos/variations
+    // Only for single-word genres to avoid false positives
+    if (!normalized.contains(' ') && normalized.length >= _minFuzzyKeywordLength) {
+      Mood? bestMatch;
+      int bestDistance = _fuzzyMatchThreshold + 1;
+      
+      for (final keyword in sortedKeys) {
+        // Only fuzzy match single-word keywords of similar length
+        if (!keyword.contains(' ') && 
+            keyword.length >= _minFuzzyKeywordLength &&
+            (keyword.length - normalized.length).abs() <= _fuzzyMatchThreshold) {
+          final distance = _levenshteinDistance(normalized, keyword);
+          if (distance <= _fuzzyMatchThreshold && distance < bestDistance) {
+            bestMatch = _genreMoodMap[keyword];
+            bestDistance = distance;
+            // If we find an exact fuzzy match, return immediately
+            if (distance == 1) break;
+          }
+        }
+      }
+      
+      if (bestMatch != null) {
+        return bestMatch;
+      }
+    }
+    
+    // Strategy 6: Check individual words with fuzzy matching
+    for (final word in words) {
+      if (word.length >= _minFuzzyKeywordLength) {
+        for (final keyword in sortedKeys) {
+          if (!keyword.contains(' ') && 
+              keyword.length >= _minFuzzyKeywordLength &&
+              (keyword.length - word.length).abs() <= _fuzzyMatchThreshold) {
+            final distance = _levenshteinDistance(word, keyword);
+            if (distance <= _fuzzyMatchThreshold) {
+              return _genreMoodMap[keyword];
+            }
           }
         }
       }
