@@ -14,6 +14,7 @@ import '../services/listenbrainz_service.dart';
 import '../widgets/jellyfin_image.dart';
 import '../widgets/now_playing_bar.dart';
 import 'album_detail_screen.dart';
+import 'all_tracks_screen.dart';
 
 /// Top-level function for compute() - extracts colors from image bytes in isolate
 List<int> _extractColorsFromBytes(Uint8List pixels) {
@@ -74,6 +75,22 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
   // Top tracks from ListenBrainz
   List<JellyfinTrack>? _topTracks;
   bool _isLoadingTopTracks = false;
+  bool _topTracksExpanded = true;
+
+  // Tracks section (Library)
+  bool _tracksExpanded = true;
+  bool _albumsExpanded = true;
+  String _selectedSort = 'Most Listened';
+  List<JellyfinTrack>? _tracks;
+  bool _isLoadingTracks = false;
+
+  final Map<String, ({String sortBy, String sortOrder})> _sortOptions = {
+    'Most Listened': (sortBy: 'PlayCount', sortOrder: 'Descending'),
+    'Random': (sortBy: 'Random', sortOrder: 'Ascending'),
+    'Latest': (sortBy: 'ProductionYear', sortOrder: 'Descending'),
+    'Recently Added': (sortBy: 'DateCreated', sortOrder: 'Descending'),
+    'Recently Played': (sortBy: 'DatePlayed', sortOrder: 'Descending'),
+  };
 
   @override
   void initState() {
@@ -90,6 +107,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
       _hasInitialized = true;
       _loadAlbums();
       _loadTopTracks();
+      _loadTracks();
       _extractColors();
     }
   }
@@ -171,14 +189,27 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
     });
 
     try {
-      // Use efficient API to get albums directly by artist ID
-      final artistAlbums = await _appState.jellyfinService.loadAlbumsByArtist(
-        artistId: widget.artist.id,
-      );
+      // Load albums for all artist IDs (handles grouped artists)
+      final artistIds = widget.artist.allIds;
+      final List<JellyfinAlbum> allAlbums = [];
+      final Set<String> seenAlbumIds = {};
+      
+      for (final artistId in artistIds) {
+        final artistAlbums = await _appState.jellyfinService.loadAlbumsByArtist(
+          artistId: artistId,
+        );
+        // Deduplicate albums (same album might appear for multiple artist IDs)
+        for (final album in artistAlbums) {
+          if (!seenAlbumIds.contains(album.id)) {
+            seenAlbumIds.add(album.id);
+            allAlbums.add(album);
+          }
+        }
+      }
 
       if (mounted) {
         setState(() {
-          _albums = artistAlbums;
+          _albums = allAlbums;
           _isLoading = false;
         });
       }
@@ -215,7 +246,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
       // Get popular tracks from ListenBrainz
       final popularTracks = await listenbrainz.getArtistTopTracks(
         artistMbid: artistMbid,
-        limit: 10, // Fetch more to increase chance of library matches
+        limit: 50, // Fetch more to increase chance of library matches
       );
 
       if (popularTracks.isEmpty) {
@@ -243,7 +274,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
         popularTracks: popularTracks,
         jellyfin: _appState.jellyfinService,
         libraryId: libraryId,
-        maxResults: 5,
+        maxResults: 25,
       );
 
       if (mounted) {
@@ -257,6 +288,51 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
       if (mounted) {
         setState(() {
           _isLoadingTopTracks = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadTracks() async {
+    setState(() {
+      _isLoadingTracks = true;
+    });
+
+    try {
+      final sortOption = _sortOptions[_selectedSort]!;
+      
+      // Load tracks for all artist IDs (handles grouped artists)
+      final artistIds = widget.artist.allIds;
+      final List<JellyfinTrack> allTracks = [];
+      final Set<String> seenTrackIds = {};
+      
+      for (final artistId in artistIds) {
+        final tracks = await _appState.jellyfinService.loadArtistTracks(
+          artistId: artistId,
+          limit: 100,
+          sortBy: sortOption.sortBy,
+          sortOrder: sortOption.sortOrder,
+        );
+        // Deduplicate tracks
+        for (final track in tracks) {
+          if (!seenTrackIds.contains(track.id)) {
+            seenTrackIds.add(track.id);
+            allTracks.add(track);
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _tracks = allTracks;
+          _isLoadingTracks = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('ArtistDetailScreen: Error loading library tracks: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingTracks = false;
         });
       }
     }
@@ -330,72 +406,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
               ),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            actions: [
-              // Instant Mix button
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: IconButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface.withValues(alpha: 0.7),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.auto_awesome, size: 20),
-                  ),
-                  tooltip: 'Instant Mix',
-                  onPressed: () async {
-                    try {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Creating instant mix...'),
-                          duration: Duration(seconds: 1),
-                        ),
-                      );
-
-                      final mixTracks = await _appState.jellyfinService.getArtistMix(
-                        artistId: widget.artist.id,
-                        limit: 50,
-                      );
-
-                      if (mixTracks.isEmpty) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('No similar tracks found'),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                        return;
-                      }
-
-                      await _appState.audioPlayerService.playTrack(
-                        mixTracks.first,
-                        queueContext: mixTracks,
-                      );
-
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Playing instant mix (${mixTracks.length} tracks)'),
-                          duration: const Duration(seconds: 2),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    } catch (e) {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Failed to create mix: $e'),
-                          backgroundColor: Theme.of(context).colorScheme.error,
-                        ),
-                      );
-                    }
-                  },
-                ),
-              ),
-            ],
+            actions: [],
             flexibleSpace: FlexibleSpaceBar(
               stretchModes: const [
                 StretchMode.zoomBackground,
@@ -445,6 +456,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                     style: theme.textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       letterSpacing: -0.5,
+                      color: theme.colorScheme.onSurface,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -499,6 +511,59 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                       }).toList(),
                     ),
                   ],
+                  // Shuffle buttons
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Shuffle All button
+                      FilledButton.icon(
+                        onPressed: (_tracks != null && _tracks!.isNotEmpty)
+                            ? () async {
+                                final shuffled = List<JellyfinTrack>.from(_tracks!)..shuffle();
+                                await _appState.audioPlayerService.playTrack(
+                                  shuffled.first,
+                                  queueContext: shuffled,
+                                );
+                              }
+                            : null,
+                        icon: const Icon(Icons.shuffle, size: 18),
+                        label: const Text('Shuffle All'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _paletteColors?.isNotEmpty == true
+                              ? _paletteColors!.first
+                              : theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Shuffle Popular button
+                      FilledButton.tonalIcon(
+                        onPressed: (_topTracks != null && _topTracks!.isNotEmpty)
+                            ? () async {
+                                final shuffled = List<JellyfinTrack>.from(_topTracks!)..shuffle();
+                                await _appState.audioPlayerService.playTrack(
+                                  shuffled.first,
+                                  queueContext: shuffled,
+                                );
+                              }
+                            : null,
+                        icon: const Icon(Icons.trending_up, size: 18),
+                        label: const Text('Shuffle Popular'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: (_paletteColors?.isNotEmpty == true
+                                  ? _paletteColors!.first
+                                  : theme.colorScheme.primary)
+                              .withValues(alpha: 0.15),
+                          foregroundColor: _paletteColors?.isNotEmpty == true
+                              ? _paletteColors!.first
+                              : theme.colorScheme.primary,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -518,189 +583,386 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen> {
                 ),
               ),
             ),
-          // Top Tracks section
-          if (_topTracks != null && _topTracks!.isNotEmpty)
+          // Top Tracks section (ListenBrainz)
+          if ((_topTracks != null && _topTracks!.isNotEmpty) || _isLoadingTopTracks)
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.trending_up_rounded,
-                          size: 22,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Popular',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ...List.generate(_topTracks!.length, (index) {
-                      final track = _topTracks![index];
-                      return _TopTrackTile(
-                        track: track,
-                        rank: index + 1,
-                        appState: _appState,
-                        accentColor: _paletteColors?.isNotEmpty == true
-                            ? _paletteColors!.first
-                            : theme.colorScheme.primary,
-                        onTap: () async {
-                          try {
-                            await _appState.audioPlayerService.playTrack(
-                              track,
-                              queueContext: _topTracks,
-                              albumId: track.albumId,
-                              albumName: track.album,
-                            );
-                          } catch (error) {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Could not start playback: $error'),
-                                duration: const Duration(seconds: 3),
+              child: Column(
+                children: [
+                  _CollapsibleHeader(
+                    title: 'Top Tracks',
+                    icon: Icons.trending_up,
+                    isExpanded: _topTracksExpanded,
+                    onToggle: () => setState(() => _topTracksExpanded = !_topTracksExpanded),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: InkWell(
+                        onTap: () {
+                          if (_topTracks != null && _topTracks!.isNotEmpty) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => AllTracksScreen(
+                                  title: 'Popular Tracks',
+                                  subtitle: widget.artist.name,
+                                  tracks: _topTracks!,
+                                  accentColor: _paletteColors?.isNotEmpty == true
+                                      ? _paletteColors!.first
+                                      : null,
+                                ),
                               ),
                             );
                           }
                         },
-                      );
-                    }),
-                  ],
-                ),
-              ),
-            )
-          else if (_isLoadingTopTracks)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.trending_up_rounded,
-                          size: 22,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Popular',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
+                        child: Text(
+                          'Show All',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
+                      ),
+                    ),
+                    accentColor: _paletteColors?.isNotEmpty == true
+                        ? _paletteColors!.first
+                        : null,
+                  ),
+                  if (_topTracksExpanded)
+                    if (_isLoadingTopTracks)
+                      const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (_topTracks != null && _topTracks!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
+                          children: List.generate(
+                            _topTracks!.length.clamp(0, 5),
+                            (index) {
+                              final track = _topTracks![index];
+                              return _TopTrackTile(
+                                track: track,
+                                rank: index + 1,
+                                appState: _appState,
+                                accentColor: _paletteColors?.isNotEmpty == true
+                                    ? _paletteColors!.first
+                                    : theme.colorScheme.primary,
+                                onTap: () async {
+                                  final queue = _topTracks!;
+                                  await _appState.audioPlayerService.playTrack(
+                                    track,
+                                    queueContext: queue,
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(
+                          'No top tracks found',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                ],
+              ),
+            ),
+
+          // Library Tracks Section
+          SliverToBoxAdapter(
+            child: Column(
+              children: [
+                _CollapsibleHeader(
+                  title: 'Tracks',
+                  icon: Icons.music_note,
+                  isExpanded: _tracksExpanded,
+                  onToggle: () => setState(() => _tracksExpanded = !_tracksExpanded),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: InkWell(
+                      onTap: () {
+                        if (_tracks != null && _tracks!.isNotEmpty) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => AllTracksScreen(
+                                title: 'All Tracks',
+                                subtitle: widget.artist.name,
+                                tracks: _tracks!,
+                                accentColor: _paletteColors?.isNotEmpty == true
+                                    ? _paletteColors!.first
+                                    : null,
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Show All',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  accentColor: _paletteColors?.isNotEmpty == true
+                      ? _paletteColors!.first
+                      : null,
+                ),
+                if (_tracksExpanded) ...[
+                  if (_isLoadingTracks)
+                    const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (_tracks != null && _tracks!.isNotEmpty) ...[
+                    // Sorting Buttons
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                      child: Row(
+                        children: _sortOptions.keys.map((label) {
+                          final isSelected = _selectedSort == label;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FilterChip(
+                              label: Text(label),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                if (selected && !isSelected) {
+                                  setState(() {
+                                    _selectedSort = label;
+                                  });
+                                  _loadTracks();
+                                }
+                              },
+                              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                              selectedColor: (_paletteColors?.isNotEmpty == true
+                                      ? _paletteColors!.first
+                                      : theme.colorScheme.primary)
+                                  .withValues(alpha: 0.2),
+                              labelStyle: TextStyle(
+                                color: isSelected
+                                    ? (_paletteColors?.isNotEmpty == true
+                                        ? _paletteColors!.first
+                                        : theme.colorScheme.primary)
+                                    : theme.colorScheme.onSurfaceVariant,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              side: BorderSide(
+                                color: isSelected
+                                    ? (_paletteColors?.isNotEmpty == true
+                                        ? _paletteColors!.first
+                                        : theme.colorScheme.primary)
+                                    : Colors.transparent,
+                                width: 1,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    // Tracks List
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        children: [
+                          ..._tracks!.take(5).map((track) {
+                            return _TopTrackTile(
+                              track: track,
+                              rank: _tracks!.indexOf(track) + 1,
+                              appState: _appState,
+                              accentColor: _paletteColors?.isNotEmpty == true
+                                  ? _paletteColors!.first
+                                  : theme.colorScheme.primary,
+                              onTap: () async {
+                                final queue = _tracks!; 
+                                await _appState.audioPlayerService.playTrack(
+                                  track,
+                                  queueContext: queue,
+                                );
+                              },
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  ] else
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text(
+                        'No tracks found in library',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+
+          // Albums Section
+          SliverToBoxAdapter(
+            child: Column(
+              children: [
+                _CollapsibleHeader(
+                  title: 'Discography',
+                  icon: Icons.album_outlined,
+                  isExpanded: _albumsExpanded,
+                  onToggle: () => setState(() => _albumsExpanded = !_albumsExpanded),
+                  accentColor: _paletteColors?.isNotEmpty == true
+                      ? _paletteColors!.first
+                      : null,
+                ),
+              ],
+            ),
+          ),
+          
+          if (_albumsExpanded)
+            if (_isLoading)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_error != null)
+              SliverPadding(
+                padding: const EdgeInsets.all(20),
+                sliver: SliverToBoxAdapter(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error),
+                        const SizedBox(height: 16),
+                        Text('Could not load albums', style: theme.textTheme.titleLarge),
+                        const SizedBox(height: 8),
+                        Text(_error.toString(), textAlign: TextAlign.center),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    const Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          // Albums section header
-          if (_albums != null && _albums!.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.album_outlined,
-                      size: 22,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Discography',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          // Content area
-          if (_isLoading)
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (_error != null)
-            SliverPadding(
-              padding: const EdgeInsets.all(20),
-              sliver: SliverToBoxAdapter(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Could not load albums',
-                        style: theme.textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _error.toString(),
-                        style: theme.textTheme.bodyMedium,
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
                   ),
                 ),
-              ),
-            )
-          else if (_albums == null || _albums!.isEmpty)
-            SliverPadding(
-              padding: const EdgeInsets.all(20),
-              sliver: SliverToBoxAdapter(
-                child: Center(
-                  child: Text(
-                    'No albums found',
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+              )
+            else if (_albums == null || _albums!.isEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.all(20),
+                sliver: SliverToBoxAdapter(
+                  child: Center(
+                    child: Text(
+                      'No albums found',
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-              sliver: SliverGrid(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: isDesktop ? 5 : 3,
-                  childAspectRatio: 0.78,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 16,
-                ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final album = _albums![index];
-                    return _AlbumCard(
-                      album: album,
-                      appState: _appState,
-                    );
-                  },
-                  childCount: _albums!.length,
-                ),
-              ),
-            ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                sliver: _appState.useListMode
+                    ? SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final album = _albums![index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: InkWell(
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => AlbumDetailScreen(
+                                        album: album,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Row(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: SizedBox(
+                                        width: 60,
+                                        height: 60,
+                                        child: JellyfinImage(
+                                          itemId: album.id,
+                                          imageTag: album.primaryImageTag,
+                                          boxFit: BoxFit.cover,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            album.name,
+                                            style: theme.textTheme.titleMedium?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (album.productionYear != null)
+                                            Text(
+                                              '${album.productionYear}',
+                                              style: theme.textTheme.bodyMedium?.copyWith(
+                                                color: theme.colorScheme.onSurfaceVariant,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                          childCount: _albums!.length,
+                        ),
+                      )
+                    : SliverGrid(
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: isDesktop ? 5 : 3,
+                          childAspectRatio: 0.78,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 16,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final album = _albums![index];
+                            return _AlbumCard(
+                              album: album,
+                              appState: _appState,
+                            );
+                          },
+                          childCount: _albums!.length,
+                        ),
+                      ),
+              )
         ],
       ),
       bottomNavigationBar: NowPlayingBar(
@@ -1075,6 +1337,7 @@ class _TopTrackTile extends StatelessWidget {
   }
 }
 
+
 class _DefaultArtistArtwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -1082,6 +1345,66 @@ class _DefaultArtistArtwork extends StatelessWidget {
       child: Image.asset(
         'assets/no_artist_art.png',
         fit: BoxFit.cover,
+      ),
+    );
+  }
+}
+
+class _CollapsibleHeader extends StatelessWidget {
+  const _CollapsibleHeader({
+    required this.title,
+    required this.icon,
+    required this.isExpanded,
+    required this.onToggle,
+    this.trailing,
+    this.accentColor,
+  });
+
+  final String title;
+  final IconData icon;
+  final bool isExpanded;
+  final VoidCallback onToggle;
+  final Widget? trailing;
+  final Color? accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = accentColor ?? theme.colorScheme.primary;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: InkWell(
+        onTap: onToggle,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 22,
+                color: color,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              if (trailing != null) ...[
+                trailing!,
+                const SizedBox(width: 8),
+              ],
+              Icon(
+                isExpanded ? Icons.expand_less : Icons.expand_more,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

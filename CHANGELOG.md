@@ -1,3 +1,87 @@
+### v6.6.0 - 3D Globe Visualizer, Artist Grouping & Theme Enhancements
+
+**New Visualizer: 3D Globe**
+- **Particle Globe**: New audio-reactive 3D globe visualizer with hundreds of particles forming a spinning sphere
+- **Fibonacci Distribution**: Evenly distributed particles using mathematical Fibonacci sphere algorithm
+- **Audio-Reactive**: Globe pulses and expands with bass hits, particles respond to frequency spectrum
+- **Theme Colors**: Particles use your theme's primary color with opacity based on depth and audio intensity
+- **Smooth Rotation**: Globe slowly rotates with subtle tilt for a mesmerizing 3D effect
+- **Persistence**: Globe persists across tracks and albums
+
+**Artist Grouping**
+- **Smart Grouping**: Automatically combines "Artist" with "Artist feat. X", "Artist x Other", and similar variations
+- **Settings Toggle**: Enable/disable in Settings > Appearance > Artist Grouping
+- **MusicBrainz Protection**: Uses provider IDs (MusicBrainz) as a source of truth to protect legitimate band names (like *Earth, Wind & Fire* or *AC/DC*) from being split
+- **Expanded Exception List**: Built-in protection for 20+ iconic bands with commas or ampersands in their names
+- **Unified Artist Pages**: Grouped artists show all albums and tracks from all variations
+- **Album Deduplication**: Same album appearing under multiple artist names only shown once
+- **Artist Art**: Artist art no longer overlap, and no longer appear as oval on linux
+
+**Artist Page: Tracks Section**
+- **Library Tracks**: Artist pages now show a "Tracks" section with all songs from your library
+- **5 Sort Options**: Most Listened, Random, Latest, Recently Added, Recently Played
+- **Collapsible Sections**: Popular, Tracks, and Albums sections can be expanded/collapsed
+- **Show All**: Tap "Show all" to view complete track list on dedicated page
+- **Top 25 Popular Tracks**: Increased from 5 to 25 matched popular tracks from ListenBrainz
+
+**New Theme: Glacial Glass**
+- **Cool Light Theme**: New "Glacial Glass" palette with clean teal/slate tones for a glassy aesthetic
+- **High Contrast**: Optimized text colors (#191C1E) for excellent readability on light backgrounds
+- **Theme List**: Added to preset palettes for easy selection in Settings > Appearance
+
+**Enhanced Theme Customization**
+- **5 Color Pickers**: Custom themes now have Primary, Secondary, Accent, Surface, and Text Secondary colors
+- **Full Control**: Fine-tune background surface and secondary text colors independently
+- **Persisted Settings**: All 5 custom colors saved and restored across app restarts
+
+**Now Playing: Adaptive Text Colors**
+- **Smart Contrast**: Text color automatically adapts based on album art luminance (Gradient/Blur layouts)
+- **Light Albums = Dark Text**: Albums with bright artwork get dark text for readability
+- **Dark Albums = Light Text**: Albums with dark artwork get light text
+- **WCAG Compliant**: Follows accessibility guidelines for contrast ratios
+
+**Smart Mix: Expanded Genre Matching**
+- **100+ Genres**: Massively expanded genre-to-mood mapping for better playlist generation
+- **Subgenres**: Added lo-fi, neo-soul, psytrance, metalcore, post-punk, and many more
+- **Variations**: Handles spelling variations (chill/chillout/chill-out, nu metal/nu-metal)
+- **Common Abbreviations**: Recognizes alt, prog, heavy as genre shortcuts
+
+**Smart Mix Cards: Compact Layout**
+- **1x4 Grid**: Smart Mix mood cards now display in a single row of 4 compact cards
+- **More Space**: Reduced card size frees up screen real estate for other content
+
+**Album Page: Hot Tracks from Artist Popularity**
+- **Artist-Based**: Hot track detection now uses artist's top tracks from ListenBrainz (more reliable)
+- **Name Matching**: Fuzzy matching finds popular tracks even with slight title variations
+- **Flame Indicators**: Popular tracks still display flame icon with album-palette-matched color
+
+**Playback Bar: Visualizer Position Aware**
+- **Respects Position Setting**: When visualizer position is set to "Album Art", the playback bar no longer shows the visualizer overlay
+- **Avoids Duplication**: Visualizer only appears in one location based on your preference
+
+**App Restore: Fixed Auto-Play**
+- **Paused on Launch**: App now correctly restores in paused state (no more unexpected audio on startup)
+- **Explicit Resume**: User must tap play to start playback after app restore
+
+**Linux: Tray Right-Click Fix**
+- **Fixed Context Menu**: Right-click on system tray icon now reliably shows the context menu
+- **AppIndicator Compatibility**: Removed conflicting manual popup that blocked native menu
+
+**Linux FFT: Isolate Processing**
+- **Background Processing**: FFT calculations now run in a separate Dart isolate
+- **Lower Latency**: Reduced audio-to-visual delay for tighter synchronization
+- **Smoother Animation**: UI thread no longer blocked by FFT math
+
+**Theme-Aware UI Colors**
+- **Library Header**: Nautune logo and wave icon now use theme colors instead of hardcoded purple
+- **Playback Bar Waveform**: Waveform tint colors now match your theme
+- **Light Theme Support**: All UI elements properly adapt to light mode themes
+
+**Fixed Alphabetical Navigation**
+- **Foreign Characters**: Properly handles foreign characters in alphabetical navigation
+
+---
+
 ### v6.5.0 - Now Playing Layouts, Crossfade Fix & Battery Optimization
 
 **Now Playing Screen Layouts**

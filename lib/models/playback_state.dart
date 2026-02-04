@@ -96,6 +96,8 @@ class PlaybackState {
     this.customPrimaryColor,  // Custom theme primary color (stored as int)
     this.customSecondaryColor,  // Custom theme secondary color (stored as int)
     this.customAccentColor,  // Custom theme accent color (stored as int)
+    this.customSurfaceColor, // Custom theme surface color (stored as int)
+    this.customTextSecondaryColor, // Custom theme secondary text color (stored as int)
     this.customThemeIsLight = false,  // Whether custom theme is light mode
     // Visualizer
     this.visualizerEnabled = true,
@@ -112,6 +114,10 @@ class PlaybackState {
     this.useListMode = false,
     // Now Playing layout
     this.nowPlayingLayout = NowPlayingLayout.classic,
+    // Artist grouping - combines "Artist" with "Artist feat. X" etc.
+    this.artistGroupingEnabled = false,
+    // Local visualizer toggle for album art position
+    this.showingVisualizerOverArtwork = false,
   });
 
   final String? currentTrackId;
@@ -147,6 +153,8 @@ class PlaybackState {
   final int? customPrimaryColor;  // Custom theme primary (Color.value)
   final int? customSecondaryColor;  // Custom theme secondary (Color.value)
   final int? customAccentColor;  // Custom theme accent (Color.value)
+  final int? customSurfaceColor;  // Custom theme surface (Color.value)
+  final int? customTextSecondaryColor;  // Custom theme text secondary (Color.value)
   final bool customThemeIsLight;  // Whether custom theme is light
   // Visualizer
   final bool visualizerEnabled;
@@ -163,6 +171,10 @@ class PlaybackState {
   final bool useListMode;
   // Now Playing layout
   final NowPlayingLayout nowPlayingLayout;
+  // Artist grouping - combines "Artist" with "Artist feat. X" etc.
+  final bool artistGroupingEnabled;
+  // Local visualizer toggle for album art position (persists across tracks)
+  final bool showingVisualizerOverArtwork;
 
   bool get hasTrack => currentTrackId != null;
 
@@ -197,6 +209,8 @@ class PlaybackState {
     int? customPrimaryColor,
     int? customSecondaryColor,
     int? customAccentColor,
+    int? customSurfaceColor,
+    int? customTextSecondaryColor,
     bool? customThemeIsLight,
     bool? visualizerEnabled,
     VisualizerType? visualizerType,
@@ -207,6 +221,8 @@ class PlaybackState {
     int? gridSize,
     bool? useListMode,
     NowPlayingLayout? nowPlayingLayout,
+    bool? artistGroupingEnabled,
+    bool? showingVisualizerOverArtwork,
   }) {
     return PlaybackState(
       currentTrackId: currentTrackId ?? this.currentTrackId,
@@ -239,6 +255,8 @@ class PlaybackState {
       customPrimaryColor: customPrimaryColor ?? this.customPrimaryColor,
       customSecondaryColor: customSecondaryColor ?? this.customSecondaryColor,
       customAccentColor: customAccentColor ?? this.customAccentColor,
+      customSurfaceColor: customSurfaceColor ?? this.customSurfaceColor,
+      customTextSecondaryColor: customTextSecondaryColor ?? this.customTextSecondaryColor,
       customThemeIsLight: customThemeIsLight ?? this.customThemeIsLight,
       visualizerEnabled: visualizerEnabled ?? this.visualizerEnabled,
       visualizerType: visualizerType ?? this.visualizerType,
@@ -249,6 +267,8 @@ class PlaybackState {
       gridSize: gridSize ?? this.gridSize,
       useListMode: useListMode ?? this.useListMode,
       nowPlayingLayout: nowPlayingLayout ?? this.nowPlayingLayout,
+      artistGroupingEnabled: artistGroupingEnabled ?? this.artistGroupingEnabled,
+      showingVisualizerOverArtwork: showingVisualizerOverArtwork ?? this.showingVisualizerOverArtwork,
     );
   }
 
@@ -284,6 +304,8 @@ class PlaybackState {
       'customPrimaryColor': customPrimaryColor,
       'customSecondaryColor': customSecondaryColor,
       'customAccentColor': customAccentColor,
+      'customSurfaceColor': customSurfaceColor,
+      'customTextSecondaryColor': customTextSecondaryColor,
       'customThemeIsLight': customThemeIsLight,
       'visualizerEnabled': visualizerEnabled,
       'visualizerType': visualizerType.name,
@@ -294,6 +316,8 @@ class PlaybackState {
       'gridSize': gridSize,
       'useListMode': useListMode,
       'nowPlayingLayout': nowPlayingLayout.name,
+      'artistGroupingEnabled': artistGroupingEnabled,
+      'showingVisualizerOverArtwork': showingVisualizerOverArtwork,
     };
   }
 
@@ -341,6 +365,8 @@ class PlaybackState {
       customPrimaryColor: (json['customPrimaryColor'] as num?)?.toInt(),
       customSecondaryColor: (json['customSecondaryColor'] as num?)?.toInt(),
       customAccentColor: (json['customAccentColor'] as num?)?.toInt(),
+      customSurfaceColor: (json['customSurfaceColor'] as num?)?.toInt(),
+      customTextSecondaryColor: (json['customTextSecondaryColor'] as num?)?.toInt(),
       customThemeIsLight: json['customThemeIsLight'] as bool? ?? false,
       visualizerEnabled: json['visualizerEnabled'] as bool? ?? true,
       visualizerType: VisualizerTypeExtension.fromString(json['visualizerType'] as String?),
@@ -351,6 +377,8 @@ class PlaybackState {
       gridSize: (json['gridSize'] as num?)?.toInt() ?? 2,
       useListMode: json['useListMode'] as bool? ?? false,
       nowPlayingLayout: NowPlayingLayoutExtension.fromString(json['nowPlayingLayout'] as String?),
+      artistGroupingEnabled: json['artistGroupingEnabled'] as bool? ?? false,
+      showingVisualizerOverArtwork: json['showingVisualizerOverArtwork'] as bool? ?? false,
     );
   }
 
@@ -389,6 +417,8 @@ class PlaybackState {
       customPrimaryColor: customPrimaryColor, // Preserve custom theme colors
       customSecondaryColor: customSecondaryColor,
       customAccentColor: customAccentColor,
+      customSurfaceColor: customSurfaceColor,
+      customTextSecondaryColor: customTextSecondaryColor,
       customThemeIsLight: customThemeIsLight,
       visualizerEnabled: visualizerEnabled, // Preserve visualizer preference
       visualizerType: visualizerType, // Preserve visualizer type
@@ -398,6 +428,8 @@ class PlaybackState {
       gridSize: gridSize, // Preserve grid size preference
       useListMode: useListMode, // Preserve list mode preference
       nowPlayingLayout: nowPlayingLayout, // Preserve Now Playing layout
+      artistGroupingEnabled: artistGroupingEnabled, // Preserve artist grouping preference
+      showingVisualizerOverArtwork: showingVisualizerOverArtwork, // Preserve visualizer toggle
     );
   }
 

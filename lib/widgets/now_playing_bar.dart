@@ -524,14 +524,22 @@ class _WaveformDisplayState extends State<_WaveformDisplay> {
   @override
   Widget build(BuildContext context) {
     final borderRadius = BorderRadius.circular(12);
-    final primaryTint = const Color(0xFFCCB8FF);
-    final secondaryTint = const Color(0xFF5F3FAE);
+    // Use theme colors for tinting instead of hardcoded purple
+    final primaryTint = widget.theme.colorScheme.primary.withValues(alpha: 0.5);
+    final secondaryTint = widget.theme.colorScheme.secondary;
     final visualizerEnabled = context.select<NautuneAppState, bool>(
       (state) => state.visualizerEnabled,
     );
     final visualizerType = context.select<NautuneAppState, VisualizerType>(
       (state) => state.visualizerType,
     );
+    final visualizerPosition = context.select<NautuneAppState, VisualizerPosition>(
+      (state) => state.visualizerPosition,
+    );
+    // Only show visualizer in controls bar when position is set to controlsBar
+    // When set to albumArt, visualizer only appears in the Now Playing screen
+    final showVisualizer = visualizerEnabled && 
+        visualizerPosition == VisualizerPosition.controlsBar;
 
     return SizedBox(
       height: 40,
@@ -560,9 +568,10 @@ class _WaveformDisplayState extends State<_WaveformDisplay> {
                       height: 40,
                     ),
                   ),
-                  // Audio visualizer overlay (conditionally shown)
+                  // Audio visualizer overlay (only shown when position is controlsBar)
+                  // When position is albumArt, visualizer only appears in Now Playing screen
                   // Wrapped in RepaintBoundary to isolate repaints from parent layout
-                  if (visualizerEnabled)
+                  if (showVisualizer)
                     Positioned.fill(
                       child: RepaintBoundary(
                         child: VisualizerFactory(

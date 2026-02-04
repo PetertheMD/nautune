@@ -7,13 +7,14 @@
 - **6 Now Playing Layouts**: Classic, Blur, Card, Gradient, Compact, and Full Art - choose your preferred player design
 - **Your Rewind**: Spotify Wrapped-style yearly listening reports with shareable exports
 - **ListenBrainz Integration**: Scrobble your plays and get personalized music recommendations (matches via MusicBrainz IDs for reliable library matching)
-- **Popular Tracks**: Artist pages show top 5 most popular tracks globally with dynamic accent colors, album pages highlight popular songs with flame icons (powered by ListenBrainz)
-- **Artist Page Redesign**: Dynamic gradient backgrounds extracted from artist artwork, expandable bio cards, compact album grid layout
+- **Popular Tracks**: Artist pages show top 25 most popular tracks globally with dynamic accent colors, album pages highlight popular songs with flame icons (powered by ListenBrainz)
+- **Artist Page Redesign**: Dynamic gradient backgrounds, expandable bio cards, sortable tracks section (Most Listened, Random, Latest, etc.), compact album grid layout
 - **Collaborative Playlists**: Real-time SyncPlay sessions - listen together with friends via QR code or share link
 - **Custom Color Theme**: Create your own theme with primary/secondary color picker
 - **Alternate App Icons**: Choose between Classic (purple), Sunset (orange), Crimson (red), and Emerald (green) icons across all platforms
 - **10-Band Equalizer** (Linux): Full graphic EQ with 12 presets (Rock, Pop, Jazz, Classical, and more)
-- **5 Audio Visualizers**: Ocean Waves, Spectrum Bars, Mirror Bars, Radial, and Psychedelic styles
+- **6 Audio Visualizers**: Ocean Waves, Spectrum Bars, Mirror Bars, Radial, Psychedelic, and 3D Globe styles
+- **Artist Grouping**: Automatically combines "Artist" with "Artist feat. X" and similar variations. Uses MusicBrainz IDs as a source of truth to protect legitimate band names (like *Earth, Wind & Fire* or *AC/DC*) from being split.
 - **Real-Time FFT**: True audio-reactive visualization using PulseAudio (Linux) and MTAudioProcessingTap (iOS)
 - **Smart Playlists**: Tag-aware mood playlists (Chill, Energetic, Melancholy, Upbeat) using actual file tags
 - **Smart Pre-Cache**: Configurable pre-caching of current and upcoming tracks (3, 5, or 10) with WiFi-only option
@@ -511,7 +512,7 @@ Waveforms are extracted for all tracks - downloaded, cached, and streaming - ena
 
 ## 🎨 Visualizer Styles
 
-Nautune offers 5 audio-reactive visualizer styles. Access the picker via **Settings > Appearance > Visualizer Style**.
+Nautune offers 6 audio-reactive visualizer styles. Access the picker via **Settings > Appearance > Visualizer Style**.
 
 | Style | Description |
 |-------|-------------|
@@ -520,6 +521,7 @@ Nautune offers 5 audio-reactive visualizer styles. Access the picker via **Setti
 | **Mirror Bars** | Symmetric bars extending from center, creates "sound wave" look |
 | **Radial** | Circular bar arrangement with slow rotation and bass pulse rings |
 | **Psychedelic** | Milkdrop-inspired effects with 3 auto-cycling presets |
+| **3D Globe** | Fibonacci sphere of particles that pulse with audio and rotate smoothly |
 
 - **30fps rendering**: Battery-optimized frame rate with smooth interpolation
 - **Fast attack / slow decay**: Musical smoothing for natural-feeling reactivity

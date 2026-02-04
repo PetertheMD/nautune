@@ -9,6 +9,7 @@ class JellyfinArtist {
     this.songCount,
     this.playCount,
     this.providerIds,
+    this.additionalIds,
   });
 
   final String id;
@@ -20,6 +21,39 @@ class JellyfinArtist {
   final int? songCount;
   final int? playCount;
   final Map<String, String>? providerIds;
+  /// Additional artist IDs that have been grouped into this artist.
+  /// Used when artist grouping is enabled to combine "Artist" with "Artist feat. X".
+  final List<String>? additionalIds;
+
+  /// Returns all artist IDs including the primary ID and any additional grouped IDs.
+  List<String> get allIds => [id, ...?additionalIds];
+
+  /// Creates a copy of this artist with the given fields replaced.
+  JellyfinArtist copyWith({
+    String? id,
+    String? name,
+    String? primaryImageTag,
+    String? overview,
+    List<String>? genres,
+    int? albumCount,
+    int? songCount,
+    int? playCount,
+    Map<String, String>? providerIds,
+    List<String>? additionalIds,
+  }) {
+    return JellyfinArtist(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      primaryImageTag: primaryImageTag ?? this.primaryImageTag,
+      overview: overview ?? this.overview,
+      genres: genres ?? this.genres,
+      albumCount: albumCount ?? this.albumCount,
+      songCount: songCount ?? this.songCount,
+      playCount: playCount ?? this.playCount,
+      providerIds: providerIds ?? this.providerIds,
+      additionalIds: additionalIds ?? this.additionalIds,
+    );
+  }
 
   factory JellyfinArtist.fromJson(Map<String, dynamic> json) {
     final imageTags = json['ImageTags'];
@@ -69,6 +103,7 @@ class JellyfinArtist {
       songCount: songCount,
       playCount: playCount,
       providerIds: providerIds,
+      additionalIds: null, // Initialized as null from JSON
     );
   }
 
@@ -82,6 +117,7 @@ class JellyfinArtist {
       'ChildCount': albumCount,
       'SongCount': songCount,
       if (providerIds != null) 'ProviderIds': providerIds,
+      if (additionalIds != null) 'AdditionalIds': additionalIds,
     };
   }
 }

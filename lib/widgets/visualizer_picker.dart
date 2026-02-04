@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/visualizer_type.dart';
 
-/// A dialog for selecting visualizer styles with visual previews.
+// The menu where you pick your visual flavor
 class VisualizerPicker extends StatelessWidget {
   const VisualizerPicker({
     super.key,
@@ -255,6 +255,12 @@ class _VisualizerOptionCard extends StatelessWidget {
           const Color(0xFF2A1A3A),
           const Color(0xFF0A1A2A),
         ];
+      case VisualizerType.globe:
+        return [
+          const Color(0xFF0A1628), // Dark blue/purple
+          primary.withValues(alpha: 0.3),
+          const Color(0xFF000000),
+        ];
     }
   }
 
@@ -280,8 +286,46 @@ class _VisualizerOptionCard extends StatelessWidget {
         return CustomPaint(
           painter: _ButterchurnPreviewPainter(primary),
         );
+      case VisualizerType.globe:
+        return CustomPaint(
+          painter: _GlobePreviewPainter(primary),
+        );
     }
   }
+}
+
+// ... existing painters ...
+
+class _GlobePreviewPainter extends CustomPainter {
+  final Color primary;
+  _GlobePreviewPainter(this.primary);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final paint = Paint()..color = primary.withValues(alpha: 0.6);
+
+    // Draw a simplified sphere of dots
+    for (int i = 0; i < 20; i++) {
+        // Distribute dots somewhat randomly but spherically
+        final radius = size.width * 0.25;
+        final x = center.dx + radius * 0.8 * (i % 5 - 2) * 0.5;
+        final y = center.dy + radius * 0.8 * ((i * 3) % 5 - 2) * 0.5;
+        
+        final sizeScale = ((i % 3) + 1.0) * 1.5;
+        
+        paint.color = primary.withValues(alpha: 0.4 + (i%5)*0.1);
+        canvas.drawCircle(Offset(x, y), sizeScale, paint);
+    }
+    
+    // Draw some 'outer' dots
+    paint.color = primary.withValues(alpha: 0.3);
+    canvas.drawCircle(Offset(center.dx - 20, center.dy - 20), 4, paint);
+    canvas.drawCircle(Offset(center.dx + 25, center.dy + 15), 3, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // Preview painters for each visualizer type (simplified static representations)

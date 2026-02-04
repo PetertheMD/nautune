@@ -6,19 +6,22 @@ import 'spectrum_bars_visualizer.dart';
 import 'spectrum_mirror_visualizer.dart';
 import 'spectrum_radial_visualizer.dart';
 import 'butterchurn_visualizer.dart';
+import 'globe_visualizer.dart';
 
-/// Factory widget that returns the appropriate visualizer based on type.
+// Selects the right visualizer widget based on your mood (or settings)
 class VisualizerFactory extends StatelessWidget {
   const VisualizerFactory({
     super.key,
     required this.type,
     required this.audioService,
     this.opacity = 0.6,
+    this.globeQuality = GlobeQuality.normal,
   });
 
   final VisualizerType type;
   final AudioPlayerService audioService;
   final double opacity;
+  final GlobeQuality globeQuality;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +59,14 @@ class VisualizerFactory extends StatelessWidget {
           key: const ValueKey('butterchurn'),
           audioService: audioService,
           opacity: opacity,
+        );
+
+      case VisualizerType.globe:
+        return GlobeVisualizer(
+          key: ValueKey('globe_${globeQuality.name}'),
+          audioService: audioService,
+          opacity: opacity,
+          quality: globeQuality,
         );
     }
   }

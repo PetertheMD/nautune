@@ -1036,6 +1036,34 @@ class JellyfinService {
     )).toList();
   }
 
+  /// Get tracks by artist with sorting
+  Future<List<JellyfinTrack>> loadArtistTracks({
+    required String artistId,
+    int limit = 50,
+    String sortBy = 'SortName',
+    String sortOrder = 'Ascending',
+  }) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    final tracksJson = await client.fetchTracksByArtist(
+      session.credentials,
+      artistId: artistId,
+      limit: limit,
+      sortBy: sortBy,
+      sortOrder: sortOrder,
+    );
+
+    return tracksJson.map((json) => JellyfinTrack.fromJson(
+      json,
+      serverUrl: session.serverUrl,
+      token: session.credentials.accessToken,
+      userId: session.credentials.userId,
+    )).toList();
+  }
+
   /// Get random tracks by artist (for artist instant mix)
   Future<List<JellyfinTrack>> getArtistMix({
     required String artistId,
@@ -1125,7 +1153,7 @@ class JellyfinService {
     )).toList();
   }
 
-  /// Get a single track by ID
+   /// Get a single track by ID
   Future<JellyfinTrack?> getTrack(String trackId) async {
     final client = _client;
     if (client == null) throw StateError('Not connected');
@@ -1145,6 +1173,23 @@ class JellyfinService {
       token: session.credentials.accessToken,
       userId: session.credentials.userId,
     );
+  }
+
+  /// Get a single artist by ID
+  Future<JellyfinArtist?> getArtist(String artistId) async {
+    final client = _client;
+    if (client == null) throw StateError('Not connected');
+    final session = _session;
+    if (session == null) throw StateError('No session');
+
+    final json = await client.fetchItem(
+      session.credentials,
+      itemId: artistId,
+    );
+
+    if (json == null) return null;
+
+    return JellyfinArtist.fromJson(json);
   }
 
   /// Get most played albums for a library

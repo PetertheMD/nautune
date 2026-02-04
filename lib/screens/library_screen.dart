@@ -375,8 +375,8 @@ class _LibraryScreenState extends State<LibraryScreen>
                     child: Icon(
                       Icons.waves,
                       color: appState.isOfflineMode 
-                          ? const Color(0xFF7A3DF1)  // Violet when offline
-                          : const Color(0xFFB39DDB),  // Light purple when online
+                          ? (theme.brightness == Brightness.dark ? const Color(0xFF7A3DF1) : theme.colorScheme.secondary)
+                          : (theme.brightness == Brightness.dark ? const Color(0xFFB39DDB) : theme.colorScheme.primary),
                       size: 28,
                     ),
                   ),
@@ -399,7 +399,9 @@ class _LibraryScreenState extends State<LibraryScreen>
                           'Nautune',
                           style: GoogleFonts.pacifico(
                             fontSize: 24,
-                            color: const Color(0xFFB39DDB),
+                            color: theme.brightness == Brightness.dark 
+                                ? const Color(0xFFB39DDB) 
+                                : theme.colorScheme.primary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -2853,14 +2855,14 @@ class _PlaylistsTabState extends State<_PlaylistsTab> {
                     ],
                   ),
                 ),
-                // 2x2 Mood Grid
+                // 1x4 Mood Grid
                 GridView.count(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
+                  crossAxisCount: 4,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
-                  childAspectRatio: 1.6,
+                  childAspectRatio: 0.75,
                   children: Mood.values.map((mood) => _buildMoodCard(mood, theme)).toList(),
                 ),
                 const SizedBox(height: 16),
@@ -4383,28 +4385,33 @@ class _ArtistListTile extends StatelessWidget {
       );
     }
 
-    return ListTile(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ArtistDetailScreen(
-              artist: artist,
-            ),
+    return SizedBox(
+      height: 72,
+      child: Center(
+        child: ListTile(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ArtistDetailScreen(
+                  artist: artist,
+                ),
+              ),
+            );
+          },
+          leading: SizedBox(
+            width: 56,
+            height: 56,
+            child: artwork,
           ),
-        );
-      },
-      leading: SizedBox(
-        width: 56,
-        height: 56,
-        child: artwork,
-      ),
-      title: Text(
-        artist.name,
-        style: theme.textTheme.titleSmall?.copyWith(
-          fontWeight: FontWeight.w500,
+          title: Text(
+            artist.name,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
       ),
     );
   }
@@ -5336,9 +5343,14 @@ class _ArtistCard extends StatelessWidget {
         children: [
           Expanded(
             flex: 3,
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: artwork,
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: artwork,
+                ),
+              ),
             ),
           ),
           Expanded(
@@ -5676,6 +5688,8 @@ class AlphabetSectionBuilder {
   AlphabetSectionBuilder._();
 
   /// Groups items by first letter and returns a list of (letter, items) pairs
+  /// NOTE: Preserves the order of letters as they appear in the items list,
+  /// since items are already sorted by the app (with locale-aware sorting).
   static List<(String, List<T>)> groupByLetter<T>(
     List<T> items,
     String Function(T) getItemName,
@@ -5683,27 +5697,24 @@ class AlphabetSectionBuilder {
   ) {
     if (items.isEmpty) return [];
 
-    final isAscending = sortOrder == SortOrder.ascending;
-
-    // Group items by first letter
+    // Preserve the order of letters as they appear in the sorted items list
+    final List<String> orderedLetters = [];
     final Map<String, List<T>> letterGroups = {};
+    
     for (final item in items) {
       final name = getItemName(item).toUpperCase();
       if (name.isEmpty) continue;
       final firstChar = name[0];
       final letter = RegExp(r'[0-9]').hasMatch(firstChar) ? '#' : firstChar;
-      letterGroups.putIfAbsent(letter, () => []).add(item);
+      
+      if (!letterGroups.containsKey(letter)) {
+        orderedLetters.add(letter);
+        letterGroups[letter] = [];
+      }
+      letterGroups[letter]!.add(item);
     }
 
-    // Sort letters
-    final sortedLetters = letterGroups.keys.toList()
-      ..sort((a, b) {
-        if (a == '#') return isAscending ? -1 : 1;
-        if (b == '#') return isAscending ? 1 : -1;
-        return isAscending ? a.compareTo(b) : b.compareTo(a);
-      });
-
-    return sortedLetters.map((letter) => (letter, letterGroups[letter]!)).toList();
+    return orderedLetters.map((letter) => (letter, letterGroups[letter]!)).toList();
   }
 }
 
@@ -5713,6 +5724,7 @@ class LetterPositions {
 
   /// Build a map of letter -> flat index accounting for section headers
   /// Returns (letterToFlatIndex, totalItemCount including headers)
+  /// NOTE: Preserves the order of letters as they appear in the items list.
   static (Map<String, int>, int) buildWithHeaders(
     List items,
     String Function(dynamic) getItemName,
@@ -5721,37 +5733,34 @@ class LetterPositions {
     if (items.isEmpty) return ({}, 0);
 
     final Map<String, int> letterToIndex = {};
-    final isAscending = sortOrder == SortOrder.ascending;
+    final List<String> orderedLetters = [];
+    final Map<String, int> letterCounts = {};
 
-    // Group items by first letter
-    final Map<String, List<int>> letterGroups = {};
+    // Preserve the order of letters as they appear in the sorted items list
     for (int i = 0; i < items.length; i++) {
       final name = getItemName(items[i]).toUpperCase();
       if (name.isEmpty) continue;
       final firstChar = name[0];
       final letter = RegExp(r'[0-9]').hasMatch(firstChar) ? '#' : firstChar;
-      letterGroups.putIfAbsent(letter, () => []).add(i);
+      
+      if (!letterCounts.containsKey(letter)) {
+        orderedLetters.add(letter);
+        letterCounts[letter] = 0;
+      }
+      letterCounts[letter] = letterCounts[letter]! + 1;
     }
-
-    // Sort letters appropriately
-    final sortedLetters = letterGroups.keys.toList()
-      ..sort((a, b) {
-        // # comes first in ascending, last in descending
-        if (a == '#') return isAscending ? -1 : 1;
-        if (b == '#') return isAscending ? 1 : -1;
-        return isAscending ? a.compareTo(b) : b.compareTo(a);
-      });
 
     // Calculate flat positions (each letter group adds 1 header)
     int flatIndex = 0;
-    for (final letter in sortedLetters) {
+    for (final letter in orderedLetters) {
       letterToIndex[letter] = flatIndex;
       flatIndex++; // The header
-      flatIndex += letterGroups[letter]!.length; // The items
+      flatIndex += letterCounts[letter]!; // The items
     }
 
     return (letterToIndex, flatIndex);
   }
+
 
   /// Get the letter for an item at a given index
   static String getLetterForItem(dynamic item, String Function(dynamic) getItemName) {
@@ -5803,36 +5812,44 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
   // Returns (letterToPosition, totalHeight)
   (Map<String, double>, double) _buildLetterPositions() {
     final Map<String, double> letterToPosition = {};
-    final isAscending = widget.sortOrder == SortOrder.ascending;
 
-    // Group items by first letter
-    final Map<String, List<int>> letterGroups = {};
+    // CRITICAL: Preserve the order of letters as they appear in the actual items list.
+    // The items are already sorted by the app (with locale-aware sorting), so we must
+    // NOT re-sort letters alphabetically - that causes mismatches with accented chars.
+    final List<String> orderedLetters = [];
+    final Map<String, int> letterCounts = {};
+    
     for (int i = 0; i < widget.items.length; i++) {
       final name = widget.getItemName(widget.items[i]).toUpperCase();
       if (name.isEmpty) continue;
       final firstChar = name[0];
       final letter = RegExp(r'[0-9]').hasMatch(firstChar) ? '#' : firstChar;
-      letterGroups.putIfAbsent(letter, () => []).add(i);
+      
+      if (!letterCounts.containsKey(letter)) {
+        // First time seeing this letter - record its position in order
+        orderedLetters.add(letter);
+        letterCounts[letter] = 0;
+      }
+      letterCounts[letter] = letterCounts[letter]! + 1;
     }
 
-    // Sort letters appropriately
-    final sortedLetters = letterGroups.keys.toList()
-      ..sort((a, b) {
-        if (a == '#') return isAscending ? -1 : 1;
-        if (b == '#') return isAscending ? 1 : -1;
-        return isAscending ? a.compareTo(b) : b.compareTo(a);
-      });
-
-    // Calculate scroll positions accounting for headers
-    // Grid mode (crossAxisCount > 1): no initial padding, first header at 0
-    // List mode (crossAxisCount == 1): 8px initial padding from SliverPadding
+    // Calculate scroll positions accounting for headers and padding
+    // Grid mode (crossAxisCount > 1): Each section has SliverPadding with vertical: 8 (16px total)
+    // List mode (crossAxisCount == 1): 8px initial padding from outer SliverPadding only
     final isListMode = widget.crossAxisCount == 1;
+    final sectionVerticalPadding = isListMode ? 0.0 : 16.0; // 8px top + 8px bottom per grid section
     double currentPosition = isListMode ? 8.0 : 0.0;
 
-    for (final letter in sortedLetters) {
+    for (final letter in orderedLetters) {
       letterToPosition[letter] = currentPosition;
       currentPosition += widget.headerHeight; // Header (40px)
-      final itemCount = letterGroups[letter]!.length;
+      
+      if (!isListMode) {
+        // In grid mode, add vertical padding from SliverPadding
+        currentPosition += sectionVerticalPadding;
+      }
+      
+      final itemCount = letterCounts[letter]!;
       final rowCount = (itemCount / widget.crossAxisCount).ceil();
       currentPosition += rowCount * widget.itemHeight;
     }

@@ -27,6 +27,8 @@ class NautuneColorPalette {
     required Color primary,
     required Color secondary,
     Color? accent,
+    Color? surface,
+    Color? textSecondary,
     required bool isLight,
   }) {
     // Generate complementary colors based on primary/secondary
@@ -41,9 +43,9 @@ class NautuneColorPalette {
         name: 'Custom',
         primary: primary,
         secondary: secondary,
-        surface: Color.lerp(Colors.white, primary, 0.03)!,  // Very light tint of primary
+        surface: surface ?? Color.lerp(Colors.white, primary, 0.03)!,  // Very light tint of primary
         textPrimary: textPrimaryColor,
-        textSecondary: Colors.grey.shade600,
+        textSecondary: textSecondary ?? Colors.grey.shade600,
         isLight: true,
       );
     } else {
@@ -55,9 +57,9 @@ class NautuneColorPalette {
         name: 'Custom',
         primary: primary,
         secondary: secondary,
-        surface: HSLColor.fromColor(primary).withLightness(0.08).withSaturation(hsl.saturation * 0.3).toColor(),
+        surface: surface ?? HSLColor.fromColor(primary).withLightness(0.08).withSaturation(hsl.saturation * 0.3).toColor(),
         textPrimary: textPrimaryColor,
-        textSecondary: Color.lerp(Colors.grey, secondary, 0.2)!,
+        textSecondary: textSecondary ?? Color.lerp(Colors.grey, secondary, 0.2)!,
         isLight: false,
       );
     }
@@ -72,7 +74,10 @@ class NautuneColorPalette {
   }
 
   ThemeData _buildLightTheme() {
-    final onSurface = Color(0xFF1A1A1A);
+    // Use dark text colors for maximum contrast on light backgrounds
+    // #191C1E for onBackground/onSurface (WCAG AAA compliant)
+    final onSurface = const Color(0xFF191C1E);
+    final onSurfaceVariant = const Color(0xFF41484D);
     return ThemeData.light().copyWith(
       scaffoldBackgroundColor: surface,
       colorScheme: ColorScheme.light(
@@ -81,8 +86,10 @@ class NautuneColorPalette {
         tertiary: textPrimary,
         surface: surface,
         onSurface: onSurface,
+        onSurfaceVariant: onSurfaceVariant,
         onPrimary: Colors.white,
         onSecondary: onSurface,
+        outline: const Color(0xFF727A7F),
       ),
       textTheme: TextTheme(
         bodyMedium: TextStyle(color: onSurface),
@@ -337,6 +344,18 @@ class NautunePalettes {
     isLight: true,
   );
 
+  /// Glacial Glass - A clean, glassy light theme with cool teal tones
+  static const glacialGlass = NautuneColorPalette(
+    id: 'glacial_glass',
+    name: 'Glacial Glass',
+    primary: Color(0xFF00668A),      // Deep teal blue
+    secondary: Color(0xFF406374),    // Muted slate
+    surface: Color(0xFFF5F8FA),      // Cool white
+    textPrimary: Color(0xFF191C1E),  // High contrast dark gray
+    textSecondary: Color(0xFF41484D), // Muted dark gray
+    isLight: true,
+  );
+
   /// Custom theme placeholder (actual colors set via ThemeProvider)
   static const custom = NautuneColorPalette(
     id: 'custom',
@@ -352,6 +371,7 @@ class NautunePalettes {
   static const List<NautuneColorPalette> presets = [
     purpleOcean,
     lightLavender,
+    glacialGlass,
     oledPeach,
     apricotGarden,
     raspberrySunset,
@@ -362,6 +382,7 @@ class NautunePalettes {
   static const List<NautuneColorPalette> all = [
     purpleOcean,
     lightLavender,
+    glacialGlass,
     oledPeach,
     apricotGarden,
     raspberrySunset,

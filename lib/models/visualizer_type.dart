@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
-/// Available visualizer styles for audio visualization
+// The flavors of eye-candy available
 enum VisualizerType {
   bioluminescent,  // Ocean waves (default)
   spectrumBars,    // Classic vertical bars
   spectrumMirror,  // Mirrored bars (top/bottom)
   spectrumRadial,  // Circular/radial bars
   butterchurn,     // Milkdrop-inspired psychedelic
+  globe,           // 3D particle globe
 }
 
 extension VisualizerTypeExtension on VisualizerType {
@@ -23,22 +24,26 @@ extension VisualizerTypeExtension on VisualizerType {
         return 'Radial';
       case VisualizerType.butterchurn:
         return 'Psychedelic';
+      case VisualizerType.globe:
+        return '3D Globe';
     }
   }
 
-  /// Short description for the visualizer
+  // What it looks like
   String get description {
     switch (this) {
       case VisualizerType.bioluminescent:
-        return 'Bioluminescent ocean waves with floating particles';
+        return 'Chill ocean vibes with floating lights';
       case VisualizerType.spectrumBars:
-        return 'Classic vertical frequency bars with peak hold';
+        return 'That classic 90s stereo look';
       case VisualizerType.spectrumMirror:
-        return 'Symmetric bars extending from center';
+        return 'Rorschach test but for music';
       case VisualizerType.spectrumRadial:
-        return 'Circular bars with slow rotation';
+        return 'Like a sun exploding to the beat';
       case VisualizerType.butterchurn:
-        return 'Milkdrop-style psychedelic effects';
+        return 'Trippy visuals like Winamp used to have';
+      case VisualizerType.globe:
+        return 'A spinning planet of sound';
     }
   }
 
@@ -55,6 +60,8 @@ extension VisualizerTypeExtension on VisualizerType {
         return Icons.brightness_high;
       case VisualizerType.butterchurn:
         return Icons.auto_awesome;
+      case VisualizerType.globe:
+        return Icons.public;
     }
   }
 
@@ -71,6 +78,8 @@ extension VisualizerTypeExtension on VisualizerType {
         return VisualizerType.spectrumRadial;
       case 'butterchurn':
         return VisualizerType.butterchurn;
+      case 'globe':
+        return VisualizerType.globe;
       default:
         return VisualizerType.bioluminescent;
     }
@@ -123,6 +132,77 @@ extension VisualizerPositionExtension on VisualizerPosition {
         return VisualizerPosition.controlsBar;
       default:
         return VisualizerPosition.controlsBar;
+    }
+  }
+}
+
+// How fancy the globe should look
+enum GlobeQuality {
+  powerSaving,  // Fewer particles for battery efficiency
+  normal,       // Default balanced quality
+  high,         // More particles for visual fidelity
+}
+
+extension GlobeQualityExtension on GlobeQuality {
+  /// Display label for the quality option
+  String get label {
+    switch (this) {
+      case GlobeQuality.powerSaving:
+        return 'Power Saving';
+      case GlobeQuality.normal:
+        return 'Normal';
+      case GlobeQuality.high:
+        return 'High';
+    }
+  }
+
+  // What this actually means
+  String get description {
+    switch (this) {
+      case GlobeQuality.powerSaving:
+        return 'Battery saver (400 points)';
+      case GlobeQuality.normal:
+        return 'Balanced (800 points)';
+      case GlobeQuality.high:
+        return 'Show off mode (1500 points)';
+    }
+  }
+
+  /// Number of particles for this quality level
+  int get particleCount {
+    switch (this) {
+      case GlobeQuality.powerSaving:
+        return 400;
+      case GlobeQuality.normal:
+        return 800;
+      case GlobeQuality.high:
+        return 1500;
+    }
+  }
+
+  /// Icon for the quality option
+  IconData get icon {
+    switch (this) {
+      case GlobeQuality.powerSaving:
+        return Icons.battery_saver;
+      case GlobeQuality.normal:
+        return Icons.tune;
+      case GlobeQuality.high:
+        return Icons.auto_awesome;
+    }
+  }
+
+  /// Parse from string (for persistence)
+  static GlobeQuality fromString(String? value) {
+    switch (value) {
+      case 'powerSaving':
+        return GlobeQuality.powerSaving;
+      case 'normal':
+        return GlobeQuality.normal;
+      case 'high':
+        return GlobeQuality.high;
+      default:
+        return GlobeQuality.normal;
     }
   }
 }

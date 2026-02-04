@@ -32,9 +32,10 @@ import '../widgets/jellyfin_waveform.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
 
-/// Top-level function for compute() - extracts vibrant colors from image pixels in isolate
+// Heavy number crunching happens here to find the best colors from the album art
+// We run this in an isolate so the UI doesn't freeze
 Future<List<int>> _extractColorsInIsolate(Uint32List pixels) async {
-  // Run the quantization to find the dominant color clusters
+  // Find dominant colors
   final result = await QuantizerCelebi().quantize(pixels, 128);
   final colorToCount = result.colorToCount;
 
@@ -132,9 +133,58 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
   bool _showLoopControls = false;
   bool _showLoopButton = false; // Toggle visibility of A-B Loop button (off by default)
 
-  // Visualizer in album art toggle state
-  bool _showingVisualizerInArtwork = false;
-  String? _lastTrackIdForVisualizerReset; // Track ID to detect track changes
+  // Visualizer in album art toggle state is now managed by _appState.showingVisualizerOverArtwork
+
+  // Adaptive text colors computed from palette luminance
+  // These ensure text is always readable against the dynamic gradient background
+  Color? _adaptiveTextPrimary;
+  Color? _adaptiveTextSecondary;
+
+  /// Compute adaptive text colors based on the palette's average luminance.
+  /// This ensures text is always readable against the dynamic gradient background
+  /// extracted from album art - whether the album is bright or dark.
+  /// 
+  /// Follows Finamp's contrast approach: dark text on light backgrounds,
+  /// light text on dark backgrounds (WCAG AA compliant).
+  void _computeAdaptiveColors() {
+    if (_paletteColors == null || _paletteColors!.isEmpty) {
+      _adaptiveTextPrimary = null;
+      _adaptiveTextSecondary = null;
+      return;
+    }
+
+    // For layouts that use the theme background (Classic, Card),
+    // we should use the theme's text colors instead of adaptive ones
+    // to ensure proper contrast.
+    final layout = _appState.nowPlayingLayout;
+    if (layout == NowPlayingLayout.classic || layout == NowPlayingLayout.card || layout == NowPlayingLayout.compact) {
+      _adaptiveTextPrimary = null;
+      _adaptiveTextSecondary = null;
+      return;
+    }
+
+    // Calculate average luminance of the palette colors
+    double totalLuminance = 0;
+    for (final color in _paletteColors!) {
+      totalLuminance += color.computeLuminance();
+    }
+    final avgLuminance = totalLuminance / _paletteColors!.length;
+
+    // Determine if background is light or dark
+    // Use 0.4 threshold (leaning towards light) because gradients with dark overlay
+    // shift the effective luminance darker
+    final isLightBackground = avgLuminance > 0.4;
+
+    if (isLightBackground) {
+      // Light background: use dark text (Finamp's approach - #191C1E family)
+      _adaptiveTextPrimary = const Color(0xFF191C1E);
+      _adaptiveTextSecondary = const Color(0xFF41484D);
+    } else {
+      // Dark background: use light text
+      _adaptiveTextPrimary = const Color(0xFFF0F1F3);
+      _adaptiveTextSecondary = const Color(0xFFC0C7CD);
+    }
+  }
 
   @override
   void initState() {
@@ -152,55 +202,44 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     _lyricsService = LyricsService(jellyfinService: _appState.jellyfinService);
 
     // Set up stream listeners only once
+    // Start listening to music events
     if (_trackSub == null) {
-      _trackSub = _audioService.currentTrackStream.listen((track) {
-        if (mounted) {
-          setState(() {
-            // Reset visualizer toggle on track change (show album art for new track)
-            if (track?.id != _lastTrackIdForVisualizerReset) {
-              _showingVisualizerInArtwork = false;
-              _lastTrackIdForVisualizerReset = track?.id;
+        _trackSub = _audioService.currentTrackStream.listen((track) {
+            if (!mounted) return;
+            
+            setState(() {
+                // Keep the current visualizer view state when changing tracks
+            });
+            
+            if (track != null) {
+                // Get the lyrics and the vibes (colors)
+                _fetchLyrics(track);
+                _extractColors(track);
             }
-          });
-          if (track != null) {
-            _fetchLyrics(track);
-            _extractColors(track);
-          }
-        }
-      });
-      _positionSub = _audioService.positionStream.listen((_) {
-        if (mounted) setState(() {});
-      });
-      _playingSub = _audioService.playingStream.listen((_) {
-        if (mounted) setState(() {});
-      });
-      _loopSub = _audioService.loopStateStream.listen((_) {
-        if (mounted) setState(() {});
-      });
+        });
+        
+        // Listeners for progress, playback state, and loops
+        _positionSub = _audioService.positionStream.listen((_) => mounted ? setState(() {}) : null);
+        _playingSub = _audioService.playingStream.listen((_) => mounted ? setState(() {}) : null);
+        _loopSub = _audioService.loopStateStream.listen((_) => mounted ? setState(() {}) : null);
 
-      // Fetch lyrics for initial track
-      final currentTrack = _audioService.currentTrack;
-      if (currentTrack != null) {
-        _fetchLyrics(currentTrack);
-        _extractColors(currentTrack);
-      }
+        // Init for current track
+        final currentTrack = _audioService.currentTrack;
+        if (currentTrack != null) {
+            _fetchLyrics(currentTrack);
+            _extractColors(currentTrack);
+        }
     }
   }
 
+  // Get the vibes (colors) from the album art
   Future<void> _extractColors(JellyfinTrack track) async {
-    // Use same fallback logic as _buildArtwork to ensure consistency
+    // Figure out the best image to use (track > album > parent)
     String? imageTag = track.primaryImageTag;
     String? itemId = track.id;
 
-    // Fallback to album art if track doesn't have its own image
     if (imageTag == null || imageTag.isEmpty) {
-      imageTag = track.albumPrimaryImageTag;
-      itemId = track.albumId ?? track.id;
-    }
-
-    // Further fallback to parent thumb
-    if (imageTag == null || imageTag.isEmpty) {
-      imageTag = track.parentThumbImageTag;
+      imageTag = track.albumPrimaryImageTag ?? track.parentThumbImageTag;
       itemId = track.albumId ?? track.id;
     }
 
@@ -211,16 +250,16 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
       return;
     }
 
-    // Check cache first - avoids expensive color extraction for repeat plays
+    // Return fast if we already processed this one
     final cacheKey = '$itemId-$imageTag';
-    final cached = _paletteCache[cacheKey];
-    if (cached != null) {
-      if (mounted) {
-        setState(() {
-          _paletteColors = cached;
-        });
-      }
-      return;
+    if (_paletteCache.containsKey(cacheKey)) {
+        if (mounted) {
+          setState(() {
+            _paletteColors = _paletteCache[cacheKey];
+            _computeAdaptiveColors();
+          });
+        }
+        return;
     }
 
     // Clear old colors immediately to prevent showing stale gradient
@@ -229,7 +268,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
     });
 
     try {
-      // Try to load from downloaded artwork first (for offline support)
+      // Try to load from offline storage first
       ImageProvider imageProvider;
       final artworkFile = await _appState.downloadService.getArtworkFile(
         track.id,
@@ -313,6 +352,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
       if (mounted) {
         setState(() {
           _paletteColors = selectedColors;
+          _computeAdaptiveColors();
         });
       }
     } catch (e) {
@@ -784,14 +824,16 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
   /// Toggle visualizer display in album art area
   void _toggleVisualizerInArtwork() {
     HapticService.mediumTap();
-    setState(() {
-      _showingVisualizerInArtwork = !_showingVisualizerInArtwork;
-    });
+    final newValue = !_appState.showingVisualizerOverArtwork;
+    _appState.setShowingVisualizerOverArtwork(newValue);
+    
+    // Trigger local build since we're using listen: false for AppState
+    setState(() {});
 
     // BATTERY FIX: Control iOS FFT capture based on visualizer visibility
     // Stop FFT when visualizer is hidden to prevent battery drain
     if (Platform.isIOS) {
-      if (_showingVisualizerInArtwork && _audioService.isPlaying) {
+      if (newValue && _audioService.isPlaying) {
         // Visualizer now visible - start FFT capture
         IOSFFTService.instance.startCapture();
       } else {
@@ -904,8 +946,18 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
 
     switch (layout) {
       case NowPlayingLayout.classic:
+        // Classic: Solid background color (like Finamp)
+        // No gradient, just the theme's scaffold background
+        return [
+          Positioned.fill(
+            child: Container(
+              color: theme.scaffoldBackgroundColor,
+            ),
+          ),
+        ];
+
       case NowPlayingLayout.gradient:
-        // Classic/Gradient: Full gradient with medium blur
+        // Gradient: Full gradient with medium blur
         return [
           if (hasColors)
             Positioned.fill(
@@ -1041,29 +1093,23 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
         children: [
           // Album artwork layer with fade
           AnimatedOpacity(
-            opacity: _showingVisualizerInArtwork ? 0.0 : 1.0,
+            opacity: _appState.showingVisualizerOverArtwork ? 0.0 : 1.0,
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
             child: artwork,
           ),
           // BATTERY FIX: Only render visualizer when visible (not just hidden with opacity 0)
           // This prevents FFT processing and GPU rendering when visualizer is hidden
-          if (_showingVisualizerInArtwork)
+          if (_appState.showingVisualizerOverArtwork)
             ClipRRect(
               borderRadius: borderRadius,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: borderRadius,
-                  color: theme.colorScheme.surface,
-                ),
-                child: RepaintBoundary(
-                  child: VisualizerFactory(
-                    type: _appState.visualizerType,
-                    audioService: _audioService,
-                    opacity: 0.9, // Higher opacity for album art position
-                  ),
-                ),
+            child: RepaintBoundary(
+              child: VisualizerFactory(
+                type: _appState.visualizerType,
+                audioService: _audioService,
+                opacity: 0.9, // Higher opacity for album art position
               ),
+            ),
             ),
           // Mode indicator icon (bottom-right corner)
           Positioned(
@@ -1079,7 +1125,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  _showingVisualizerInArtwork ? Icons.album : Icons.equalizer,
+                  _appState.showingVisualizerOverArtwork ? Icons.album : Icons.equalizer,
                   color: Colors.white,
                   size: isDesktop ? 24 : 20,
                 ),
@@ -1504,13 +1550,9 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                           horizontal: 16,
                           vertical: 8,
                         ),
-                        child: Row(
+                        child: Stack(
+                          alignment: Alignment.center,
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.expand_more),
-                              onPressed: () => Navigator.of(context).pop(),
-                            ),
-                            const Spacer(),
                             TabBar(
                               controller: _tabController,
                               isScrollable: true,
@@ -1521,8 +1563,19 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                 Tab(text: 'Lyrics'),
                               ],
                             ),
-                            const Spacer(),
-                            if (isDesktop)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: IconButton(
+                                icon: const Icon(Icons.expand_more),
+                                onPressed: () => Navigator.of(context).pop(),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isDesktop)
                               IconButton(
                                 icon: const Icon(
                                   Icons.picture_in_picture_alt_rounded,
@@ -1939,6 +1992,9 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                 );
                               },
                             ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -2020,17 +2076,57 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
 
                         const SizedBox(height: 24),
 
-                        // Track Info - Compact
-                        Text(
-                          track.name,
-                          style:
-                              (isDesktop
-                                      ? theme.textTheme.headlineMedium
-                                      : theme.textTheme.titleLarge)
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                        // Track Info - Compact with Favorite button
+                        // Track Info - Centered with balanced invisible icon
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Invisible balancer to ensure title remains perfectly centered
+                            IgnorePointer(
+                              child: Opacity(
+                                opacity: 0.0,
+                                child: IconButton(
+                                  icon: Icon(
+                                    Icons.favorite,
+                                    size: isDesktop ? 28 : 24,
+                                  ),
+                                  onPressed: () {},
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                track.name,
+                                style:
+                                    (isDesktop
+                                            ? theme.textTheme.headlineMedium
+                                            : theme.textTheme.titleLarge)
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: _adaptiveTextPrimary,
+                                        ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: Icon(
+                                track.isFavorite
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
+                                size: isDesktop ? 28 : 24,
+                              ),
+                              onPressed: () => _toggleFavorite(track),
+                              color: track.isFavorite ? Colors.red : null,
+                              tooltip: track.isFavorite
+                                  ? 'Remove from favorites'
+                                  : 'Add to favorites',
+                            ),
+                          ],
                         ),
 
                         const SizedBox(height: 8),
@@ -2144,7 +2240,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                               Icon(
                                 Icons.person,
                                 size: 16,
-                                color: theme.colorScheme.tertiary.withValues(
+                                color: (_adaptiveTextPrimary ?? theme.colorScheme.tertiary).withValues(
                                   alpha: 0.7,
                                 ),
                               ),
@@ -2157,12 +2253,12 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                               ? theme.textTheme.headlineSmall
                                               : theme.textTheme.titleMedium)
                                           ?.copyWith(
-                                            color: theme.colorScheme.tertiary,
+                                            color: _adaptiveTextPrimary ?? theme.colorScheme.tertiary,
                                             decoration:
                                                 TextDecoration.underline,
-                                            decorationColor: theme
+                                            decorationColor: (_adaptiveTextPrimary ?? theme
                                                 .colorScheme
-                                                .tertiary
+                                                .tertiary)
                                                 .withValues(alpha: 0.5),
                                           ),
                                   textAlign: TextAlign.center,
@@ -2235,7 +2331,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                 Icon(
                                   Icons.album,
                                   size: 16,
-                                  color: theme.colorScheme.onSurfaceVariant
+                                  color: (_adaptiveTextSecondary ?? theme.colorScheme.onSurfaceVariant)
                                       .withValues(alpha: 0.7),
                                 ),
                                 const SizedBox(width: 4),
@@ -2243,11 +2339,11 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                   child: Text(
                                     track.album!,
                                     style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
+                                      color: _adaptiveTextSecondary ?? theme.colorScheme.onSurfaceVariant,
                                       decoration: TextDecoration.underline,
-                                      decorationColor: theme
+                                      decorationColor: (_adaptiveTextSecondary ?? theme
                                           .colorScheme
-                                          .onSurfaceVariant
+                                          .onSurfaceVariant)
                                           .withValues(alpha: 0.3),
                                     ),
                                     textAlign: TextAlign.center,
@@ -2283,7 +2379,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                             child: Text(
                               track.audioQualityInfo!,
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.tertiary,
+                                color: _adaptiveTextSecondary ?? theme.colorScheme.tertiary,
                                 fontWeight: FontWeight.w500,
                                 letterSpacing: 0.5,
                               ),
@@ -2419,7 +2515,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                           isSet: loopState.start != null,
                                           time: loopState.formattedStart,
                                           onTap: () => _audioService.setLoopStart(),
-                                          color: theme.colorScheme.primary,
+                                          color: _adaptiveTextPrimary ?? theme.colorScheme.primary,
                                         ),
                                         const SizedBox(width: 12),
                                         // Set B button
@@ -2430,7 +2526,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                           onTap: loopState.start != null
                                               ? () => _audioService.setLoopEnd()
                                               : null,
-                                          color: theme.colorScheme.primary,
+                                          color: _adaptiveTextPrimary ?? theme.colorScheme.primary,
                                         ),
                                         const SizedBox(width: 12),
                                         // Toggle loop active
@@ -2441,8 +2537,8 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                                   ? Icons.repeat_one
                                                   : Icons.repeat_one_outlined,
                                               color: loopState.isActive
-                                                  ? theme.colorScheme.primary
-                                                  : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                                  ? (_adaptiveTextPrimary ?? theme.colorScheme.primary)
+                                                  : (_adaptiveTextSecondary ?? theme.colorScheme.onSurface).withValues(alpha: 0.6),
                                             ),
                                             onPressed: () => _audioService.toggleLoop(),
                                             tooltip: loopState.isActive ? 'Disable loop' : 'Enable loop',
@@ -2465,7 +2561,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                           child: Text(
                                             'Done',
                                             style: TextStyle(
-                                              color: theme.colorScheme.primary,
+                                              color: _adaptiveTextPrimary ?? theme.colorScheme.primary,
                                             ),
                                           ),
                                         ),
@@ -2493,13 +2589,13 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                               child: Container(
                                                 decoration: BoxDecoration(
                                                   color: loopState.isActive
-                                                      ? theme.colorScheme.primary.withValues(alpha: 0.3)
-                                                      : theme.colorScheme.onSurface.withValues(alpha: 0.15),
+                                                      ? (_adaptiveTextPrimary ?? theme.colorScheme.primary).withValues(alpha: 0.3)
+                                                      : (_adaptiveTextSecondary ?? theme.colorScheme.onSurface).withValues(alpha: 0.15),
                                                   borderRadius: BorderRadius.circular(4),
                                                   border: Border.all(
                                                     color: loopState.isActive
-                                                        ? theme.colorScheme.primary
-                                                        : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                                                        ? (_adaptiveTextPrimary ?? theme.colorScheme.primary)
+                                                        : (_adaptiveTextSecondary ?? theme.colorScheme.onSurface).withValues(alpha: 0.3),
                                                     width: 1,
                                                   ),
                                                 ),
@@ -2536,7 +2632,9 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                             thumbColor: theme.colorScheme.secondary,
                                             timeLabelLocation: TimeLabelLocation.below,
                                             timeLabelPadding: 8.0,
-                                            timeLabelTextStyle: theme.textTheme.bodySmall,
+                                            timeLabelTextStyle: theme.textTheme.bodySmall?.copyWith(
+                                              color: _adaptiveTextSecondary,
+                                            ),
                                           ),
                                         ],
                                       );
@@ -2563,7 +2661,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                               padding: const EdgeInsets.symmetric(horizontal: 16),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.volume_mute, size: 20),
+                                  Icon(Icons.volume_mute, size: 20, color: _adaptiveTextSecondary),
                                   Expanded(
                                     child: SliderTheme(
                                       data: SliderTheme.of(context).copyWith(
@@ -2590,10 +2688,12 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                                   const SizedBox(width: 8),
                                   Text(
                                     '${(volume * 100).round()}%',
-                                    style: theme.textTheme.bodySmall,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: _adaptiveTextSecondary,
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
-                                  const Icon(Icons.volume_up, size: 20),
+                                  Icon(Icons.volume_up, size: 20, color: _adaptiveTextSecondary),
                                 ],
                               ),
                             );
@@ -2680,101 +2780,12 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          IconButton(
-                            icon: Icon(
-                              track.isFavorite
-                                  ? Icons.favorite
-                                  : Icons.favorite_border,
-                              size: isDesktop ? 32 : 26,
-                            ),
-                            onPressed: () async {
-                              try {
-                                final currentFavoriteStatus = track.isFavorite;
-                                final newFavoriteStatus =
-                                    !currentFavoriteStatus;
-
-                                debugPrint(
-                                  '🎯 Favorite button clicked: current=$currentFavoriteStatus, new=$newFavoriteStatus',
-                                );
-
-                                // Update Jellyfin server (with offline queue support)
-                                await _appState.markFavorite(
-                                  track.id,
-                                  newFavoriteStatus,
-                                );
-
-                                // Update track object with new favorite status
-                                final updatedTrack = track.copyWith(
-                                  isFavorite: newFavoriteStatus,
-                                );
-                                debugPrint(
-                                  '🔄 Updating track: old isFavorite=${track.isFavorite}, new isFavorite=${updatedTrack.isFavorite}',
-                                );
-                                _audioService.updateCurrentTrack(updatedTrack);
-
-                                // Force UI rebuild
-                                if (mounted) setState(() {});
-
-                                // Refresh favorites list in app state
-                                await _appState.refreshFavorites();
-
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      newFavoriteStatus
-                                          ? 'Added to favorites'
-                                          : 'Removed from favorites',
-                                    ),
-                                    duration: const Duration(seconds: 2),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              } catch (e) {
-                                debugPrint('❌ Error toggling favorite: $e');
-                                if (!context.mounted) return;
-                                final isOfflineError =
-                                    e.toString().contains('Offline') ||
-                                    e.toString().contains('queued');
-
-                                // Update track optimistically even when offline
-                                if (isOfflineError) {
-                                  final currentFavoriteStatus =
-                                      track.isFavorite;
-                                  final newFavoriteStatus =
-                                      !currentFavoriteStatus;
-                                  final updatedTrack = track.copyWith(
-                                    isFavorite: newFavoriteStatus,
-                                  );
-                                  _audioService.updateCurrentTrack(
-                                    updatedTrack,
-                                  );
-                                  if (mounted) setState(() {});
-                                }
-
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      isOfflineError
-                                          ? 'Offline: Favorite will sync when online'
-                                          : 'Failed to update favorite: $e',
-                                    ),
-                                    backgroundColor: isOfflineError
-                                        ? Colors.orange
-                                        : theme.colorScheme.error,
-                                  ),
-                                );
-                              }
-                            },
-                            color: track.isFavorite ? Colors.red : null,
-                          ),
-
-                          SizedBox(width: isDesktop ? 16 : 4),
 
                           IconButton(
                             icon: Icon(
                               Icons.skip_previous,
                               size: isDesktop ? 48 : 40,
+                              color: _adaptiveTextPrimary,
                             ),
                             onPressed: () => _audioService.previous(),
                           ),
@@ -2782,9 +2793,12 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                           SizedBox(width: isDesktop ? 24 : 8),
 
                           IconButton(
-                            icon: Icon(Icons.stop, size: isDesktop ? 40 : 32),
+                            icon: Icon(
+                              Icons.stop, 
+                              size: isDesktop ? 40 : 32,
+                              color: _adaptiveTextSecondary,
+                            ),
                             onPressed: () => _audioService.stop(),
-                            color: theme.colorScheme.error,
                           ),
 
                           SizedBox(width: isDesktop ? 24 : 8),
@@ -2819,6 +2833,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                             icon: Icon(
                               Icons.skip_next,
                               size: isDesktop ? 48 : 40,
+                              color: _adaptiveTextPrimary,
                             ),
                             onPressed: () => _audioService.next(),
                           ),
@@ -2838,7 +2853,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                               switch (repeatMode) {
                                 case RepeatMode.off:
                                   icon = Icons.repeat;
-                                  color = null;
+                                  color = _adaptiveTextSecondary;
                                   break;
                                 case RepeatMode.all:
                                   icon = Icons.repeat;
@@ -2888,7 +2903,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
           children: [
             const CircularProgressIndicator(),
             const SizedBox(height: 16),
-            Text('Loading lyrics...', style: theme.textTheme.bodyMedium),
+            Text('Loading lyrics...', style: theme.textTheme.bodyMedium?.copyWith(color: _adaptiveTextPrimary)),
           ],
         ),
       );
@@ -2905,12 +2920,12 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
               color: theme.colorScheme.secondary.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 24),
-            Text('No lyrics available', style: theme.textTheme.headlineSmall),
+            Text('No lyrics available', style: theme.textTheme.headlineSmall?.copyWith(color: _adaptiveTextPrimary)),
             const SizedBox(height: 12),
             Text(
               'Lyrics not found for this track',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+                color: _adaptiveTextSecondary ?? theme.colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 24),
@@ -3002,7 +3017,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen>
                       style: theme.textTheme.titleLarge!.copyWith(
                         color: isCurrent
                             ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurfaceVariant.withValues(
+                            : (_adaptiveTextSecondary ?? theme.colorScheme.onSurfaceVariant).withValues(
                                 alpha: isPast ? 0.3 : 0.6,
                               ),
                         fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,

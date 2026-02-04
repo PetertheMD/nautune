@@ -50,6 +50,7 @@ class SmartPlaylistService {
         _libraryId = libraryId;
 
   /// Genre-to-mood mapping (case-insensitive matching)
+  /// Expanded with subgenres, variations, and common alternative spellings
   static const Map<String, Mood> _genreMoodMap = {
     // Chill genres
     'jazz': Mood.chill,
@@ -61,6 +62,7 @@ class SmartPlaylistService {
     'chillout': Mood.chill,
     'chill out': Mood.chill,
     'chill-out': Mood.chill,
+    'chill': Mood.chill,
     'downtempo': Mood.chill,
     'easy listening': Mood.chill,
     'soul': Mood.chill,
@@ -69,11 +71,29 @@ class SmartPlaylistService {
     'trip-hop': Mood.chill,
     'new age': Mood.chill,
     'world': Mood.chill,
+    'lo-fi': Mood.chill,
+    'lofi': Mood.chill,
+    'relaxing': Mood.chill,
+    'soft': Mood.chill,
+    'spa': Mood.chill,
+    'meditation': Mood.chill,
+    'sleep': Mood.chill,
+    'study': Mood.chill,
+    'acoustic jazz': Mood.chill,
+    'nu jazz': Mood.chill,
+    'nu-jazz': Mood.chill,
+    'acid jazz': Mood.chill,
+    'fusion': Mood.chill,
+    'smooth': Mood.chill,
+    'quiet storm': Mood.chill,
+    'neo-soul': Mood.chill,
+    'neo soul': Mood.chill,
 
     // Energetic genres
     'rock': Mood.energetic,
     'metal': Mood.energetic,
     'heavy metal': Mood.energetic,
+    'heavy': Mood.energetic,
     'punk': Mood.energetic,
     'punk rock': Mood.energetic,
     'electronic': Mood.energetic,
@@ -87,12 +107,41 @@ class SmartPlaylistService {
     'hard rock': Mood.energetic,
     'alternative rock': Mood.energetic,
     'alternative': Mood.energetic,
+    'alt': Mood.energetic,
     'hardcore': Mood.energetic,
     'industrial': Mood.energetic,
     'trance': Mood.energetic,
     'dubstep': Mood.energetic,
     'grunge': Mood.energetic,
     'progressive rock': Mood.energetic,
+    'prog': Mood.energetic,
+    'thrash': Mood.energetic,
+    'death metal': Mood.energetic,
+    'black metal': Mood.energetic,
+    'power metal': Mood.energetic,
+    'metalcore': Mood.energetic,
+    'deathcore': Mood.energetic,
+    'nu metal': Mood.energetic,
+    'nu-metal': Mood.energetic,
+    'screamo': Mood.energetic,
+    'emo': Mood.energetic,
+    'electro': Mood.energetic,
+    'electronica': Mood.energetic,
+    'bass': Mood.energetic,
+    'breakbeat': Mood.energetic,
+    'hardstyle': Mood.energetic,
+    'gabber': Mood.energetic,
+    'psytrance': Mood.energetic,
+    'goa': Mood.energetic,
+    'big beat': Mood.energetic,
+    'uk garage': Mood.energetic,
+    'garage': Mood.energetic,
+    'jungle': Mood.energetic,
+    'rave': Mood.energetic,
+    'post-punk': Mood.energetic,
+    'post punk': Mood.energetic,
+    'new wave': Mood.energetic,
+    'noise': Mood.energetic,
 
     // Melancholy genres
     'classical': Mood.melancholy,
@@ -101,10 +150,13 @@ class SmartPlaylistService {
     'acoustic': Mood.melancholy,
     'singer-songwriter': Mood.melancholy,
     'singer songwriter': Mood.melancholy,
+    'songwriter': Mood.melancholy,
     'sad': Mood.melancholy,
     'piano': Mood.melancholy,
     'orchestral': Mood.melancholy,
     'soundtrack': Mood.melancholy,
+    'score': Mood.melancholy,
+    'ost': Mood.melancholy,
     'instrumental': Mood.melancholy,
     'chamber': Mood.melancholy,
     'baroque': Mood.melancholy,
@@ -115,6 +167,24 @@ class SmartPlaylistService {
     'dream pop': Mood.melancholy,
     'slowcore': Mood.melancholy,
     'dark ambient': Mood.melancholy,
+    'opera': Mood.melancholy,
+    'symphony': Mood.melancholy,
+    'symphonic': Mood.melancholy,
+    'ballad': Mood.melancholy,
+    'country': Mood.melancholy,
+    'bluegrass': Mood.melancholy,
+    'americana': Mood.melancholy,
+    'celtic': Mood.melancholy,
+    'traditional': Mood.melancholy,
+    'gothic': Mood.melancholy,
+    'goth': Mood.melancholy,
+    'darkwave': Mood.melancholy,
+    'ethereal': Mood.melancholy,
+    'neoclassical': Mood.melancholy,
+    'minimalist': Mood.melancholy,
+    'minimal': Mood.melancholy,
+    'contemporary': Mood.melancholy,
+    'contemplative': Mood.melancholy,
 
     // Upbeat genres
     'pop': Mood.upbeat,
@@ -127,6 +197,7 @@ class SmartPlaylistService {
     'latin': Mood.upbeat,
     'hip hop': Mood.upbeat,
     'hip-hop': Mood.upbeat,
+    'hiphop': Mood.upbeat,
     'rap': Mood.upbeat,
     'k-pop': Mood.upbeat,
     'kpop': Mood.upbeat,
@@ -135,6 +206,7 @@ class SmartPlaylistService {
     'ska': Mood.upbeat,
     'motown': Mood.upbeat,
     'afrobeat': Mood.upbeat,
+    'afrobeats': Mood.upbeat,
     'salsa': Mood.upbeat,
     'samba': Mood.upbeat,
     'cumbia': Mood.upbeat,
@@ -142,14 +214,96 @@ class SmartPlaylistService {
     'electropop': Mood.upbeat,
     'synth-pop': Mood.upbeat,
     'synthpop': Mood.upbeat,
+    'synth pop': Mood.upbeat,
     'nu-disco': Mood.upbeat,
+    'nu disco': Mood.upbeat,
+    'dance-pop': Mood.upbeat,
+    'dance pop': Mood.upbeat,
+    'bubblegum': Mood.upbeat,
+    'teen pop': Mood.upbeat,
+    'euro': Mood.upbeat,
+    'eurodance': Mood.upbeat,
+    'eurobeat': Mood.upbeat,
+    'italo': Mood.upbeat,
+    'italo disco': Mood.upbeat,
+    'tropical': Mood.upbeat,
+    'reggaeton': Mood.upbeat,
+    'bachata': Mood.upbeat,
+    'merengue': Mood.upbeat,
+    'soca': Mood.upbeat,
+    'calypso': Mood.upbeat,
+    'party': Mood.upbeat,
+    'groove': Mood.upbeat,
+    'groovy': Mood.upbeat,
+    'happy': Mood.upbeat,
+    'uplifting': Mood.upbeat,
+    'dub': Mood.upbeat,
+    'roots': Mood.upbeat,
+    'swing': Mood.upbeat,
+    'big band': Mood.upbeat,
+    'boogie': Mood.upbeat,
   };
 
-  /// Get the mood for a given genre (case-insensitive)
+
+  /// Regular expression to split genres into words
+  /// Handles: spaces, slashes, ampersands, commas, hyphens, parentheses
+  static final _wordSplitRegex = RegExp(r'[\s/&,\-\(\)]+');
+
+  /// Get the mood for a given genre (case-insensitive, multi-strategy matching)
+  /// 
+  /// Matching strategies (in order of priority):
+  /// 1. Exact match - fastest, e.g., "rock" matches "rock"
+  /// 2. Substring match - e.g., "Indie Pop" contains "indie"
+  /// 3. Word tokenization - splits genre into words and matches each
+  ///    e.g., "Progressive/Death/Metal" → ["progressive", "death", "metal"] → matches "metal"
   Mood? getMoodForGenre(String genre) {
     final normalized = genre.toLowerCase().trim();
-    return _genreMoodMap[normalized];
+    
+    // Strategy 1: Exact match (fastest)
+    final exactMatch = _genreMoodMap[normalized];
+    if (exactMatch != null) return exactMatch;
+    
+    // Strategy 2: Substring matching
+    // Sort by length descending to prioritize longer, more specific matches
+    // e.g., "hip hop" should match before "hip" would
+    final sortedKeys = _genreMoodMap.keys.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    
+    for (final keyword in sortedKeys) {
+      if (normalized.contains(keyword)) {
+        return _genreMoodMap[keyword];
+      }
+    }
+    
+    // Strategy 3: Word tokenization
+    // Split the genre into individual words and check each
+    // Handles: "Rock/Pop", "Rock & Roll", "Progressive Death Metal", etc.
+    final words = normalized
+        .split(_wordSplitRegex)
+        .where((w) => w.isNotEmpty && w.length > 2) // Skip empty and very short words
+        .toList();
+    
+    if (words.length > 1) {
+      // Check each word against the keywords (longer keywords first)
+      for (final keyword in sortedKeys) {
+        // For multi-word keywords, check if all words are present
+        if (keyword.contains(' ')) {
+          final keywordWords = keyword.split(' ');
+          if (keywordWords.every((kw) => words.contains(kw))) {
+            return _genreMoodMap[keyword];
+          }
+        } else {
+          // Single-word keyword - check if it's in the word list
+          if (words.contains(keyword)) {
+            return _genreMoodMap[keyword];
+          }
+        }
+      }
+    }
+    
+    return null;
   }
+
 
   /// Try to detect mood from tags (preferred over genre mapping)
   /// Looks for mood-related keywords in the track's tags

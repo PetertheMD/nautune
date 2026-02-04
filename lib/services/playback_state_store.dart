@@ -158,6 +158,8 @@ class PlaybackStateStore {
     int? customPrimaryColor,
     int? customSecondaryColor,
     int? customAccentColor,
+    int? customSurfaceColor,
+    int? customTextSecondaryColor,
     bool? customThemeIsLight,
     bool? visualizerEnabled,
     VisualizerType? visualizerType,
@@ -168,6 +170,8 @@ class PlaybackStateStore {
     int? gridSize,
     bool? useListMode,
     NowPlayingLayout? nowPlayingLayout,
+    bool? artistGroupingEnabled,
+    bool? showingVisualizerOverArtwork,
   }) async {
     await update((state) {
       final mergedOffsets = Map<String, double>.from(state.scrollOffsets);
@@ -193,6 +197,8 @@ class PlaybackStateStore {
         customPrimaryColor: customPrimaryColor ?? state.customPrimaryColor,
         customSecondaryColor: customSecondaryColor ?? state.customSecondaryColor,
         customAccentColor: customAccentColor ?? state.customAccentColor,
+        customSurfaceColor: customSurfaceColor ?? state.customSurfaceColor,
+        customTextSecondaryColor: customTextSecondaryColor ?? state.customTextSecondaryColor,
         customThemeIsLight: customThemeIsLight ?? state.customThemeIsLight,
         visualizerEnabled: visualizerEnabled ?? state.visualizerEnabled,
         visualizerType: visualizerType ?? state.visualizerType,
@@ -203,6 +209,8 @@ class PlaybackStateStore {
         gridSize: gridSize ?? state.gridSize,
         useListMode: useListMode ?? state.useListMode,
         nowPlayingLayout: nowPlayingLayout ?? state.nowPlayingLayout,
+        artistGroupingEnabled: artistGroupingEnabled ?? state.artistGroupingEnabled,
+        showingVisualizerOverArtwork: showingVisualizerOverArtwork ?? state.showingVisualizerOverArtwork,
       );
     });
   }

@@ -835,12 +835,15 @@ class JellyfinClient {
     JellyfinCredentials credentials, {
     required String artistId,
     int limit = 50,
+    String sortBy = 'Random',
+    String sortOrder = 'Ascending',
   }) async {
     final uri = _buildUri('/Users/${credentials.userId}/Items', {
       'ArtistIds': artistId,
       'IncludeItemTypes': 'Audio',
       'Recursive': 'true',
-      'SortBy': 'Random',
+      'SortBy': sortBy,
+      'SortOrder': sortOrder,
       'Limit': '$limit',
       'Fields': 'Album,AlbumId,AlbumPrimaryImageTag,ParentThumbImageTag,Artists,RunTimeTicks,ImageTags,IndexNumber,ParentIndexNumber,MediaStreams,Tags',
     });

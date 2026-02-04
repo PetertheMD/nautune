@@ -38,6 +38,9 @@ import 'providers/session_provider.dart';
 import 'repositories/music_repository.dart';
 import 'repositories/repository_factory.dart';
 
+// Import artist grouping utility
+import 'utils/artist_grouping.dart';
+
 class NautuneAppState extends ChangeNotifier {
   NautuneAppState({
     required JellyfinService jellyfinService,
@@ -108,6 +111,34 @@ class NautuneAppState extends ChangeNotifier {
     // Listen to session provider changes (Bridge for Phase 2)
     _sessionProvider?.addListener(_onSessionChanged);
     _onSessionChanged(); // Sync initial state
+
+    // Load persisted UI settings
+    scheduleMicrotask(() async {
+      try {
+        final state = await _playbackStateStore.load();
+        if (state != null) {
+          _showVolumeBar = state.showVolumeBar;
+          _crossfadeEnabled = state.crossfadeEnabled;
+          _crossfadeDurationSeconds = state.crossfadeDurationSeconds;
+          _infiniteRadioEnabled = state.infiniteRadioEnabled;
+          _gaplessPlaybackEnabled = state.gaplessPlaybackEnabled;
+          _cacheTtlMinutes = state.cacheTtlMinutes;
+          _streamingQuality = state.streamingQuality;
+          _visualizerEnabled = state.visualizerEnabled;
+          _visualizerType = state.visualizerType;
+          _visualizerPosition = state.visualizerPosition;
+          _nowPlayingLayout = state.nowPlayingLayout;
+          _showingVisualizerOverArtwork = state.showingVisualizerOverArtwork;
+          _useListMode = state.useListMode; // Load list mode setting
+          _artistGroupingEnabled = state.artistGroupingEnabled; // Load artist grouping setting
+          _restoredLibraryTabIndex = state.libraryTabIndex;
+          _libraryScrollOffsets = Map<String, double>.from(state.scrollOffsets);
+          notifyListeners();
+        }
+      } catch (e) {
+        debugPrint('Error loading UI state: $e');
+      }
+    });
   }
 
   final JellyfinService _jellyfinService;
@@ -144,6 +175,9 @@ class NautuneAppState extends ChangeNotifier {
   VisualizerType _visualizerType = VisualizerType.bioluminescent; // Current visualizer style
   VisualizerPosition _visualizerPosition = VisualizerPosition.controlsBar; // Where visualizer is displayed
   NowPlayingLayout _nowPlayingLayout = NowPlayingLayout.classic; // Now Playing screen layout
+  bool _useListMode = false; // Persistent setting for album list/grid mode
+  bool _artistGroupingEnabled = false; // Group artists like "Artist" and "Artist feat. X"
+  bool _showingVisualizerOverArtwork = false; // Persistent visualizer toggle for album art position
   StreamSubscription? _powerModeSub;
   SortOption _albumSortBy = SortOption.name;
   SortOrder _albumSortOrder = SortOrder.ascending;
@@ -361,7 +395,14 @@ class NautuneAppState extends ChangeNotifier {
   bool get hasMoreAlbums => _hasMoreAlbums;
   bool get isLoadingArtists => _isLoadingArtists;
   Object? get artistsError => _artistsError;
-  List<JellyfinArtist>? get artists => _artists;
+  /// Returns artists, grouped if [artistGroupingEnabled] is true.
+  List<JellyfinArtist>? get artists {
+    if (_artists == null) return null;
+    if (!_artistGroupingEnabled) return _artists;
+    return ArtistGrouping.groupArtists(_artists!);
+  }
+  /// Returns the raw, ungrouped artists list.
+  List<JellyfinArtist>? get rawArtists => _artists;
   bool get isLoadingMoreArtists => _isLoadingMoreArtists;
   bool get hasMoreArtists => _hasMoreArtists;
   bool get isLoadingPlaylists => _isLoadingPlaylists;
@@ -419,6 +460,9 @@ class NautuneAppState extends ChangeNotifier {
   VisualizerType get visualizerType => _visualizerType;
   VisualizerPosition get visualizerPosition => _visualizerPosition;
   NowPlayingLayout get nowPlayingLayout => _nowPlayingLayout;
+  bool get useListMode => _useListMode;
+  bool get artistGroupingEnabled => _artistGroupingEnabled;
+  bool get showingVisualizerOverArtwork => _showingVisualizerOverArtwork;
   Duration get cacheTtl => Duration(minutes: _cacheTtlMinutes);
   SortOption get albumSortBy => _albumSortBy;
   SortOrder get albumSortOrder => _albumSortOrder;
@@ -752,6 +796,47 @@ class NautuneAppState extends ChangeNotifier {
       nowPlayingLayout: layout,
     ));
     debugPrint('🎨 Now Playing layout set to: ${layout.label}');
+  }
+
+  /// Set album list/grid mode preference
+  void setUseListMode(bool useListMode) {
+    if (_useListMode == useListMode) return;
+    _useListMode = useListMode;
+    notifyListeners();
+
+    unawaited(_playbackStateStore.saveUiState(
+      useListMode: useListMode,
+    ));
+    debugPrint('🎨 Album view mode set to: ${useListMode ? 'List' : 'Grid'}');
+  }
+
+  /// Set showing visualizer over artwork preference
+  void setShowingVisualizerOverArtwork(bool showing) {
+    if (_showingVisualizerOverArtwork == showing) return;
+    _showingVisualizerOverArtwork = showing;
+    notifyListeners();
+
+    unawaited(_playbackStateStore.saveUiState(
+      showingVisualizerOverArtwork: showing,
+    ));
+    debugPrint('🎨 Visualizer over artwork set to: $showing');
+  }
+
+  /// Set artist grouping preference (combines "Artist" with "Artist feat. X", etc.)
+  void setArtistGroupingEnabled(bool enabled) {
+    if (_artistGroupingEnabled == enabled) return;
+    _artistGroupingEnabled = enabled;
+    notifyListeners();
+
+    unawaited(_playbackStateStore.saveUiState(
+      artistGroupingEnabled: enabled,
+    ));
+    debugPrint('👥 Artist grouping ${enabled ? 'enabled' : 'disabled'}');
+    
+    // Refresh artists to apply/remove grouping
+    if (_session?.selectedLibraryId != null) {
+      _loadArtistsForSelectedLibrary(forceRefresh: true);
+    }
   }
 
   /// Set pre-cache track count for smart caching

@@ -155,7 +155,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
+
               ],
+              ListTile(
+                leading: Icon(Icons.group, color: theme.colorScheme.primary),
+                title: const Text('Artist Grouping'),
+                subtitle: Text(
+                  appState.artistGroupingEnabled
+                      ? 'Combine "Artist" with "Artist feat. X"'
+                      : 'Show all artists separately',
+                ),
+                trailing: Switch(
+                  value: appState.artistGroupingEnabled,
+                  onChanged: (value) {
+                    appState.setArtistGroupingEnabled(value);
+                  },
+                ),
+              ),
               ListTile(
                 leading: Icon(Icons.waves, color: theme.colorScheme.primary),
                 title: const Text('Audio Visualizer'),
@@ -712,16 +728,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         customPrimaryColor: themeProvider.customPrimaryColor,
         customSecondaryColor: themeProvider.customSecondaryColor,
         customAccentColor: themeProvider.customAccentColor,
+        customSurfaceColor: themeProvider.customSurfaceColor,
+        customTextSecondaryColor: themeProvider.customTextSecondaryColor,
         customIsLight: themeProvider.customIsLight,
         onSelectPreset: (palette) {
           themeProvider.setPalette(palette);
           Navigator.pop(context);
         },
-        onSelectCustom: (primary, secondary, accent, isLight) {
+        onSelectCustom: (primary, secondary, accent, surface, textSecondary, isLight) {
           themeProvider.setCustomColors(
             primary: primary,
             secondary: secondary,
             accent: accent,
+            surface: surface,
+            textSecondary: textSecondary,
             isLight: isLight,
           );
           Navigator.pop(context);
@@ -2126,15 +2146,19 @@ class _ThemePickerSheet extends StatefulWidget {
   final Color? customPrimaryColor;
   final Color? customSecondaryColor;
   final Color? customAccentColor;
+  final Color? customSurfaceColor;
+  final Color? customTextSecondaryColor;
   final bool customIsLight;
   final ValueChanged<NautuneColorPalette> onSelectPreset;
-  final void Function(Color primary, Color secondary, Color accent, bool isLight) onSelectCustom;
+  final void Function(Color primary, Color secondary, Color accent, Color surface, Color textSecondary, bool isLight) onSelectCustom;
 
   const _ThemePickerSheet({
     required this.currentPalette,
     required this.customPrimaryColor,
     required this.customSecondaryColor,
     required this.customAccentColor,
+    required this.customSurfaceColor,
+    required this.customTextSecondaryColor,
     required this.customIsLight,
     required this.onSelectPreset,
     required this.onSelectCustom,
@@ -2149,8 +2173,10 @@ class _ThemePickerSheetState extends State<_ThemePickerSheet> {
   late Color _primaryColor;
   late Color _secondaryColor;
   late Color _accentColor;
+  late Color _surfaceColor;
+  late Color _textSecondaryColor;
   late bool _isLightTheme;
-  int _editingColor = 0;  // 0=primary, 1=secondary, 2=accent
+  int _editingColor = 0;  // 0=primary, 1=secondary, 2=accent, 3=surface, 4=textSecondary
 
   @override
   void initState() {
@@ -2158,6 +2184,8 @@ class _ThemePickerSheetState extends State<_ThemePickerSheet> {
     _primaryColor = widget.customPrimaryColor ?? const Color(0xFF6B21A8);
     _secondaryColor = widget.customSecondaryColor ?? const Color(0xFF9333EA);
     _accentColor = widget.customAccentColor ?? const Color(0xFF409CFF);
+    _surfaceColor = widget.customSurfaceColor ?? const Color(0xFF1A1A2E);
+    _textSecondaryColor = widget.customTextSecondaryColor ?? const Color(0xFF8B9DC3);
     _isLightTheme = widget.customIsLight;
   }
 
@@ -2275,35 +2303,46 @@ class _ThemePickerSheetState extends State<_ThemePickerSheet> {
         const SizedBox(height: 16),
 
         // Color selection tabs
-        Row(
-          children: [
-            Expanded(
-              child: _ColorSelectionButton(
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _ColorSelectionButton(
                 label: 'Primary',
                 color: _primaryColor,
                 isSelected: _editingColor == 0,
                 onTap: () => setState(() => _editingColor = 0),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ColorSelectionButton(
+              const SizedBox(width: 8),
+              _ColorSelectionButton(
                 label: 'Secondary',
                 color: _secondaryColor,
                 isSelected: _editingColor == 1,
                 onTap: () => setState(() => _editingColor = 1),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ColorSelectionButton(
+              const SizedBox(width: 8),
+              _ColorSelectionButton(
                 label: 'Accent',
                 color: _accentColor,
                 isSelected: _editingColor == 2,
                 onTap: () => setState(() => _editingColor = 2),
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              _ColorSelectionButton(
+                label: 'Surface',
+                color: _surfaceColor,
+                isSelected: _editingColor == 3,
+                onTap: () => setState(() => _editingColor = 3),
+              ),
+              const SizedBox(width: 8),
+              _ColorSelectionButton(
+                label: 'Text Sec.',
+                color: _textSecondaryColor,
+                isSelected: _editingColor == 4,
+                onTap: () => setState(() => _editingColor = 4),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
 
@@ -2312,15 +2351,25 @@ class _ThemePickerSheetState extends State<_ThemePickerSheet> {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: HueRingPicker(
-              pickerColor: _editingColor == 0 ? _primaryColor : (_editingColor == 1 ? _secondaryColor : _accentColor),
+              pickerColor: _editingColor == 0 
+                  ? _primaryColor 
+                  : (_editingColor == 1 
+                      ? _secondaryColor 
+                      : (_editingColor == 2 
+                          ? _accentColor 
+                          : (_editingColor == 3 ? _surfaceColor : _textSecondaryColor))),
               onColorChanged: (color) {
                 setState(() {
                   if (_editingColor == 0) {
                     _primaryColor = color;
                   } else if (_editingColor == 1) {
                     _secondaryColor = color;
-                  } else {
+                  } else if (_editingColor == 2) {
                     _accentColor = color;
+                  } else if (_editingColor == 3) {
+                    _surfaceColor = color;
+                  } else {
+                    _textSecondaryColor = color;
                   }
                 });
               },
@@ -2337,9 +2386,7 @@ class _ThemePickerSheetState extends State<_ThemePickerSheet> {
         Container(
           height: 80,
           decoration: BoxDecoration(
-            color: _isLightTheme
-                ? Color.lerp(Colors.white, _primaryColor, 0.03)
-                : HSLColor.fromColor(_primaryColor).withLightness(0.08).toColor(),
+            color: _surfaceColor,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: _primaryColor, width: 2),
           ),
@@ -2372,7 +2419,14 @@ class _ThemePickerSheetState extends State<_ThemePickerSheet> {
           width: double.infinity,
           child: FilledButton.icon(
             onPressed: () {
-              widget.onSelectCustom(_primaryColor, _secondaryColor, _accentColor, _isLightTheme);
+              widget.onSelectCustom(
+                _primaryColor, 
+                _secondaryColor, 
+                _accentColor, 
+                _surfaceColor, 
+                _textSecondaryColor, 
+                _isLightTheme
+              );
             },
             icon: const Icon(Icons.check),
             label: const Text('Apply Custom Theme'),

@@ -1008,11 +1008,13 @@ class AudioPlayerService {
     final clampedIndex = state.currentQueueIndex.clamp(0, queue.length - 1);
     final track = queue[clampedIndex];
 
+    // Always initialize paused - user must explicitly tap play
     await playTrack(
       track,
       queueContext: queue,
       reorderQueue: false,
       fromShuffle: state.shuffleEnabled,
+      autoPlay: false,
     );
 
     if (state.positionMs > 0) {
@@ -1020,9 +1022,9 @@ class AudioPlayerService {
       await seek(position);
     }
 
-    if (!state.isPlaying) {
-      await pause();
-    }
+    // Ensure we are in paused state (UI expects this)
+    _playingController.add(false);
+    _emitIdleVisualizer();
   }
   
   Future<void> playTrack(
@@ -1032,6 +1034,7 @@ class AudioPlayerService {
     String? albumName,
     bool reorderQueue = false,
     bool fromShuffle = false,
+    bool autoPlay = true,
   }) async {
     // Reset FFT URL tracking to ensure new track gets fresh FFT setup
     if (Platform.isIOS) {
@@ -1204,7 +1207,9 @@ class AudioPlayerService {
            debugPrint('🔊 Applied ReplayGain: ${track.normalizationGain} dB');
         }
         
-        await _player.resume();
+        if (autoPlay) {
+           await _player.resume();
+        }
     }
 
     try {
@@ -1214,7 +1219,7 @@ class AudioPlayerService {
       await applySourceAndPlay();
 
       // Report playback start to Jellyfin (only for real Jellyfin tracks)
-      if (_reportingService != null && track.serverUrl != null) {
+      if (autoPlay && _reportingService != null && track.serverUrl != null) {
         debugPrint('🎵 Reporting playback start to Jellyfin: ${track.name}');
         await _reportingService?.reportPlaybackStart(
           track,
@@ -1223,22 +1228,26 @@ class AudioPlayerService {
         );
       }
 
-      _lastPlayingState = true;
+      if (autoPlay) {
+        _lastPlayingState = true;
+      }
 
       // iOS FFT: Use local file immediately, or cache streaming track first
       if (Platform.isIOS) {
         if (isLocalFile) {
           // Local file - start FFT immediately
           await IOSFFTService.instance.setAudioUrl('file://$activeUrl');
-          await IOSFFTService.instance.startCapture();
+          if (autoPlay) {
+            await IOSFFTService.instance.startCapture();
+          }
         } else {
           // Streaming - cache in background (same quality as playback), then start FFT
-          _cacheTrackForIOSFFT(track, activeUrl);
+          _cacheTrackForIOSFFT(track, activeUrl, autoPlay: autoPlay);
         }
       }
 
       // Linux FFT: PulseAudio captures system audio directly (no file path needed)
-      if (Platform.isLinux) {
+      if (Platform.isLinux && autoPlay) {
         PulseAudioFFTService.instance.startCapture();
       }
 
@@ -1267,14 +1276,16 @@ class AudioPlayerService {
           await applySourceAndPlay();
 
           // Report transcoded playback (only for real Jellyfin tracks)
-          if (_reportingService != null && track.serverUrl != null) {
+          if (autoPlay && _reportingService != null && track.serverUrl != null) {
             await _reportingService?.reportPlaybackStart(
               track,
               playMethod: 'Transcode',
               sessionId: sessionId,
             );
           }
-          _lastPlayingState = true;
+          if (autoPlay) {
+            _lastPlayingState = true;
+          }
           // No iOS FFT for streaming - would double bandwidth
         } else {
           rethrow;
@@ -1289,7 +1300,7 @@ class AudioPlayerService {
       position: Duration.zero,
       queue: _queue,
       currentQueueIndex: _currentIndex,
-      isPlaying: true,
+      isPlaying: autoPlay,
       repeatMode: _repeatMode.name,
       shuffleEnabled: _isShuffleEnabled,
     );
@@ -1359,6 +1370,14 @@ class AudioPlayerService {
   
   Future<void> resume() async {
     HapticService.lightTap();
+
+    // Ensure visualizer capture is active (crucial for Linux/iOS real-time FFT)
+    if (Platform.isLinux) {
+      PulseAudioFFTService.instance.startCapture();
+    } else if (Platform.isIOS) {
+      unawaited(IOSFFTService.instance.startCapture());
+    }
+
     await _resumeAndFadeIn();
     await _stateStore.savePlaybackSnapshot(isPlaying: true);
   }
@@ -1493,7 +1512,7 @@ class AudioPlayerService {
   /// Cache streaming track for iOS FFT visualization.
   /// Once cached, starts FFT from local file and syncs to current position.
   /// Uses the same [streamUrl] as playback to match transcoding quality.
-  void _cacheTrackForIOSFFT(JellyfinTrack track, String streamUrl) {
+  void _cacheTrackForIOSFFT(JellyfinTrack track, String streamUrl, {bool autoPlay = true}) {
     if (!Platform.isIOS) return;
 
     final trackId = track.id;
@@ -1523,7 +1542,9 @@ class AudioPlayerService {
       final currentPosMs = _lastPosition.inMilliseconds.toDouble() / 1000.0;
       await IOSFFTService.instance.syncPosition(currentPosMs);
 
-      await IOSFFTService.instance.startCapture();
+      if (autoPlay) {
+        await IOSFFTService.instance.startCapture();
+      }
 
       // Sync again after a short delay to ensure accuracy
       await Future.delayed(const Duration(milliseconds: 100));

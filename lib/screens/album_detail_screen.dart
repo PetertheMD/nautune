@@ -72,9 +72,9 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
   bool? _previousNetworkAvailable;
   bool _hasInitialized = false;
 
-  // Track popularity data from ListenBrainz (recording MBID -> listen count)
-  Map<String, int>? _trackPopularities;
-  static const int _popularityThreshold = 1000;
+  // Hot track IDs matched from artist's top tracks (Jellyfin track ID -> rank)
+  Map<String, int> _hotTrackRanks = {};
+  Set<String> get _hotTrackIds => _hotTrackRanks.keys.toSet();
 
   @override
   void initState() {
@@ -240,7 +240,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
           _isLoading = false;
         });
         // Load track popularities in background (non-blocking)
-        _loadTrackPopularities(sorted);
+        _loadHotTracks(sorted);
       }
     } catch (error) {
       if (mounted) {
@@ -252,40 +252,88 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
     }
   }
 
-  Future<void> _loadTrackPopularities(List<JellyfinTrack> tracks) async {
-    // Skip if offline or no network
+  Future<void> _loadHotTracks(List<JellyfinTrack> tracks) async {
+    // Skip if offline, no network, or album has 3 or fewer tracks
     if (_appState == null || _appState!.isOfflineMode || !_appState!.networkAvailable) {
       return;
     }
-
-    // Collect MBIDs from tracks
-    final mbids = <String>[];
-    for (final track in tracks) {
-      final mbid = track.providerIds?['MusicBrainzTrack'];
-      if (mbid != null && mbid.isNotEmpty) {
-        mbids.add(mbid);
-      }
+    if (tracks.length <= 3) {
+      debugPrint('AlbumDetailScreen: Album has ${tracks.length} tracks, skipping hot track check');
+      return;
     }
 
-    if (mbids.isEmpty) {
-      debugPrint('AlbumDetailScreen: No MusicBrainz IDs for tracks');
+    // Get artist ID from album
+    final artistIds = widget.album.artistIds;
+    if (artistIds.isEmpty) {
+      debugPrint('AlbumDetailScreen: No artist IDs for album');
       return;
     }
 
     try {
+      // Fetch the first artist's details to get their MusicBrainz ID
+      final artistId = artistIds.first;
+      final artist = await _appState!.jellyfinService.getArtist(artistId);
+
+      if (artist == null) {
+        debugPrint('AlbumDetailScreen: Could not fetch artist $artistId');
+        return;
+      }
+
+      final artistMbid = artist.providerIds?['MusicBrainzArtist'];
+
+      if (artistMbid == null || artistMbid.isEmpty) {
+        debugPrint('AlbumDetailScreen: Artist ${artist.name} has no MusicBrainz ID');
+        return;
+      }
+
+      debugPrint('AlbumDetailScreen: Fetching top tracks for artist ${artist.name} (MBID: $artistMbid)');
+
+      // Fetch artist's top tracks from ListenBrainz (get more to increase match chance)
       final listenbrainz = ListenBrainzService();
-      final popularities = await listenbrainz.getRecordingPopularities(
-        recordingMbids: mbids,
+      final popularTracks = await listenbrainz.getArtistTopTracks(
+        artistMbid: artistMbid,
+        limit: 50,
       );
 
-      if (mounted && popularities.isNotEmpty) {
+      if (popularTracks.isEmpty) {
+        debugPrint('AlbumDetailScreen: No popular tracks found for artist');
+        return;
+      }
+
+      debugPrint('AlbumDetailScreen: Got ${popularTracks.length} popular tracks, matching to album...');
+
+      // Match popular tracks to album tracks by name (fuzzy matching)
+      final hotRanks = <String, int>{};
+      for (int rank = 0; rank < popularTracks.length && hotRanks.length < 3; rank++) {
+        final pop = popularTracks[rank];
+        final popNameLower = pop.recordingName.toLowerCase().trim();
+
+        for (final track in tracks) {
+          if (hotRanks.containsKey(track.id)) continue; // Already matched
+
+          final trackNameLower = track.name.toLowerCase().trim();
+
+          // Fuzzy name matching
+          final nameMatch = trackNameLower == popNameLower ||
+              trackNameLower.contains(popNameLower) ||
+              popNameLower.contains(trackNameLower);
+
+          if (nameMatch) {
+            hotRanks[track.id] = rank + 1; // 1-indexed rank
+            debugPrint('AlbumDetailScreen: 🔥 Matched "${track.name}" as hot track #${rank + 1}');
+            break;
+          }
+        }
+      }
+
+      if (mounted && hotRanks.isNotEmpty) {
         setState(() {
-          _trackPopularities = popularities;
+          _hotTrackRanks = hotRanks;
         });
-        debugPrint('AlbumDetailScreen: Loaded popularities for ${popularities.length} tracks');
+        debugPrint('AlbumDetailScreen: Marked ${hotRanks.length} hot tracks');
       }
     } catch (e) {
-      debugPrint('AlbumDetailScreen: Error loading track popularities: $e');
+      debugPrint('AlbumDetailScreen: Error loading hot tracks: $e');
     }
   }
 
@@ -617,89 +665,103 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
           else
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final currentTracks = tracks;
-                    if (index >= currentTracks.length) {
-                      return const SizedBox.shrink();
-                    }
-                    final track = currentTracks[index];
-                    final discKey = track.discNumber ?? 1;
-                    final tracksBeforeDisc = currentTracks
-                        .take(index)
-                        .where((t) => (t.discNumber ?? 1) == discKey)
-                        .length;
-                    final fallbackNumber = tracksBeforeDisc + 1;
-                    final trackNumber =
-                        track.effectiveTrackNumber(fallbackNumber);
-                    final displayNumber =
-                        trackNumber.toString().padLeft(2, '0');
-                    final previousDisc = index == 0
-                        ? null
-                        : (currentTracks[index - 1].discNumber ?? 1);
-                    final showDiscHeader = hasMultipleDiscs &&
-                        (index == 0 || discKey != previousDisc);
+              sliver: Builder(
+                builder: (context) {
+                  // Determine the flame color from palette
+                  Color? flameColor;
+                  if (_paletteColors != null && _paletteColors!.isNotEmpty) {
+                    // Use a warm/bright color from the palette - pick from the brighter end
+                    // Palette is sorted dark to bright, so pick from the middle-bright range
+                    final brightIndex = (_paletteColors!.length * 2 ~/ 3).clamp(0, _paletteColors!.length - 1);
+                    flameColor = _paletteColors![brightIndex];
+                  }
 
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (showDiscHeader) ...[
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              top: 16,
-                              bottom: 8,
-                              left: 8,
-                            ),
-                            child: Text(
-                              'Disc $discKey',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                color:
-                                    theme.colorScheme.onSurfaceVariant,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                        _TrackTile(
-                          track: track,
-                          displayTrackNumber: displayNumber,
-                          appState: _appState!,
-                          listenCount: _trackPopularities?[track.providerIds?['MusicBrainzTrack']],
-                          popularityThreshold: _popularityThreshold,
-                          onTap: () async {
-                            try {
-                              await _appState!.audioPlayerService
-                                  .playTrack(
-                                track,
-                                queueContext: currentTracks,
-                                albumId: widget.album.id,
-                                albumName: widget.album.name,
-                              );
-                            } catch (error) {
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Could not start playback: $error'),
-                                  duration: const Duration(seconds: 3),
+                  return SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final currentTracks = tracks;
+                        if (index >= currentTracks.length) {
+                          return const SizedBox.shrink();
+                        }
+                        final track = currentTracks[index];
+                        final discKey = track.discNumber ?? 1;
+                        final tracksBeforeDisc = currentTracks
+                            .take(index)
+                            .where((t) => (t.discNumber ?? 1) == discKey)
+                            .length;
+                        final fallbackNumber = tracksBeforeDisc + 1;
+                        final trackNumber =
+                            track.effectiveTrackNumber(fallbackNumber);
+                        final displayNumber =
+                            trackNumber.toString().padLeft(2, '0');
+                        final previousDisc = index == 0
+                            ? null
+                            : (currentTracks[index - 1].discNumber ?? 1);
+                        final showDiscHeader = hasMultipleDiscs &&
+                            (index == 0 || discKey != previousDisc);
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (showDiscHeader) ...[
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: 16,
+                                  bottom: 8,
+                                  left: 8,
                                 ),
-                              );
-                            }
-                          },
-                        ),
-                        if (index < currentTracks.length - 1)
-                          Divider(
-                            height: 1,
-                            thickness: 0.5,
-                            indent: 72,
-                            endIndent: 16,
-                            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
-                          ),
-                      ],
-                    );
-                  },
-                  childCount: tracks.length,
-                ),
+                                child: Text(
+                                  'Disc $discKey',
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    color:
+                                        theme.colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            _TrackTile(
+                              track: track,
+                              displayTrackNumber: displayNumber,
+                              appState: _appState!,
+                              isHotTrack: _hotTrackIds.contains(track.id),
+                              hotRank: _hotTrackRanks[track.id],
+                              flameColor: flameColor,
+                              onTap: () async {
+                                try {
+                                  await _appState!.audioPlayerService
+                                      .playTrack(
+                                    track,
+                                    queueContext: currentTracks,
+                                    albumId: widget.album.id,
+                                    albumName: widget.album.name,
+                                  );
+                                } catch (error) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Could not start playback: $error'),
+                                      duration: const Duration(seconds: 3),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                            if (index < currentTracks.length - 1)
+                              Divider(
+                                height: 1,
+                                thickness: 0.5,
+                                indent: 72,
+                                endIndent: 16,
+                                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
+                              ),
+                          ],
+                        );
+                      },
+                      childCount: tracks.length,
+                    ),
+                  );
+                },
               ),
             ),
         ],
@@ -721,16 +783,18 @@ class _TrackTile extends StatelessWidget {
     required this.displayTrackNumber,
     required this.onTap,
     required this.appState,
-    this.listenCount,
-    this.popularityThreshold = 1000,
+    this.isHotTrack = false,
+    this.hotRank,
+    this.flameColor,
   });
 
   final JellyfinTrack track;
   final String displayTrackNumber;
   final VoidCallback onTap;
   final NautuneAppState appState;
-  final int? listenCount;
-  final int popularityThreshold;
+  final bool isHotTrack;
+  final int? hotRank;
+  final Color? flameColor;
 
   @override
   Widget build(BuildContext context) {
@@ -756,38 +820,64 @@ class _TrackTile extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
               child: Row(
                 children: [
+                  // Track number area with optional flame overlay
                   SizedBox(
                     width: 48,
-                    child: isPlayingTrack
-                        ? Icon(
-                            Icons.equalizer,
-                            color: theme.colorScheme.primary,
-                            size: 20,
-                          )
-                        : Text(
-                            displayTrackNumber,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.tertiary.withValues(alpha: 0.7),
-                              fontFeatures: const [ui.FontFeature.tabularFigures()],
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                  ),
-                  // Flame icon for popular tracks
-                  if (listenCount != null && listenCount! >= popularityThreshold)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Tooltip(
-                        message: '${_formatNumber(listenCount!)} plays on ListenBrainz',
-                        child: Icon(
-                          Icons.local_fire_department,
-                          size: 16,
-                          color: Colors.orange,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        // Track number or equalizer
+                        Center(
+                          child: isPlayingTrack
+                              ? Icon(
+                                  Icons.equalizer,
+                                  color: theme.colorScheme.primary,
+                                  size: 20,
+                                )
+                              : Text(
+                                  displayTrackNumber,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: theme.colorScheme.tertiary.withValues(alpha: 0.7),
+                                    fontFeatures: const [ui.FontFeature.tabularFigures()],
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
                         ),
-                      ),
-                    )
-                  else
-                    const SizedBox(width: 8),
+                        // Flame icon overlay for hot tracks (positioned top-right)
+                        if (isHotTrack)
+                          Positioned(
+                            right: -2,
+                            top: -8,
+                            child: Tooltip(
+                              message: hotRank != null
+                                  ? '🔥 #$hotRank popular overall'
+                                  : '🔥 Hot track',
+                              child: ShaderMask(
+                                shaderCallback: (bounds) {
+                                  final baseColor = flameColor ?? Colors.orange;
+                                  return LinearGradient(
+                                    begin: Alignment.bottomCenter,
+                                    end: Alignment.topCenter,
+                                    colors: [
+                                      baseColor,
+                                      Color.lerp(baseColor, Colors.yellow, 0.6) ?? Colors.orangeAccent,
+                                      Color.lerp(baseColor, Colors.white, 0.3) ?? Colors.amber,
+                                    ],
+                                    stops: const [0.0, 0.5, 1.0],
+                                  ).createShader(bounds);
+                                },
+                                blendMode: BlendMode.srcIn,
+                                child: const Icon(
+                                  Icons.local_fire_department,
+                                  size: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1112,15 +1202,6 @@ class _TrackTile extends StatelessWidget {
       return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
     }
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
-  }
-
-  String _formatNumber(int number) {
-    if (number >= 1000000) {
-      return '${(number / 1000000).toStringAsFixed(1)}M';
-    } else if (number >= 1000) {
-      return '${(number / 1000).toStringAsFixed(1)}K';
-    }
-    return number.toString();
   }
 }
 

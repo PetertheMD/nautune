@@ -29,6 +29,8 @@ class ThemeProvider extends ChangeNotifier {
   Color? _customPrimaryColor;
   Color? _customSecondaryColor;
   Color? _customAccentColor;
+  Color? _customSurfaceColor;
+  Color? _customTextSecondaryColor;
   bool _customIsLight = false;
 
   /// The currently selected color palette
@@ -48,6 +50,12 @@ class ThemeProvider extends ChangeNotifier {
 
   /// Custom accent color (null if not set)
   Color? get customAccentColor => _customAccentColor;
+
+  /// Custom surface color (null if not set)
+  Color? get customSurfaceColor => _customSurfaceColor;
+
+  /// Custom text secondary color (null if not set)
+  Color? get customTextSecondaryColor => _customTextSecondaryColor;
 
   /// Whether custom theme is light mode
   bool get customIsLight => _customIsLight;
@@ -74,6 +82,12 @@ class ThemeProvider extends ChangeNotifier {
         if (storedState.customAccentColor != null) {
           _customAccentColor = Color(storedState.customAccentColor!);
         }
+        if (storedState.customSurfaceColor != null) {
+          _customSurfaceColor = Color(storedState.customSurfaceColor!);
+        }
+        if (storedState.customTextSecondaryColor != null) {
+          _customTextSecondaryColor = Color(storedState.customTextSecondaryColor!);
+        }
         _customIsLight = storedState.customThemeIsLight;
 
         // If using custom theme, rebuild it with stored colors
@@ -84,6 +98,8 @@ class ThemeProvider extends ChangeNotifier {
             primary: _customPrimaryColor!,
             secondary: _customSecondaryColor!,
             accent: _customAccentColor,
+            surface: _customSurfaceColor,
+            textSecondary: _customTextSecondaryColor,
             isLight: _customIsLight,
           );
           debugPrint('ThemeProvider: Restored custom palette');
@@ -131,17 +147,23 @@ class ThemeProvider extends ChangeNotifier {
     required Color primary,
     required Color secondary,
     Color? accent,
+    Color? surface,
+    Color? textSecondary,
     required bool isLight,
   }) {
     _customPrimaryColor = primary;
     _customSecondaryColor = secondary;
     _customAccentColor = accent;
+    _customSurfaceColor = surface;
+    _customTextSecondaryColor = textSecondary;
     _customIsLight = isLight;
 
     _currentPalette = NautuneColorPalette.custom(
       primary: primary,
       secondary: secondary,
       accent: accent,
+      surface: surface,
+      textSecondary: textSecondary,
       isLight: isLight,
     );
 
@@ -151,10 +173,12 @@ class ThemeProvider extends ChangeNotifier {
       customPrimaryColor: primary.toARGB32(),
       customSecondaryColor: secondary.toARGB32(),
       customAccentColor: accent?.toARGB32(),
+      customSurfaceColor: surface?.toARGB32(),
+      customTextSecondaryColor: textSecondary?.toARGB32(),
       customThemeIsLight: isLight,
     ));
 
-    debugPrint('ThemeProvider: Set custom colors (primary: $primary, secondary: $secondary, accent: $accent, light: $isLight)');
+    debugPrint('ThemeProvider: Set custom colors (primary: $primary, secondary: $secondary, accent: $accent, surface: $surface, mid: $textSecondary, light: $isLight)');
     notifyListeners();
   }
 
@@ -169,6 +193,8 @@ class ThemeProvider extends ChangeNotifier {
     _customPrimaryColor = null;
     _customSecondaryColor = null;
     _customAccentColor = null;
+    _customSurfaceColor = null;
+    _customTextSecondaryColor = null;
     super.dispose();
   }
 }

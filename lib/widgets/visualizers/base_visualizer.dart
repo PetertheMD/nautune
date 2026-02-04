@@ -1,9 +1,13 @@
 import 'dart:async' show StreamSubscription;
 import 'dart:io' show Platform;
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
 import '../../services/audio_player_service.dart';
 import '../../services/pulseaudio_fft_service.dart';
 import '../../services/ios_fft_service.dart';
+import '../../services/power_mode_service.dart';
 
 /// Abstract base class for all audio visualizers.
 /// Provides shared FFT subscription logic, animation control, and value smoothing.
@@ -24,7 +28,7 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
     with SingleTickerProviderStateMixin {
   late AnimationController animationController;
 
-  // Smoothed values (interpolate towards targets each frame)
+  // Smoothed values used by visualizers
   double smoothBass = 0.0;
   double smoothMid = 0.0;
   double smoothTreble = 0.0;
@@ -38,24 +42,35 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
   double _targetAmplitude = 0.0;
   List<double> _targetSpectrum = [];
 
-  // Frame rate throttling (30fps - smooth enough, good battery)
+  // Frame rate throttling
   DateTime _lastFrameTime = DateTime.now();
-  static const _frameInterval = Duration(milliseconds: 33); // ~30fps
+  static const _frameIntervalReal = Duration(milliseconds: 16);
+  static const _frameIntervalFallback = Duration(milliseconds: 33);
 
-  // Cached values for frame skipping
   double lastPaintedTime = 0;
 
   StreamSubscription? _playingSubscription;
   StreamSubscription? _frequencySubscription;
   StreamSubscription? _fftSubscription;
+  StreamSubscription? _lowPowerModeSubscription;
+  
+  /// iOS Low Power Mode state (disables visualization when true)
+  bool _isLowPowerMode = false;
 
-  // Real FFT sources - check synchronously from singleton services
-  bool get usePulseAudioFFT => Platform.isLinux && PulseAudioFFTService.instance.isAvailable;
+  bool get usePulseAudioFFT =>
+      Platform.isLinux && PulseAudioFFTService.instance.isAvailable;
   bool get useIOSFFT => Platform.isIOS && IOSFFTService.instance.isAvailable;
   bool get useRealFFT => usePulseAudioFFT || useIOSFFT;
 
   /// Number of spectrum bars to use (subclasses can override)
   int get spectrumBarCount => 64;
+
+  // Frequency range for bar mapping (20Hz to 14kHz)
+  static const double _minHz = 20.0;
+  static const double _maxHz = 14000.0;
+
+  // Bar smoothing cache (fast attack/decay, very light to avoid latency).
+  List<double> _barEma = const [];
 
   @override
   void initState() {
@@ -67,28 +82,35 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
 
     _initFFTSource();
 
-    // Listen to playing state - start/stop animation only
     _playingSubscription = widget.audioService.playingStream.listen((playing) {
-      if (mounted) {
-        if (playing) {
-          animationController.repeat();
-        } else {
-          animationController.stop();
-        }
+      if (!mounted) return;
+      if (playing) {
+        animationController.repeat();
+      } else {
+        animationController.stop();
       }
     });
 
-    // Initial state
     if (widget.audioService.isPlaying) {
       animationController.repeat();
+    }
+    
+    // Listen for iOS Low Power Mode to disable visualizations
+    if (Platform.isIOS) {
+      _isLowPowerMode = PowerModeService.instance.isLowPowerMode;
+      _lowPowerModeSubscription = PowerModeService.instance.lowPowerModeStream.listen((lowPower) {
+        if (mounted) {
+          setState(() => _isLowPowerMode = lowPower);
+        }
+      });
     }
   }
 
   void _initFFTSource() {
-    // Subscribe to real FFT stream if available
+    // 1. Linux PulseAudio (Real FFT)
     if (usePulseAudioFFT) {
       _fftSubscription = PulseAudioFFTService.instance.fftStream.listen((fft) {
-        _targetBass = fft.bass;
+        _targetBass = fft.bass * 0.92;
         _targetMid = fft.mid;
         _targetTreble = fft.treble;
         _targetAmplitude = fft.amplitude;
@@ -97,32 +119,30 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
       return;
     }
 
+    // 2. iOS Native FFT
     if (useIOSFFT) {
       _fftSubscription = IOSFFTService.instance.fftStream.listen((fft) {
-        // iOS FFT values tend to be more elevated than Linux, scale down for visual parity
         const iosScale = 0.65;
         _targetBass = fft.bass * iosScale;
         _targetMid = fft.mid * iosScale;
         _targetTreble = fft.treble * iosScale;
         _targetAmplitude = fft.amplitude * iosScale;
-        // iOS FFT doesn't provide full spectrum, generate from bands
+        // Generate a simple spectrum from 3 bands
         _targetSpectrum = _generateFakeSpectrum(_targetBass, _targetMid, _targetTreble);
       });
       return;
     }
 
-    // Fallback: metadata-driven frequency bands
+    // 3. Fallback to basic frequency bands
     _frequencySubscription = widget.audioService.frequencyBandsStream.listen((bands) {
       _targetBass = bands.bass;
       _targetMid = bands.mid;
       _targetTreble = bands.treble;
       _targetAmplitude = ((bands.bass + bands.mid + bands.treble) / 3).clamp(0.0, 1.0);
-      // Generate fake spectrum from bands for fallback
       _targetSpectrum = _generateFakeSpectrum(bands.bass, bands.mid, bands.treble);
     });
   }
 
-  /// Generate a fake spectrum from frequency bands for fallback mode
   List<double> _generateFakeSpectrum(double bass, double mid, double treble) {
     final spectrum = <double>[];
     final count = spectrumBarCount;
@@ -132,14 +152,11 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
       double value;
 
       if (ratio < 0.2) {
-        // Bass region
         value = bass * (1.0 - ratio * 2);
       } else if (ratio < 0.6) {
-        // Mid region
         final midRatio = (ratio - 0.2) / 0.4;
         value = mid * (0.7 + 0.3 * (1.0 - (midRatio - 0.5).abs() * 2));
       } else {
-        // Treble region
         final trebleRatio = (ratio - 0.6) / 0.4;
         value = treble * (1.0 - trebleRatio * 0.5);
       }
@@ -155,32 +172,45 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
     _fftSubscription?.cancel();
     _frequencySubscription?.cancel();
     _playingSubscription?.cancel();
+    _lowPowerModeSubscription?.cancel();
     animationController.dispose();
     super.dispose();
   }
 
-  /// Update smoothed values with fast attack, slow decay
+  // Update and smooth values
   void updateSmoothedValues() {
     final now = DateTime.now();
-    if (now.difference(_lastFrameTime) < _frameInterval) return;
+    final frameInterval = useRealFFT ? _frameIntervalReal : _frameIntervalFallback;
+    if (now.difference(_lastFrameTime) < frameInterval) return;
     _lastFrameTime = now;
 
-    // Musical smoothing: FAST attack, SLOW decay
-    // iOS needs slower attack (values come in hot) and faster decay (they stay elevated)
-    final attackFactor = Platform.isIOS ? 0.4 : (useRealFFT ? 0.6 : 0.3);
-    final decayFactor = Platform.isIOS ? 0.35 : (useRealFFT ? 0.12 : 0.08);
+    if (useRealFFT) {
+      // Light band smoothing only
+      const attack = 0.75;
+      const decay = 0.35;
 
-    smoothBass += (_targetBass - smoothBass) *
-        (_targetBass > smoothBass ? attackFactor : decayFactor);
-    smoothMid += (_targetMid - smoothMid) *
-        (_targetMid > smoothMid ? attackFactor : decayFactor);
-    smoothTreble += (_targetTreble - smoothTreble) *
-        (_targetTreble > smoothTreble ? attackFactor : decayFactor);
-    smoothAmplitude += (_targetAmplitude - smoothAmplitude) *
-        (_targetAmplitude > smoothAmplitude ? attackFactor : decayFactor);
+      smoothBass += (_targetBass - smoothBass) * (_targetBass > smoothBass ? attack : decay);
+      smoothMid += (_targetMid - smoothMid) * (_targetMid > smoothMid ? attack : decay);
+      smoothTreble += (_targetTreble - smoothTreble) * (_targetTreble > smoothTreble ? attack : decay);
+      smoothAmplitude += (_targetAmplitude - smoothAmplitude) * (_targetAmplitude > smoothAmplitude ? attack : decay);
 
-    // Smooth spectrum values
-    _updateSmoothedSpectrum(attackFactor, decayFactor);
+      // Spectrum direct
+      smoothSpectrum = _targetSpectrum;
+    } else {
+      final attackFactor = Platform.isIOS ? 0.4 : 0.3;
+      final decayFactor = Platform.isIOS ? 0.35 : 0.08;
+
+      smoothBass += (_targetBass - smoothBass) *
+          (_targetBass > smoothBass ? attackFactor : decayFactor);
+      smoothMid += (_targetMid - smoothMid) *
+          (_targetMid > smoothMid ? attackFactor : decayFactor);
+      smoothTreble += (_targetTreble - smoothTreble) *
+          (_targetTreble > smoothTreble ? attackFactor : decayFactor);
+      smoothAmplitude += (_targetAmplitude - smoothAmplitude) *
+          (_targetAmplitude > smoothAmplitude ? attackFactor : decayFactor);
+
+      _updateSmoothedSpectrum(attackFactor, decayFactor);
+    }
 
     lastPaintedTime = animationController.value * 10;
   }
@@ -188,7 +218,6 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
   void _updateSmoothedSpectrum(double attackFactor, double decayFactor) {
     if (_targetSpectrum.isEmpty) return;
 
-    // Ensure smoothSpectrum has correct size
     if (smoothSpectrum.length != _targetSpectrum.length) {
       smoothSpectrum = List<double>.filled(_targetSpectrum.length, 0.0);
     }
@@ -201,60 +230,112 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
     }
   }
 
-  /// Get interpolated spectrum values for the specified number of bars
-  /// Values are boosted for more dramatic visualization
+  // Get smoothed bars for visualization
+  // Uses log-frequency spacing for a natural look
   List<double> getSpectrumBars(int barCount) {
+    if (barCount <= 0) return const [];
+
     if (smoothSpectrum.isEmpty) {
-      // Fallback: generate bars from bass/mid/treble when no spectrum available
       return _generateBarsFromBands(barCount);
     }
 
-    final bars = <double>[];
-    final spectrumLength = smoothSpectrum.length;
+    if (_barEma.length != barCount) {
+      _barEma = List<double>.filled(barCount, 0.0);
+    }
+
+    final rawBars = _buildLogFrequencyBarsFromSpectrum(
+      spectrum: smoothSpectrum,
+      barCount: barCount,
+      minHz: _minHz,
+      maxHz: _maxHz,
+    );
+
+    // Very light smoothing to avoid shimmer (doesn't add much latency)
+    final attack = useRealFFT ? 0.55 : 0.40;
+    final decay = useRealFFT ? 0.25 : 0.18;
 
     for (int i = 0; i < barCount; i++) {
-      // Map bar index to spectrum range (use first half for better frequency representation)
-      final startRatio = i / barCount;
-      final endRatio = (i + 1) / barCount;
+      final x = rawBars[i];
+      final prev = _barEma[i];
+      final a = (x > prev) ? attack : decay;
+      _barEma[i] = prev + a * (x - prev);
+    }
 
-      // Use first 40% of spectrum (most musical content)
-      final usableRange = (spectrumLength * 0.4).round();
-      final start = (startRatio * usableRange).round().clamp(0, spectrumLength - 1);
-      final end = (endRatio * usableRange).round().clamp(start + 1, spectrumLength);
+    return _barEma;
+  }
 
-      // Average the spectrum values in this range
-      var sum = 0.0;
-      var count = 0;
-      for (int j = start; j < end; j++) {
-        sum += smoothSpectrum[j];
-        count++;
-      }
+  // Convert raw spectrum to log-spaced bars
+  // This matches how human ears perceive pitch
+  List<double> _buildLogFrequencyBarsFromSpectrum({
+    required List<double> spectrum,
+    required int barCount,
+    required double minHz,
+    required double maxHz,
+  }) {
+    final len = spectrum.length;
+    if (len == 0) return List<double>.filled(barCount, 0.0);
 
-      var avg = count > 0 ? sum / count : 0.0;
+    const nyquist = 22050.0;
+    final lo = minHz.clamp(20.0, maxHz - 100.0);
+    final hi = maxHz.clamp(lo + 100.0, nyquist);
 
-      // BOOST: Apply frequency-dependent gain for more dramatic effect
-      // Bass frequencies get extra boost, treble gets moderate boost
-      final freqRatio = i / barCount;
-      double boost;
-      if (freqRatio < 0.2) {
-        // Bass: massive boost
-        boost = 3.0 + smoothBass * 2.0;
-      } else if (freqRatio < 0.5) {
-        // Mids: good boost
-        boost = 2.5 + smoothMid * 1.5;
+    // Helpers for sampling
+    double getBinIndex(int barIdx) {
+      final t = barIdx / barCount;
+      final hz = lo * math.pow(hi / lo, t).toDouble();
+      return (hz / nyquist) * len;
+    }
+
+    double sampleSpectrum(double binIdx) {
+      final idx = binIdx.clamp(0.0, len - 1.0);
+      final i = idx.floor();
+      final frac = idx - i;
+      if (i >= len - 1) return spectrum[len - 1];
+      // Linear interpolation between bins
+      return spectrum[i] * (1.0 - frac) + spectrum[i + 1] * frac;
+    }
+
+    // Compression
+    const k = 10.0;
+    const global = 0.80;
+    double compress(double val) {
+      final y = math.log(1 + k * (val * val)) / math.log(1 + k);
+      return math.pow(y.clamp(0.0, 1.0), 0.9).toDouble();
+    }
+
+    final bars = List<double>.filled(barCount, 0.0);
+
+    for (int i = 0; i < barCount; i++) {
+      final idx0 = getBinIndex(i);
+      final idx1 = getBinIndex(i + 1);
+      
+      double val;
+      // Sample or average the spectrum for this bar
+      if ((idx1 - idx0) > 1.0) {
+        double sum = 0.0;
+        int count = 0;
+        for (int b = idx0.floor(); b <= idx1.floor() && b < len; b++) {
+          sum += spectrum[b];
+          count++;
+        }
+        val = (compress(sum / count) * global).clamp(0.0, 1.0);
       } else {
-        // Treble: moderate boost
-        boost = 2.0 + smoothTreble * 1.0;
+        // High resolution region (Bass): use precise interpolated sample
+        final centerIdx = (idx0 + idx1) / 2.0;
+        val = (compress(sampleSpectrum(centerIdx)) * global).clamp(0.0, 1.0);
       }
 
-      avg = (avg * boost).clamp(0.0, 1.0);
-      bars.add(avg);
+      // Reduce bass gain by ~8% (first 30% of bars)
+      if (i < barCount * 0.3) {
+        val *= 0.92;
+      }
+      
+      bars[i] = val;
     }
 
     return bars;
   }
 
-  /// Generate bars from frequency bands when spectrum is not available
   List<double> _generateBarsFromBands(int barCount) {
     final bars = <double>[];
 
@@ -263,22 +344,18 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
       double value;
 
       if (ratio < 0.25) {
-        // Bass region - use bass with variation
         final variation = 0.7 + 0.3 * (1.0 - (ratio / 0.25 - 0.5).abs() * 2);
         value = smoothBass * variation * 1.2;
       } else if (ratio < 0.6) {
-        // Mid region
         final midRatio = (ratio - 0.25) / 0.35;
         final variation = 0.6 + 0.4 * (1.0 - (midRatio - 0.5).abs() * 2);
         value = smoothMid * variation * 1.1;
       } else {
-        // Treble region
         final trebleRatio = (ratio - 0.6) / 0.4;
         final variation = 0.5 + 0.5 * (1.0 - trebleRatio * 0.5);
         value = smoothTreble * variation;
       }
 
-      // Add overall amplitude influence
       value = (value * (0.7 + smoothAmplitude * 0.5)).clamp(0.0, 1.0);
       bars.add(value);
     }
@@ -288,6 +365,11 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
 
   @override
   Widget build(BuildContext context) {
+    // Disable visualization in iOS Low Power Mode for battery efficiency
+    if (Platform.isIOS && _isLowPowerMode) {
+      return const SizedBox.shrink();
+    }
+    
     return AnimatedBuilder(
       animation: animationController,
       builder: (context, child) {
