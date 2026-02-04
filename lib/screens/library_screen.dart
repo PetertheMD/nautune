@@ -737,56 +737,59 @@ class _LibraryTabState extends State<_LibraryTab> {
   Widget build(BuildContext context) {
     final isOffline = widget.appState.isOfflineMode;
     
-    return NestedScrollView(
-      headerSliverBuilder: (context, innerBoxIsScrolled) {
-        return [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  SegmentedButton<String>(
-                    segments: [
-                      const ButtonSegment(
-                        value: 'albums',
-                        label: Text('Albums'),
-                        icon: Icon(Icons.album),
-                      ),
-                      const ButtonSegment(
-                        value: 'artists',
-                        label: Text('Artists'),
-                        icon: Icon(Icons.person),
-                      ),
-                      if (!isOffline)
-                        const ButtonSegment(
-                          value: 'genres',
-                          label: Text('Genres'),
-                          icon: Icon(Icons.category),
-                        ),
-                    ],
-                    selected: {_selectedView},
-                    onSelectionChanged: (Set<String> newSelection) {
-                      setState(() {
-                        _selectedView = newSelection.first;
-                      });
-                    },
-                  ),
-                  // Sort controls for albums and artists (not genres)
-                  if (!isOffline && _selectedView != 'genres')
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: _SortControls(
-                        appState: widget.appState,
-                        isAlbums: _selectedView == 'albums',
-                      ),
-                    ),
-                ],
+    // Header controls
+    final header = Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          SegmentedButton<String>(
+            segments: [
+              const ButtonSegment(
+                value: 'albums',
+                label: Text('Albums'),
+                icon: Icon(Icons.album),
+              ),
+              const ButtonSegment(
+                value: 'artists',
+                label: Text('Artists'),
+                icon: Icon(Icons.person),
+              ),
+              if (!isOffline)
+                const ButtonSegment(
+                  value: 'genres',
+                  label: Text('Genres'),
+                  icon: Icon(Icons.category),
+                ),
+            ],
+            selected: {_selectedView},
+            onSelectionChanged: (Set<String> newSelection) {
+              setState(() {
+                _selectedView = newSelection.first;
+              });
+            },
+          ),
+          // Sort controls
+          if (!isOffline && _selectedView != 'genres')
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: _SortControls(
+                appState: widget.appState,
+                isAlbums: _selectedView == 'albums',
               ),
             ),
-          ),
-        ];
-      },
-      body: isOffline ? _buildOfflineContent() : _buildOnlineContent(),
+        ],
+      ),
+    );
+
+    // Use Column + Expanded instead of NestedScrollView so the ScrollController 
+    // is directly attached to the view we are trying to jump.
+    return Column(
+      children: [
+        header,
+        Expanded(
+          child: isOffline ? _buildOfflineContent() : _buildOnlineContent(),
+        ),
+      ],
     );
   }
 
@@ -1125,14 +1128,17 @@ class _AlbumsTab extends StatelessWidget {
                     ),
                   ],
                 ),
-                AlphabetScrollbar(
-                  items: albums!,
-                  getItemName: (album) => (album as JellyfinAlbum).name,
-                  scrollController: scrollController,
-                  itemHeight: 72, // List tile height
-                  crossAxisCount: 1,
-                  sortOrder: appState.albumSortOrder,
-                  sortBy: appState.albumSortBy,
+                Positioned.fill(
+                  child: AlphabetScrollbar(
+                    items: albums!,
+                    getItemName: (album) => (album as JellyfinAlbum).name,
+                    scrollController: scrollController,
+                    itemHeight: 72, // List tile height
+                    crossAxisCount: 1,
+                    sortOrder: appState.albumSortOrder,
+                    sortBy: appState.albumSortBy,
+                    sectionPadding: 0,
+                  ),
                 ),
               ],
             );
@@ -1147,7 +1153,11 @@ class _AlbumsTab extends StatelessWidget {
                   appState.albumSortOrder,
                 )
               : <(String, List<JellyfinAlbum>)>[];
-          final itemHeight = ((constraints.maxWidth - 32 - (crossAxisCount - 1) * 16) / crossAxisCount) / 0.75 + 16;
+          
+          // CHANGE THESE CALCULATIONS:
+          // Remove the "+ 16" (spacing) from the card height calculation
+          final cardHeight = ((constraints.maxWidth - 32 - (crossAxisCount - 1) * 16) / crossAxisCount) / 0.75;
+          const double mainSpacing = 16.0;
 
           return Stack(
             children: [
@@ -1167,7 +1177,7 @@ class _AlbumsTab extends StatelessWidget {
                                 crossAxisCount: crossAxisCount,
                                 childAspectRatio: 0.75,
                                 crossAxisSpacing: 16,
-                                mainAxisSpacing: 16,
+                                mainAxisSpacing: mainSpacing,
                               ),
                               delegate: SliverChildBuilderDelegate(
                                 (context, index) {
@@ -1218,14 +1228,18 @@ class _AlbumsTab extends StatelessWidget {
                         ),
                       ],
               ),
-              AlphabetScrollbar(
-                items: albums!,
-                getItemName: (album) => (album as JellyfinAlbum).name,
-                scrollController: scrollController,
-                itemHeight: itemHeight,
-                crossAxisCount: crossAxisCount,
-                sortOrder: appState.albumSortOrder,
-                sortBy: appState.albumSortBy,
+              Positioned.fill(
+                child: AlphabetScrollbar(
+                  items: albums!,
+                  getItemName: (album) => (album as JellyfinAlbum).name,
+                  scrollController: scrollController,
+                  itemHeight: cardHeight, // Pass strict card height
+                  crossAxisCount: crossAxisCount,
+                  sortOrder: appState.albumSortOrder,
+                  sortBy: appState.albumSortBy,
+                  sectionPadding: 8, // Half of vertical padding (16 total usually)
+                  mainAxisSpacing: mainSpacing, // Pass the spacing explicitly
+                ),
               ),
             ],
           );
@@ -4264,13 +4278,14 @@ class _ArtistsTab extends StatelessWidget {
                   crossAxisCount: 1,
                   sortOrder: effectiveSortOrder,
                   sortBy: effectiveSortBy,
+                  sectionPadding: 0,
                 ),
               ],
             );
           }
 
           // Grid mode rendering
-          final artistItemHeight = ((constraints.maxWidth - 32 - (crossAxisCount - 1) * 12) / crossAxisCount) / 0.75 + 12;
+          final artistItemHeight = ((constraints.maxWidth - 32 - (crossAxisCount - 1) * 12) / crossAxisCount) / 0.75;
 
           return Stack(
             children: [
@@ -4331,14 +4346,18 @@ class _ArtistsTab extends StatelessWidget {
                         ),
                       ],
               ),
-              AlphabetScrollbar(
-                items: effectiveArtists,
-                getItemName: (artist) => (artist as JellyfinArtist).name,
-                scrollController: controller,
-                itemHeight: artistItemHeight,
-                crossAxisCount: crossAxisCount,
-                sortOrder: effectiveSortOrder,
-                sortBy: effectiveSortBy,
+              Positioned.fill(
+                child: AlphabetScrollbar(
+                  items: effectiveArtists,
+                  getItemName: (artist) => (artist as JellyfinArtist).name,
+                  scrollController: controller,
+                  itemHeight: artistItemHeight,
+                  crossAxisCount: crossAxisCount,
+                  sortOrder: effectiveSortOrder,
+                  sortBy: effectiveSortBy,
+                  sectionPadding: 16,
+                  mainAxisSpacing: 12,
+                ),
               ),
             ],
           );
@@ -4366,13 +4385,11 @@ class _ArtistListTile extends StatelessWidget {
           itemId: artist.id,
           imageTag: tag,
           artistId: artist.id,
-          maxWidth: 100,
+          maxWidth: 112,
           boxFit: BoxFit.cover,
-          errorBuilder: (context, url, error) => ClipOval(
-            child: Image.asset(
-              'assets/no_artist_art.png',
-              fit: BoxFit.cover,
-            ),
+          errorBuilder: (context, url, error) => Image.asset(
+            'assets/no_artist_art.png',
+            fit: BoxFit.cover,
           ),
         ),
       );
@@ -4498,7 +4515,7 @@ class _GenresTabState extends State<_GenresTab> {
             (genre) => genre.name,
             SortOrder.ascending,
           );
-          final genreItemHeight = ((constraints.maxWidth - 32 - (crossAxisCount - 1) * 12) / crossAxisCount) / 1.5 + 12;
+          final genreItemHeight = ((constraints.maxWidth - 32 - (crossAxisCount - 1) * 12) / crossAxisCount) / 1.5;
 
           return Stack(
             children: [
@@ -4531,12 +4548,16 @@ class _GenresTabState extends State<_GenresTab> {
                   ],
                 ],
               ),
-              AlphabetScrollbar(
-                items: genres,
-                getItemName: (genre) => (genre as JellyfinGenre).name,
-                scrollController: _genresScrollController,
-                itemHeight: genreItemHeight,
-                crossAxisCount: crossAxisCount,
+              Positioned.fill(
+                child: AlphabetScrollbar(
+                  items: genres,
+                  getItemName: (genre) => (genre as JellyfinGenre).name,
+                  scrollController: _genresScrollController,
+                  itemHeight: genreItemHeight,
+                  crossAxisCount: crossAxisCount,
+                  sectionPadding: 16,
+                  mainAxisSpacing: 12,
+                ),
               ),
             ],
           );
@@ -5312,11 +5333,9 @@ class _ArtistCard extends StatelessWidget {
           artistId: artist.id, // Enable offline artist image support
           maxWidth: 400,
           boxFit: BoxFit.cover,
-          errorBuilder: (context, url, error) => ClipOval(
-            child: Image.asset(
-              'assets/no_artist_art.png',
-              fit: BoxFit.cover,
-            ),
+          errorBuilder: (context, url, error) => Image.asset(
+            'assets/no_artist_art.png',
+            fit: BoxFit.cover,
           ),
         ),
       );
@@ -5339,39 +5358,41 @@ class _ArtistCard extends StatelessWidget {
           ),
         );
       },
-      child: Column(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: artwork,
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: ClipRect(
+      child: RepaintBoundary(
+        child: Column(
+          children: [
+            Expanded(
+              flex: 3,
               child: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  artist.name,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: theme.colorScheme.tertiary,  // Ocean blue
+                padding: const EdgeInsets.all(8.0),
+                child: Center(
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: artwork,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
                 ),
               ),
             ),
-          ),
-        ],
+            Expanded(
+              flex: 1,
+              child: ClipRect(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    artist.name,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: theme.colorScheme.tertiary,  // Ocean blue
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -5660,9 +5681,8 @@ class _DownloadsTab extends StatelessWidget {
   }
 }
 
-/// Section header widget for alphabet groups
 class _AlphabetSectionHeader extends StatelessWidget {
-  const _AlphabetSectionHeader({required this.letter});
+  const _AlphabetSectionHeader({required this.letter, super.key});
   final String letter;
 
   @override
@@ -5784,6 +5804,8 @@ class AlphabetScrollbar extends StatefulWidget {
     this.sortBy,
     this.headerHeight = 40.0,
     this.useHeaders = true,
+    this.sectionPadding = 0.0,
+    this.mainAxisSpacing = 0.0,
   });
 
   final List items;
@@ -5795,6 +5817,8 @@ class AlphabetScrollbar extends StatefulWidget {
   final SortOption? sortBy;
   final double headerHeight;
   final bool useHeaders;
+  final double sectionPadding;
+  final double mainAxisSpacing;
 
   @override
   State<AlphabetScrollbar> createState() => _AlphabetScrollbarState();
@@ -5808,134 +5832,54 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
   String? _activeLetter;
   double _bubbleY = 0.0;
 
-  // Build a map from first letter to scroll position for fast lookup
-  // Returns (letterToPosition, totalHeight)
-  (Map<String, double>, double) _buildLetterPositions() {
-    final Map<String, double> letterToPosition = {};
-
-    // CRITICAL: Preserve the order of letters as they appear in the actual items list.
-    // The items are already sorted by the app (with locale-aware sorting), so we must
-    // NOT re-sort letters alphabetically - that causes mismatches with accented chars.
-    final List<String> orderedLetters = [];
-    final Map<String, int> letterCounts = {};
-    
-    for (int i = 0; i < widget.items.length; i++) {
-      final name = widget.getItemName(widget.items[i]).toUpperCase();
-      if (name.isEmpty) continue;
-      final firstChar = name[0];
-      final letter = RegExp(r'[0-9]').hasMatch(firstChar) ? '#' : firstChar;
-      
-      if (!letterCounts.containsKey(letter)) {
-        // First time seeing this letter - record its position in order
-        orderedLetters.add(letter);
-        letterCounts[letter] = 0;
-      }
-      letterCounts[letter] = letterCounts[letter]! + 1;
-    }
-
-    // Calculate scroll positions accounting for headers and padding
-    // Grid mode (crossAxisCount > 1): Each section has SliverPadding with vertical: 8 (16px total)
-    // List mode (crossAxisCount == 1): 8px initial padding from outer SliverPadding only
-    final isListMode = widget.crossAxisCount == 1;
-    final sectionVerticalPadding = isListMode ? 0.0 : 16.0; // 8px top + 8px bottom per grid section
-    double currentPosition = isListMode ? 8.0 : 0.0;
-
-    for (final letter in orderedLetters) {
-      letterToPosition[letter] = currentPosition;
-      currentPosition += widget.headerHeight; // Header (40px)
-      
-      if (!isListMode) {
-        // In grid mode, add vertical padding from SliverPadding
-        currentPosition += sectionVerticalPadding;
-      }
-      
-      final itemCount = letterCounts[letter]!;
-      final rowCount = (itemCount / widget.crossAxisCount).ceil();
-      currentPosition += rowCount * widget.itemHeight;
-    }
-    
-    // Add bottom padding
-    currentPosition += 100.0; 
-
-    return (letterToPosition, currentPosition);
-  }
-
   void _scrollToLetter(String letter) {
     if (widget.items.isEmpty) return;
-    if (!widget.scrollController.hasClients) return;
-
-    final (letterPositions, totalHeight) = _buildLetterPositions();
-    double targetPosition;
-
-    // Direct match
-    if (letterPositions.containsKey(letter)) {
-      targetPosition = letterPositions[letter]!;
-    } else {
-      // No exact match - find nearest letter
-      final isAscending = widget.sortOrder == SortOrder.ascending;
-
-      if (letter == '#') {
-        // Looking for numbers but none found - go to start/end
-        targetPosition = isAscending ? 0.0 : totalHeight;
+    
+    final groups = AlphabetSectionBuilder.groupByLetter<dynamic>(
+      widget.items,
+      widget.getItemName,
+      widget.sortOrder,
+    );
+    
+    double offset = 0.0;
+    
+    for (final (groupLetter, groupItems) in groups) {
+      if (groupLetter == letter) break;
+      
+      // Stop if we've passed the target letter (handling sort order)
+      if (widget.sortOrder == SortOrder.ascending) {
+         if (groupLetter.compareTo(letter) > 0) break;
       } else {
-        // Find the closest available letter
-        final letterCode = letter.codeUnitAt(0);
-        String? bestMatch;
-        final sortedKeys = letterPositions.keys.toList()
-          ..sort((a, b) {
-            if (a == '#') return isAscending ? -1 : 1;
-            if (b == '#') return isAscending ? 1 : -1;
-            return isAscending ? a.compareTo(b) : b.compareTo(a);
-          });
-
-        // Filter to only standard A-Z letters for fallback (ignore accented chars like Á, †, etc.)
-        final standardKeys = sortedKeys.where((k) => k == '#' || (k.codeUnitAt(0) >= 65 && k.codeUnitAt(0) <= 90)).toList();
-
-        if (isAscending) {
-          // Ascending: Find first existing letter >= target
-          for (final key in standardKeys) {
-            if (key == '#') continue;
-            if (key.codeUnitAt(0) >= letterCode) {
-              bestMatch = key;
-              break;
-            }
-          }
-        } else {
-          // Descending: Find first existing letter <= target
-          for (final key in standardKeys) {
-            if (key == '#') continue;
-            if (key.codeUnitAt(0) <= letterCode) {
-              bestMatch = key;
-              break;
-            }
-          }
-        }
-
-        if (bestMatch != null) {
-          targetPosition = letterPositions[bestMatch]!;
-        } else {
-          // If no letter found after target (e.g. target Z, only have A-Y), go to end
-          // Use calculated totalHeight instead of maxScrollExtent which might be inaccurate
-          targetPosition = isAscending ? totalHeight : 0.0;
-        }
+         if (groupLetter.compareTo(letter) < 0) break;
       }
+      
+      // 1. Header height
+      offset += widget.headerHeight;
+      
+      // 2. Section padding
+      offset += widget.sectionPadding; // e.g., top padding
+      
+      // 3. Items height calculation
+      if (widget.crossAxisCount > 1) {
+        // Grid: Rows * CardHeight + (Rows) * Spacing
+        // Note: SliverGrid adds spacing after every row except the last, 
+        // but simple math often approximates spacing after every row.
+        final rows = (groupItems.length / widget.crossAxisCount).ceil();
+        offset += rows * widget.itemHeight;
+        if (rows > 0) offset += (rows - 1) * widget.mainAxisSpacing;
+      } else {
+        // List
+        offset += groupItems.length * widget.itemHeight;
+      }
+      
+      // Add bottom padding of section if applicable
+      offset += widget.sectionPadding; 
     }
-
-    // Ensure we don't scroll before the start
-    // We do NOT clamp to maxScrollExtent because in List View (SliverList),
-    // the maxExtent might be estimated and much smaller than the real content height.
-    // Jumping to the calculated position usually forces the list to build and update the extent.
-    final safePosition = targetPosition < 0.0 ? 0.0 : targetPosition;
-
-    // Use jumpTo during drag for immediate response
-    if (_activeLetter != null) {
-      widget.scrollController.jumpTo(safePosition);
-    } else {
-      widget.scrollController.animateTo(
-        safePosition,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
+    
+    if (widget.scrollController.hasClients) {
+      final maxScroll = widget.scrollController.position.maxScrollExtent;
+      // Clamp to ensure we don't crash by scrolling past bounds
+      widget.scrollController.jumpTo(offset.clamp(0.0, maxScroll));
     }
   }
 
@@ -5977,19 +5921,8 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
           width: 30,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final availableHeight = constraints.maxHeight;
-              final letterHeight = 16.0;
-              final maxLetters = (availableHeight / letterHeight).floor();
-              
-              // If not enough space for all letters, show subset
-              List<String> displayLetters = _alphabet;
-              if (maxLetters < _alphabet.length && maxLetters > 0) {
-                final step = (_alphabet.length / maxLetters).ceil();
-                displayLetters = [];
-                for (int i = 0; i < _alphabet.length; i += step) {
-                  displayLetters.add(_alphabet[i]);
-                }
-              }
+              // Always display the full alphabet - let letters scale to fit
+              final List<String> displayLetters = _alphabet;
               
               return GestureDetector(
                 behavior: HitTestBehavior.opaque,
@@ -6005,15 +5938,18 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
                     children: displayLetters.map((letter) {
                       final isActive = _activeLetter == letter;
                       return Flexible(
-                        child: AnimatedScale(
-                          scale: isActive ? 1.4 : 1.0,
-                          duration: const Duration(milliseconds: 100),
-                          child: Text(
-                            letter,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
-                              color: isActive ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: AnimatedScale(
+                            scale: isActive ? 1.4 : 1.0,
+                            duration: const Duration(milliseconds: 100),
+                            child: Text(
+                              letter,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
+                                color: isActive ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                              ),
                             ),
                           ),
                         ),
@@ -6053,6 +5989,8 @@ class _AlphabetScrollbarState extends State<AlphabetScrollbar> {
     );
   }
 }
+
+
 
 // ignore: unused_element
 class _PlaceholderTab extends StatelessWidget {

@@ -45,6 +45,13 @@ class JellyfinImage extends StatelessWidget {
     // If artistId is provided, try to load downloaded artist image first
     if (artistId != null) {
       final isOfflineMarker = imageTag == 'offline';
+
+      // Optimization: If we are online and not forced to use offline image (by 'offline' tag),
+      // skip the filesystem check to avoid FutureBuilder overhead during scrolling.
+      if (!appState.isOfflineMode && !isOfflineMarker) {
+        return _buildNetworkImage(context, appState);
+      }
+
       return FutureBuilder<File?>(
         future: appState.downloadService.getArtistImageFile(artistId!),
         builder: (context, snapshot) {

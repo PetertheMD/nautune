@@ -10,9 +10,9 @@ class ArtistGrouping {
   /// Regex pattern to match common artist separators.
   /// Matches " feat", " ft", " with", " x ", " & ", " vs", " pres", " presents", " starring", " duet with"
   /// followed by optional dot, and spaces.
-  /// Also matches simple comma separator.
+  /// Also matches simple comma and semicolon separators.
   static final _separatorRegex = RegExp(
-    r'\s+(?:feat|ft|featuring|with|w\/|&|x|vs|pres|presents|starring|duet with)\.?\s+|,\s*',
+    r'\s+(?:feat|ft|featuring|with|w\/|&|x|vs|pres|presents|starring|duet with)\.?\s+|[;,]\s*',
     caseSensitive: false,
   );
 

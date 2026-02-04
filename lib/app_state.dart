@@ -205,15 +205,17 @@ class NautuneAppState extends ChangeNotifier {
   bool _isLoadingMoreAlbums = false;
   bool _hasMoreAlbums = true;
   int _albumsPage = 0;
-  static const int _albumsPageSize = 50;
+  static const int _albumsPageSize = 5000;
   
   bool _isLoadingArtists = false;
   Object? _artistsError;
   List<JellyfinArtist>? _artists;
+  List<JellyfinArtist>? _cachedGroupedArtists;
+  List<JellyfinArtist>? _cachedGroupedArtistsSource;
   bool _isLoadingMoreArtists = false;
   bool _hasMoreArtists = true;
   int _artistsPage = 0;
-  static const int _artistsPageSize = 50;
+  static const int _artistsPageSize = 5000;
   bool _isLoadingPlaylists = false;
   Object? _playlistsError;
   List<JellyfinPlaylist>? _playlists;
@@ -399,7 +401,17 @@ class NautuneAppState extends ChangeNotifier {
   List<JellyfinArtist>? get artists {
     if (_artists == null) return null;
     if (!_artistGroupingEnabled) return _artists;
-    return ArtistGrouping.groupArtists(_artists!);
+    
+    // Return cached value if source hasn't changed
+    if (_cachedGroupedArtists != null && 
+        identical(_cachedGroupedArtistsSource, _artists)) {
+      return _cachedGroupedArtists;
+    }
+    
+    // Compute and cache
+    _cachedGroupedArtists = ArtistGrouping.groupArtists(_artists!);
+    _cachedGroupedArtistsSource = _artists;
+    return _cachedGroupedArtists;
   }
   /// Returns the raw, ungrouped artists list.
   List<JellyfinArtist>? get rawArtists => _artists;
