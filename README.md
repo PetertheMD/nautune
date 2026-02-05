@@ -1,3 +1,7 @@
+Known Bugs : 
+Headphones dont currently control the app on Android. 
+Music controls don't appear on Android. 
+
 # Nautune 🔱🌊
 
 **Nautune** (Poseidon Music Player) is a high-performance, visually stunning music client for Jellyfin. Built for speed, offline reliability, and an immersive listening experience.
