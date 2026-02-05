@@ -64,11 +64,11 @@ class NautuneAudioHandler extends audio_service.BaseAudioHandler with audio_serv
 
   void _broadcastState(PlayerState state) {
     final playing = state == PlayerState.playing;
+    // Treat 'stopped' as 'ready' (paused) to keep the MediaSession active
+    // so that media buttons work even if the player is not actively playing.
     final processingState = state == PlayerState.completed
         ? audio_service.AudioProcessingState.completed
-        : state == PlayerState.playing || state == PlayerState.paused
-            ? audio_service.AudioProcessingState.ready
-            : audio_service.AudioProcessingState.idle;
+        : audio_service.AudioProcessingState.ready;
 
     playbackState.add(playbackState.value.copyWith(
       playing: playing,
