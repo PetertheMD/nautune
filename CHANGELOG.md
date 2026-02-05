@@ -1,3 +1,13 @@
+### v6.7.2 - Visualizer "Neutral State" & Credits
+
+**Visualizer Enhancements**
+- **Smooth Neutral State**: Visualizers now transition gracefully to a "neutral" state when playback is paused, settling down instead of freezing.
+- **Ambient Motion**: Visualizers like Ocean Waves and 3D Globe now maintain subtle background movement while paused for a more "alive" feel.
+- **Improved Responsiveness**: Optimized the visual decay curve for a more natural feel during transitions.
+
+**Credits & UI**
+- **New Credits**: Added special thanks to "Peter the MD" in the Settings screen footer.
+
 ### v6.7.1 - UI Tightening & Bugfixes
 
 **UI Tightening**

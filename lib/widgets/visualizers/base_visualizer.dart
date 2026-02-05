@@ -96,14 +96,18 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
 
     _playingSubscription = widget.audioService.playingStream.listen((playing) {
       if (!mounted) return;
-      if (playing && widget.isVisible) {
-        animationController.repeat();
+      if (widget.isVisible) {
+        // Keep animation running even when paused to allow values to drain to neutral
+        // and maintain ambient movement (for visualizers that support it).
+        if (!animationController.isAnimating) {
+          animationController.repeat();
+        }
       } else {
         animationController.stop();
       }
     });
 
-    if (widget.audioService.isPlaying && widget.isVisible) {
+    if (widget.isVisible && !animationController.isAnimating) {
       animationController.repeat();
     }
     
@@ -139,7 +143,7 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
       if (widget.isVisible) {
         _initFFTSource();
         _appState?.incrementVisibleVisualizerCount();
-        if (widget.audioService.isPlaying) {
+        if (!animationController.isAnimating) {
           animationController.repeat();
         }
       } else {
@@ -250,16 +254,23 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
     // We update every frame (vsync) for maximum smoothness on 90Hz/120Hz screens.
     // Manual throttling here causes jitter/stuttering because it quantizes movement.
     
+    // Force targets to 0 if not playing to settle into neutral state
+    final bool isPlaying = widget.audioService.isPlaying;
+    final targetB = isPlaying ? _targetBass : 0.0;
+    final targetM = isPlaying ? _targetMid : 0.0;
+    final targetT = isPlaying ? _targetTreble : 0.0;
+    final targetA = isPlaying ? _targetAmplitude : 0.0;
+
     if (useRealFFT) {
       // Light band smoothing for real-time FFT sources
       // High attack for snappy response, moderate decay for stability
       final attack = Platform.isAndroid ? 0.85 : 0.75;
       final decay = Platform.isAndroid ? 0.45 : 0.35;
 
-      smoothBass += (_targetBass - smoothBass) * (_targetBass > smoothBass ? attack : decay);
-      smoothMid += (_targetMid - smoothMid) * (_targetMid > smoothMid ? attack : decay);
-      smoothTreble += (_targetTreble - smoothTreble) * (_targetTreble > smoothTreble ? attack : decay);
-      smoothAmplitude += (_targetAmplitude - smoothAmplitude) * (_targetAmplitude > smoothAmplitude ? attack : decay);
+      smoothBass += (targetB - smoothBass) * (targetB > smoothBass ? attack : decay);
+      smoothMid += (targetM - smoothMid) * (targetM > smoothMid ? attack : decay);
+      smoothTreble += (targetT - smoothTreble) * (targetT > smoothTreble ? attack : decay);
+      smoothAmplitude += (targetA - smoothAmplitude) * (targetA > smoothAmplitude ? attack : decay);
 
       // Spectrum smoothing (CRITICAL for buttery smooth Android)
       // Since Android capture rate is ~20Hz, we must smooth/interpolate in Flutter
@@ -272,7 +283,7 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
         final barDecay = Platform.isAndroid ? 0.35 : 0.40;
         
         for (int i = 0; i < _targetSpectrum.length; i++) {
-          final target = _targetSpectrum[i];
+          final target = isPlaying ? _targetSpectrum[i] : 0.0;
           final current = smoothSpectrum[i];
           smoothSpectrum[i] += (target - current) * (target > current ? barAttack : barDecay);
         }
@@ -281,22 +292,22 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
       final attackFactor = Platform.isIOS ? 0.4 : 0.3;
       final decayFactor = Platform.isIOS ? 0.35 : 0.08;
 
-      smoothBass += (_targetBass - smoothBass) *
-          (_targetBass > smoothBass ? attackFactor : decayFactor);
-      smoothMid += (_targetMid - smoothMid) *
-          (_targetMid > smoothMid ? attackFactor : decayFactor);
-      smoothTreble += (_targetTreble - smoothTreble) *
-          (_targetTreble > smoothTreble ? attackFactor : decayFactor);
-      smoothAmplitude += (_targetAmplitude - smoothAmplitude) *
-          (_targetAmplitude > smoothAmplitude ? attackFactor : decayFactor);
+      smoothBass += (targetB - smoothBass) *
+          (targetB > smoothBass ? attackFactor : decayFactor);
+      smoothMid += (targetM - smoothMid) *
+          (targetM > smoothMid ? attackFactor : decayFactor);
+      smoothTreble += (targetT - smoothTreble) *
+          (targetT > smoothTreble ? attackFactor : decayFactor);
+      smoothAmplitude += (targetA - smoothAmplitude) *
+          (targetA > smoothAmplitude ? attackFactor : decayFactor);
 
-      _updateSmoothedSpectrum(attackFactor, decayFactor);
+      _updateSmoothedSpectrum(attackFactor, decayFactor, isPlaying);
     }
 
     lastPaintedTime = animationController.value * 10;
   }
 
-  void _updateSmoothedSpectrum(double attackFactor, double decayFactor) {
+  void _updateSmoothedSpectrum(double attackFactor, double decayFactor, bool isPlaying) {
     if (_targetSpectrum.isEmpty) return;
 
     if (smoothSpectrum.length != _targetSpectrum.length) {
@@ -304,7 +315,7 @@ abstract class BaseVisualizerState<T extends BaseVisualizer> extends State<T>
     }
 
     for (int i = 0; i < _targetSpectrum.length; i++) {
-      final target = _targetSpectrum[i];
+      final target = isPlaying ? _targetSpectrum[i] : 0.0;
       final current = smoothSpectrum[i];
       smoothSpectrum[i] += (target - current) *
           (target > current ? attackFactor : decayFactor);
